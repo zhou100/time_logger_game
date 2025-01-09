@@ -1,0 +1,21 @@
+title: Voice Note Taker API
+description: API for transcribing and paraphrasing voice notes
+baseurl: ""  # the subpath of your site, e.g. /blog
+url: ""  # the base hostname & protocol for your site, e.g. http://example.com
+
+# Build settings
+markdown: kramdown
+theme: minima
+
+# Exclude files from processing
+exclude:
+  - .env
+  - .env.example
+  - .git
+  - .github
+  - __pycache__
+  - *.pyc
+  - README.md
+  - requirements.txt
+  - gunicorn_config.py
+  - nginx.conf

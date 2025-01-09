@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.python-version
+.venv
+venv/
+ENV/
+
+# Development tools and files
+.env
+.env.example
+ffmpeg/
+install_ffmpeg.ps1
+test_audio.wav
+record_test_audio.py
+telegram_bot.py
+supervisord.conf
+nginx.conf
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp files
+logs/
+temp/
+*.log
+
+# Documentation
+README.md
+LICENSE
+_config.yml
+scratchpad.md
+
+# Test files
+test_*.py
+test_*.wav

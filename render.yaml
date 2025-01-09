@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: voice-note-taker
+    env: docker
+    region: oregon  # Choose the region closest to your users
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: API_USERNAME
+        sync: false  # Indicates this should be set manually in Render dashboard
+      - key: API_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+    disk:
+      name: temp
+      mountPath: /app/temp
+      sizeGB: 1
