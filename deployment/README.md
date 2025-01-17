@@ -102,6 +102,82 @@ sudo systemctl enable timelogger
 sudo systemctl start timelogger
 ```
 
+## Render Deployment (Recommended)
+
+### Prerequisites
+- A Render account
+- OpenAI API key
+- Git repository with your code
+
+### Deployment Steps
+
+1. **Fork or Clone the Repository**
+   - Ensure your code is in a Git repository
+   - Make sure you have the following files:
+     - `Dockerfile`
+     - `render.yaml`
+     - `requirements.txt`
+
+2. **Create a New Web Service in Render**
+   - Go to the Render dashboard
+   - Click "New +"
+   - Select "Web Service"
+   - Connect your repository
+   - Render will automatically detect the Docker configuration
+
+3. **Configure Environment Variables**
+   The following environment variables need to be set in the Render dashboard:
+   - `API_USERNAME`: Your chosen API username
+   - `API_PASSWORD`: Your chosen API password
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   
+   Other variables are automatically set through `render.yaml`:
+   - `FLASK_ENV`: production
+   - `LOG_LEVEL`: INFO
+
+4. **Deploy**
+   - Click "Create Web Service"
+   - Render will automatically build and deploy your application
+   - The first deployment may take a few minutes
+
+5. **Verify Deployment**
+   - Once deployed, test the API endpoints using the provided URL
+   - Check the logs in the Render dashboard for any issues
+   - Verify that the health check endpoint is responding
+
+### Monitoring and Maintenance
+
+1. **Logs**
+   - Access logs through the Render dashboard
+   - Filter logs by severity (ERROR, INFO, etc.)
+   - Set up log alerts for critical errors
+
+2. **Performance**
+   - Monitor response times in the Render metrics dashboard
+   - Check memory usage and CPU utilization
+   - Note: Free tier has 512 MB RAM limit
+
+3. **Usage Limits**
+   - Free tier limitations:
+     - 512 MB RAM
+     - Shared CPU
+     - Auto-sleep after 15 minutes of inactivity
+     - Build time: 500 minutes/month
+     - Bandwidth: 100 GB/month
+
+4. **Troubleshooting**
+   - Check application logs for errors
+   - Verify environment variables are set correctly
+   - Ensure OpenAI API key is valid
+   - Check disk usage in /app/temp directory
+
+### Upgrading
+To upgrade to a paid plan if needed:
+1. Go to the service settings in Render
+2. Click "Change Plan"
+3. Select new plan
+4. Confirm upgrade
+
 ## Security Considerations
 
 ### 1. Firewall Configuration

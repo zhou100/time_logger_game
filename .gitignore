@@ -11,3 +11,6 @@ test_audio.wav
 record_test_audio.py  
 supervisord.conf  
 nginx.conf  
+
+# windsurf rules
+.windsurfrules

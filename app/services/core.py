@@ -8,7 +8,7 @@ import openai
 import io
 import json
 from pydub import AudioSegment
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Generator
 from prompts import PROMPTS, CHOICE_TO_PROMPT
 
 def transcribe_voice_message(filename: str) -> str:
@@ -26,13 +26,13 @@ def transcribe_voice_message(filename: str) -> str:
     return transcribed_text
 
 def classify_outline_content(text: str) -> Dict[str, str]:
-    """Invokes GPT-3.5 API to tell the actual content of the request.
+    """Invokes GPT-4o-mini API to tell the actual content of the request.
     Args:
         text (str): the initial transcribed text to be processed.
 
     Returns:
     """
-    parse_result = gpt_process_text(text, PROMPTS['outline-content-classification'], model='gpt-3.5-turbo')
+    parse_result = gpt_process_text(text, PROMPTS['outline-content-classification'], model='gpt-4o-mini')
     try:
         parse_result = json.loads(parse_result)
     except json.decoder.JSONDecodeError:
@@ -41,7 +41,7 @@ def classify_outline_content(text: str) -> Dict[str, str]:
     return parse_result
 
 def classify_outline_intent_mode(text: str) -> bool:
-    """Invokes GPT-3.5 API to tell whether the intent of the given text is to enter the outline mode.
+    """Invokes GPT-4o-mini API to tell whether the intent of the given text is to enter the outline mode.
     Args:
         text (str): the initial transcribed text to be processed.
 
@@ -51,11 +51,11 @@ def classify_outline_intent_mode(text: str) -> bool:
     if len(text) > 30:
         # A small trick is, because the outline mode triggering word is so short, we can directly tell outline mode is not the intent when the text is too long.
         return False
-    processed_text = gpt_process_text(text, PROMPTS['outline-intent-classification'], model='gpt-3.5-turbo')
+    processed_text = gpt_process_text(text, PROMPTS['outline-intent-classification'], model='gpt-4o-mini')
     return processed_text == 'True'
 
 def preprocess_text(text: str) -> str:
-    """Invokes GPT-3.5 API to preprocess the text.
+    """Invokes GPT-4o-mini API to preprocess the text.
     We use certain format to parse the text, and output a json with two fields, content and tag.
     The tag is then used to determine which model to invoke.
 
@@ -66,7 +66,7 @@ def preprocess_text(text: str) -> str:
         str: paraphrased text.
     """
     response = openai.ChatCompletion.create(
-        model='gpt-3.5-turbo',
+        model='gpt-4o-mini',
         messages=[
             {"role": "system", "content": PROMPTS['transcribe-and-parse']},
             {"role": "user", "content": text},
@@ -78,7 +78,7 @@ def preprocess_text(text: str) -> str:
     return processed_text
 
 def gpt_iterate_on_thoughts(text: str, target_usage: str) -> str:
-    """Invokes GPT-4 API to iterate on thoughts, using the provided target usage, which is expected to be one of the keys in the CHOINCE_TO_PROMPT.
+    """Invokes GPT-4o-mini API to iterate on thoughts, using the provided target usage, which is expected to be one of the keys in the CHOINCE_TO_PROMPT.
 
     Args:
         text (str): the inptu text.
@@ -89,16 +89,16 @@ def gpt_iterate_on_thoughts(text: str, target_usage: str) -> str:
     """
     if target_usage not in CHOICE_TO_PROMPT:
         raise ValueError(f"Invalid target usage: {target_usage}")
-    return gpt_process_text(text, system_prompt=CHOICE_TO_PROMPT[target_usage], model='gpt-4')
+    return gpt_process_text(text, system_prompt=CHOICE_TO_PROMPT[target_usage], model='gpt-4o-mini')
 
 
-async def gpt_process_text_async(text: str, system_prompt: str = PROMPTS['paraphrase'], model: str = 'gpt-4') -> Tuple[str, str]:
-    """Invokes GPT-4 API to process the text in stream mode.
+async def gpt_process_text_async(text: str, system_prompt: str = PROMPTS['paraphrase'], model: str = 'gpt-4o-mini') -> Generator[Tuple[str, str], None, None]:
+    """Invokes GPT-4o-mini API to process the text in stream mode.
 
     Args:
         text (str): the transcribed text to be paraphrased.
         system_prompt (str): the system prompt to be used. Defaults to PROMPTS['paraphrase'].
-        model (str, optional): the GPT model to be used. Defaults to 'gpt-4'.
+        model (str, optional): the GPT model to be used. Defaults to 'gpt-4o-mini'.
 
     Returns:
         str: output text.
@@ -123,13 +123,13 @@ async def gpt_process_text_async(text: str, system_prompt: str = PROMPTS['paraph
 
     yield "finished", answer,
 
-def gpt_process_text(text: str, system_prompt: str = PROMPTS['paraphrase'], model: str = 'gpt-4') -> str:
-    """Invokes GPT-4 API to process the text.
+def gpt_process_text(text: str, system_prompt: str = PROMPTS['paraphrase'], model: str = 'gpt-4o-mini') -> str:
+    """Invokes GPT-4o-mini API to process the text.
 
     Args:
         text (str): the transcribed text to be paraphrased.
         system_prompt (str): the system prompt to be used. Defaults to PROMPTS['paraphrase'].
-        model (str, optional): the GPT model to be used. Defaults to 'gpt-4'.
+        model (str, optional): the GPT model to be used. Defaults to 'gpt-4o-mini'.
 
     Returns:
         str: output text.

@@ -23,9 +23,9 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
-app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
-app.include_router(audio.router, prefix="/api/v1/audio", tags=["audio"])
+app.include_router(users.router, prefix="/api", tags=["users"])
+app.include_router(audio.router, prefix="/api", tags=["audio"])
+app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 
 @app.get("/")
 async def root():

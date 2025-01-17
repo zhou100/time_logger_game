@@ -12,6 +12,12 @@ class TaskCategory(str, enum.Enum):
     HOBBY = "hobby"
     OTHER = "other"
 
+class ContentCategory(str, enum.Enum):
+    TODO = "todo"
+    IDEA = "idea"
+    THOUGHT = "thought"
+    TIME_RECORD = "time_record"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -22,6 +28,7 @@ class User(Base):
     
     # Relationships
     tasks = relationship("Task", back_populates="user")
+    chat_history = relationship("ChatHistory", back_populates="user")
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -36,3 +43,28 @@ class Task(Base):
     
     # Relationships
     user = relationship("User", back_populates="tasks")
+
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    audio_path = Column(String, nullable=True)
+    transcribed_text = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="chat_history")
+    categorized_entries = relationship("CategorizedEntry", back_populates="chat_history")
+
+class CategorizedEntry(Base):
+    __tablename__ = "categorized_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    chat_history_id = Column(Integer, ForeignKey("chat_history.id"))
+    category = Column(Enum(ContentCategory))
+    extracted_content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    chat_history = relationship("ChatHistory", back_populates="categorized_entries")
