@@ -1,62 +1,157 @@
+from datetime import datetime, timezone, timedelta
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+import pytest_asyncio
+import io
+from fastapi import Depends
+from app.auth import get_password_hash, create_access_token, get_current_user
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, get_db
 from app.models import User
-from app.services.auth import get_password_hash, create_access_token
+from app.models import ChatHistory, CategorizedEntry, ContentCategory
+from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 
-# Use in-memory SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite://"
+# Test database URL
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-@pytest.fixture
-def test_db():
-    # Create in-memory database engine
-    engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
-    # Create tables
-    Base.metadata.create_all(bind=engine)
-    
-    # Create test database session
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(bind=engine)
+engine = create_async_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
+)
 
-@pytest.fixture
-def client(test_db):
-    def override_get_db():
-        try:
-            yield test_db
-        finally:
-            test_db.close()
-    
-    app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+TestingSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
-@pytest.fixture
-def test_user(test_db):
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    import asyncio
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+@pytest_asyncio.fixture(autouse=True)
+async def setup_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+@pytest_asyncio.fixture
+async def test_db() -> AsyncSession:
+    """Create a fresh database session for a test."""
+    async with TestingSessionLocal() as session:
+        yield session
+
+@pytest_asyncio.fixture
+async def test_user(test_db: AsyncSession) -> User:
+    """Create a test user and return it"""
     user = User(
-        email="test@example.com",
         username="testuser",
-        hashed_password=get_password_hash("testpassword")
+        email="test@example.com",
+        hashed_password=get_password_hash("testpassword"),
+        created_at=datetime.now(timezone.utc)
     )
+    
     test_db.add(user)
-    test_db.commit()
-    test_db.refresh(user)
+    await test_db.commit()
+    await test_db.refresh(user)
+    
+    # Create access token
+    token = create_access_token(data={"sub": user.email})
+    user.token = token  # Add token as attribute for tests
+    
     return user
 
-@pytest.fixture
-def test_auth_headers(test_user):
-    access_token = create_access_token(data={"sub": test_user.email})
-    return {"Authorization": f"Bearer {access_token}"}
+@pytest_asyncio.fixture
+async def test_auth_headers(test_user: User) -> dict:
+    """Create authentication headers."""
+    access_token = create_access_token({"sub": str(test_user.id)})
+    headers = {"Authorization": f"Bearer {access_token}"}
+    return headers
+
+@pytest_asyncio.fixture
+async def async_client(test_db: AsyncSession) -> AsyncClient:
+    """Create async test client."""
+    async def override_get_db():
+        yield test_db
+
+    async def override_get_current_user():
+        return None
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    
+    transport = ASGITransport(app=app)
+    client = AsyncClient(transport=transport, base_url="http://test")
+    yield client
+    await client.aclose()
+    app.dependency_overrides.clear()
+
+@pytest_asyncio.fixture
+async def auth_async_client(test_db: AsyncSession, test_user: User) -> AsyncClient:
+    """Create async test client with authentication."""
+    async def override_get_db():
+        yield test_db
+
+    async def override_get_current_user():
+        return test_user
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    
+    transport = ASGITransport(app=app)
+    client = AsyncClient(transport=transport, base_url="http://test")
+    yield client
+    await client.aclose()
+    app.dependency_overrides.clear()
+
+@pytest_asyncio.fixture
+async def sample_entries(test_db: AsyncSession, test_user: User) -> list[CategorizedEntry]:
+    """Create sample entries for testing."""
+    # Create chat histories with different dates
+    dates = [
+        datetime(2025, 1, 15, tzinfo=timezone),
+        datetime(2025, 1, 16, tzinfo=timezone),
+        datetime(2025, 1, 17, tzinfo=timezone)
+    ]
+    
+    entries = []
+    for i, date in enumerate(dates):
+        chat_history = ChatHistory(
+            text=f"Test entry {i}",
+            user_id=test_user.id,
+            created_at=date
+        )
+        test_db.add(chat_history)
+        await test_db.commit()
+        await test_db.refresh(chat_history)
+        
+        categorized_entry = CategorizedEntry(
+            chat_history_id=chat_history.id,
+            user_id=test_user.id,
+            category=ContentCategory.todo,
+            content=f"Test todo {i}",
+            created_at=date
+        )
+        test_db.add(categorized_entry)
+        entries.append(categorized_entry)
+    
+    await test_db.commit()
+    return entries
+
+@pytest_asyncio.fixture
+async def mock_audio_file():
+    """Create a mock audio file for testing."""
+    content = b"test audio content"
+    return {
+        "file": ("test.mp3", content, "audio/mpeg")
+    }

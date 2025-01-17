@@ -1,113 +1,289 @@
-from typing import List, Dict
-from sqlalchemy.orm import Session
-from ..models import ChatHistory, CategorizedEntry, ContentCategory
-import openai
+import os
+import logging
+from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone, date
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from openai import AsyncOpenAI
 import json
+from ..models import ChatHistory, CategorizedEntry, ContentCategory
+from fastapi import HTTPException
 
-async def categorize_text(text: str) -> List[Dict[str, str]]:
+logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+async def categorize_text(text: str) -> List[Dict[str, Any]]:
     """
-    Use GPT-3.5-turbo to categorize text into different categories.
-    Returns a list of dictionaries with category and extracted content.
-    """
-    prompt = f"""
-    Analyze the following text and categorize relevant parts into these categories:
-    - TODO: Tasks or things that need to be done
-    - IDEA: New ideas or creative thoughts
-    - THOUGHT: General thoughts or observations
-    - TIME_RECORD: Time-related information or records
+    Categorize text using OpenAI's GPT API into predefined categories.
     
-    For each category, extract only the relevant parts of the text.
-    Format your response as a JSON array with objects containing 'category' and 'content'.
-    Only include categories that have relevant content.
-    
-    Text to analyze: {text}
+    Args:
+        text: The text to categorize
+        
+    Returns:
+        List of dictionaries containing category and content.
+        Each dictionary has the format: {"category": str, "content": str}
+        
+    Raises:
+        ValueError: If text is empty or too long
+        HTTPException: If there's an error with the OpenAI API
     """
+    if not text or not text.strip():
+        logger.error("Empty text provided to categorize_text")
+        return []
+        
+    if len(text) > 10000:  # OpenAI has a token limit
+        logger.warning("Text too long for categorization, truncating...")
+        text = text[:10000]
     
     try:
-        response = await openai.chat.completions.create(
-            model="gpt-4o-mini",
+        response = await client.chat.completions.create(
+            model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that categorizes text into specific categories."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
+                {
+                    "role": "system",
+                    "content": """You are a task categorizer. Analyze the given text and break it down into categories:
+                                todo (tasks/actions), idea (new ideas/suggestions), 
+                                thought (general thoughts/observations), time_record (time-related notes).
+                                Return a JSON array where each item has 'category' and 'content' fields.
+                                Example: [{"category": "todo", "content": "Buy groceries"},
+                                        {"category": "idea", "content": "Start a blog"}]"""
+                },
+                {
+                    "role": "user",
+                    "content": f"Categorize this text: {text}"
+                }
+            ]
         )
         
-        # Parse the response to get categorized entries
-        response_content = response.choices[0].message.content.strip()
         try:
-            categorized_entries = json.loads(response_content)
-            # Validate the response format
-            if not isinstance(categorized_entries, list):
+            categories = json.loads(response.choices[0].message.content)
+            if not isinstance(categories, list):
+                logger.warning(f"Invalid GPT response format - expected list, got {type(categories)}")
                 return []
             
-            valid_entries = []
-            for entry in categorized_entries:
-                if isinstance(entry, dict) and "category" in entry and "content" in entry:
-                    # Ensure category is uppercase to match enum
-                    entry["category"] = entry["category"].upper()
-                    if entry["category"] in ContentCategory.__members__:
-                        valid_entries.append(entry)
-            return valid_entries
-        except json.JSONDecodeError:
-            print("Error decoding JSON response from OpenAI")
+            # Validate each category
+            valid_categories = []
+            for item in categories:
+                if not isinstance(item, dict):
+                    logger.warning(f"Invalid category format - expected dict, got {type(item)}")
+                    continue
+                    
+                if "category" not in item or "content" not in item:
+                    logger.warning(f"Missing required fields in category: {item}")
+                    continue
+                    
+                if not isinstance(item["category"], str) or not isinstance(item["content"], str):
+                    logger.warning(f"Invalid field types in category: {item}")
+                    continue
+                    
+                if item["category"] not in [cat.value for cat in ContentCategory]:
+                    logger.warning(f"Invalid category value: {item['category']}")
+                    continue
+                    
+                if not item["content"].strip():
+                    logger.warning(f"Empty content in category: {item}")
+                    continue
+                    
+                valid_categories.append(item)
+                
+            if not valid_categories and categories:
+                logger.warning("No valid categories found in GPT response")
+                
+            return valid_categories
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse GPT response as JSON: {str(e)}")
+            logger.debug(f"Raw response: {response.choices[0].message.content}")
             return []
+            
     except Exception as e:
-        print(f"Error in categorization: {str(e)}")
-        return []
+        logger.error(f"Error in categorize_text: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise  # Re-raise HTTP exceptions
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error categorizing text: {str(e)}"
+        )
 
 async def save_chat_history(
-    db: Session,
+    db: AsyncSession,
     user_id: int,
     transcribed_text: str,
-    audio_path: str = None
+    categories: List[Dict[str, Any]]
 ) -> ChatHistory:
     """
-    Save the transcribed text to chat history and create categorized entries.
+    Save chat history and categorized entries to database
     """
-    # Create chat history entry
-    chat_history = ChatHistory(
-        user_id=user_id,
-        transcribed_text=transcribed_text,
-        audio_path=audio_path
-    )
-    db.add(chat_history)
-    db.commit()
-    db.refresh(chat_history)
-    
     try:
-        # Get categorized entries
-        categorized_entries = await categorize_text(transcribed_text)
+        now = datetime.now(timezone.utc)
         
-        # Create CategorizedEntry objects
-        for entry in categorized_entries:
-            db_entry = CategorizedEntry(
-                chat_history_id=chat_history.id,
-                category=ContentCategory[entry["category"]],
-                extracted_content=entry["content"]
-            )
-            db.add(db_entry)
+        # Create chat history entry
+        chat_history = ChatHistory(
+            user_id=user_id,
+            text=transcribed_text,
+            created_at=now
+        )
+        db.add(chat_history)
+        await db.flush()  # Flush to get the chat_history.id
         
-        db.commit()
-        db.refresh(chat_history)
+        # Save categorized entries
+        valid_entries = []
+        for category in categories:
+            try:
+                content_category = ContentCategory(category["category"])
+                
+                categorized_entry = CategorizedEntry(
+                    chat_history_id=chat_history.id,
+                    user_id=user_id,
+                    category=content_category,
+                    content=category["content"],
+                    created_at=now
+                )
+                valid_entries.append(categorized_entry)
+            except (ValueError, KeyError):
+                logger.warning(f"Invalid category {category.get('category', 'UNKNOWN')}, skipping")
+                continue
+        
+        # Only add valid entries
+        if valid_entries:
+            db.add_all(valid_entries)
+        
+        await db.commit()
+        await db.refresh(chat_history, ["categorized_entries"])
+        
+        return chat_history
+        
     except Exception as e:
-        print(f"Error saving categorized entries: {str(e)}")
-        # Don't fail the whole request if categorization fails
-        pass
-    
-    return chat_history
+        logger.error(f"Error saving chat history: {str(e)}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Error saving chat history"
+        )
 
-async def get_category_entries(
-    db: Session,
+async def get_entries_by_category(
+    db: AsyncSession,
     user_id: int,
-    category: ContentCategory = None
-) -> List[CategorizedEntry]:
+    category: str,
+    page: int = 1,
+    page_size: int = 10
+) -> Dict[str, Any]:
     """
-    Get all entries for a specific category or all categories if none specified.
+    Get entries filtered by category with pagination
     """
-    query = db.query(CategorizedEntry).join(ChatHistory).filter(ChatHistory.user_id == user_id)
-    
-    if category:
-        query = query.filter(CategorizedEntry.category == category)
-    
-    return query.order_by(CategorizedEntry.created_at.desc()).all()
+    try:
+        # Calculate offset
+        offset = (page - 1) * page_size
+
+        # Try to convert category string to enum
+        try:
+            category_enum = ContentCategory(category)
+        except ValueError:
+            raise ValueError(f"Invalid category: {category}")
+
+        # Build query
+        query = select(CategorizedEntry).where(
+            CategorizedEntry.user_id == user_id,
+            CategorizedEntry.category == category_enum
+        ).order_by(CategorizedEntry.created_at.desc())
+
+        # Get total count
+        total_query = select(CategorizedEntry).where(
+            CategorizedEntry.user_id == user_id,
+            CategorizedEntry.category == category_enum
+        )
+        result = await db.execute(total_query)
+        total = len(result.unique().all())
+
+        # Get paginated results
+        result = await db.execute(query.offset(offset).limit(page_size))
+        entries = result.unique().scalars().all()
+
+        # Format results
+        items = []
+        for entry in entries:
+            items.append({
+                "id": entry.id,
+                "content": entry.content,
+                "category": entry.category.value,
+                "created_at": entry.created_at.isoformat()
+            })
+
+        return {
+            "items": items,
+            "total": total
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_entries_by_category: {str(e)}")
+        raise e
+
+async def get_entries_by_date_range(
+    db: AsyncSession,
+    user_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    page: int = 1,
+    page_size: int = 10
+) -> Dict[str, Any]:
+    """
+    Get entries filtered by date range with pagination
+    """
+    try:
+        # Calculate offset
+        offset = (page - 1) * page_size
+
+        # Build base query
+        query = select(ChatHistory).where(
+            ChatHistory.user_id == user_id
+        )
+
+        # Add date filters if provided
+        if start_date:
+            query = query.where(ChatHistory.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc))
+        if end_date:
+            query = query.where(ChatHistory.created_at <= datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc))
+
+        # Order by date
+        query = query.order_by(ChatHistory.created_at.desc())
+
+        # Get total count
+        total_query = select(ChatHistory).where(
+            ChatHistory.user_id == user_id
+        )
+        if start_date:
+            total_query = total_query.where(ChatHistory.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc))
+        if end_date:
+            total_query = total_query.where(ChatHistory.created_at <= datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc))
+
+        result = await db.execute(total_query)
+        total = len(result.unique().all())
+
+        # Get paginated results
+        result = await db.execute(query.offset(offset).limit(page_size))
+        entries = result.unique().scalars().all()
+
+        # Format results
+        items = []
+        for entry in entries:
+            categories = []
+            for categorized_entry in entry.categorized_entries:
+                categories.append(categorized_entry.category.value)
+
+            items.append({
+                "id": entry.id,
+                "text": entry.text,
+                "categories": categories,
+                "created_at": entry.created_at.isoformat()
+            })
+
+        return {
+            "items": items,
+            "total": total
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_entries_by_date_range: {str(e)}")
+        raise e

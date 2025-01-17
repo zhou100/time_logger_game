@@ -1,103 +1,81 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.orm import Session
-from typing import Optional, List
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
-from ..models import User, ContentCategory
-from ..services.auth import get_current_user
-from ..services.audio import transcribe_audio, classify_task
-from ..services.tasks import start_new_task, end_current_task
-from ..services.categorization import save_chat_history, get_category_entries
-from ..schemas import ChatHistoryResponse, CategorizedEntryResponse
+from ..auth import get_current_user
+from ..models import User
+from ..services.audio import process_audio
 import logging
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/api/audio",
+    tags=["audio"]
+)
 
-@router.post("/audio/process", response_model=ChatHistoryResponse)
-async def process_audio(
-    audio: UploadFile = File(...),
-    db: Session = Depends(get_db),
+@router.post("/upload")
+async def upload_audio(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        logger.info(f"Processing audio request from user {current_user.email}")
-        logger.info(f"Audio file details - Name: {audio.filename}, Content-Type: {audio.content_type}")
+    """
+    Upload an audio file for transcription and categorization
+    
+    Args:
+        file: Audio file to process
+        db: Database session
+        current_user: Authenticated user
         
-        # Save audio file temporarily and transcribe
-        transcribed_text = await transcribe_audio(audio)
-        logger.info("Audio transcription successful")
+    Returns:
+        Dictionary containing chat history ID, transcribed text, and categories
         
-        # Save transcription and categorize
-        chat_history = await save_chat_history(
-            db=db,
-            user_id=current_user.id,
-            transcribed_text=transcribed_text
-        )
-        logger.info("Successfully saved chat history to database")
-        
-        # Check if it's a task-related command
-        try:
-            task_info = await classify_task(transcribed_text)
-            if task_info["action"] == "start":
-                await start_new_task(
-                    db=db,
-                    user_id=current_user.id,
-                    category=task_info["category"],
-                    description=task_info["description"]
-                )
-            elif task_info["action"] == "end":
-                await end_current_task(
-                    db=db,
-                    user_id=current_user.id
-                )
-        except Exception as e:
-            logger.error(f"Error processing task command: {str(e)}")
-        
-        return chat_history
-    except Exception as e:
-        logger.error(f"Error processing audio: {str(e)}")
+    Raises:
+        HTTPException: If file format is invalid or processing fails
+    """
+    if not current_user:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
         )
 
-@router.get("/categories/{category}", response_model=List[CategorizedEntryResponse])
-async def get_entries_by_category(
-    category: ContentCategory,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        logger.info(f"Fetching entries for category {category} for user {current_user.email}")
-        entries = await get_category_entries(db, current_user.id, category)
-        logger.info(f"Found {len(entries)} entries")
-        if not entries:
-            return []
-        return entries
-    except Exception as e:
-        logger.error(f"Error fetching entries by category: {str(e)}")
+    # Validate file format
+    if not file.content_type.startswith("audio/"):
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Please upload an audio file."
         )
 
-@router.get("/categories", response_model=List[CategorizedEntryResponse])
-async def get_all_entries(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
     try:
-        logger.info(f"Fetching all entries for user {current_user.email}")
-        entries = await get_category_entries(db, current_user.id)
-        logger.info(f"Found {len(entries)} total entries")
-        if not entries:
-            return []
-        return entries
+        # Read file content
+        content = await file.read()
+        
+        # Process audio
+        result = await process_audio(db, current_user.id, content)
+        
+        # Return response
+        return {
+            "chat_history_id": result.id,
+            "text": result.text,
+            "categories": [
+                {
+                    "category": entry.category,
+                    "content": entry.content
+                }
+                for entry in result.categorized_entries
+            ]
+        }
+        
+    except HTTPException as e:
+        # Re-raise HTTP exceptions with their original status code and detail
+        raise
+        
     except Exception as e:
-        logger.error(f"Error fetching all entries: {str(e)}")
+        # Log unexpected errors and return a generic error message
+        logger.error(f"Error processing audio upload: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="An error occurred while processing the audio file."
         )
+    finally:
+        await file.close()

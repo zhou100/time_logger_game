@@ -1,111 +1,139 @@
-from fastapi import UploadFile, HTTPException, status
-import tempfile
 import os
-import openai
-import json
-from typing import Dict
-import shutil
-import mimetypes
 import logging
+from datetime import datetime, timezone
+from typing import Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from openai import AsyncOpenAI, OpenAIError
+from .categorization import categorize_text
+from ..models import ChatHistory, CategorizedEntry, ContentCategory
+from fastapi import HTTPException
+import tempfile
 
+# Configure logging
 logger = logging.getLogger(__name__)
 
-ALLOWED_AUDIO_FORMATS = {'audio/flac', 'audio/x-m4a', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 
-                        'audio/ogg', 'audio/wav', 'audio/webm'}
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-async def transcribe_audio(audio: UploadFile) -> str:
+async def transcribe_audio(audio_data: bytes) -> str:
     """
-    Transcribe audio using OpenAI's Whisper API
+    Transcribe audio data to text using OpenAI's Whisper API
+    
+    Args:
+        audio_data: Raw audio data bytes
+        
+    Returns:
+        Transcribed text
+        
+    Raises:
+        HTTPException: If transcription fails
     """
-    logger.info(f"Processing audio file: {audio.filename}")
-    logger.info(f"Content type from file: {audio.content_type}")
-    logger.info(f"Headers: {audio.headers}")
-    
-    # Validate file format
-    content_type = audio.content_type or mimetypes.guess_type(audio.filename)[0]
-    logger.info(f"Initial content type: {content_type}")
-    
-    if not content_type:
-        # Try to get content type from headers
-        content_type = audio.headers.get("content-type")
-        logger.info(f"Content type from headers: {content_type}")
-    
-    # Normalize content type
-    if content_type == "audio/mp3":
-        content_type = "audio/mpeg"
-        logger.info("Normalized audio/mp3 to audio/mpeg")
-    
-    if not content_type or content_type not in ALLOWED_AUDIO_FORMATS:
-        error_msg = f"Invalid file format. Supported formats: {list(ALLOWED_AUDIO_FORMATS)}"
-        logger.error(f"{error_msg} (got {content_type})")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
-    
-    # Create a temporary file to store the audio
-    temp_dir = tempfile.mkdtemp()
-    temp_file_path = os.path.join(temp_dir, "audio.mp3")
-    
     try:
-        # Read and write the file content
-        content = await audio.read()
-        logger.info(f"Read {len(content)} bytes from audio file")
-        
-        with open(temp_file_path, "wb") as temp_file:
-            temp_file.write(content)
-        
-        # Open the file and transcribe
-        with open(temp_file_path, "rb") as audio_file:
-            transcript = await openai.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                response_format="text"
+        # Save audio data to temporary file
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
+            temp_file.write(audio_data)
+            temp_file.seek(0)
+            
+            # Transcribe using OpenAI API
+            response = await client.audio.transcriptions.create(
+                file=temp_file,
+                model="whisper-1"
             )
-        return transcript.text
+            
+            return response.text
+            
     except Exception as e:
-        logger.error(f"Error in transcribe_audio: {str(e)}")
-        raise
-    finally:
-        # Clean up the temporary directory and all its contents
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception as e:
-            logger.warning(f"Could not delete temporary directory {temp_dir}: {str(e)}")
-
-async def classify_task(text: str) -> Dict[str, str]:
-    """
-    Use GPT-3.5-turbo to classify if text contains a task command
-    Returns a dictionary with action type and details
-    """
-    prompt = f"""
-    Analyze the following text and determine if it's a task-related command.
-    If it's about starting a task, return a JSON with action "start", the task category, and description.
-    If it's about ending a task, return a JSON with action "end".
-    If it's not a task command, return a JSON with action "none".
-    
-    Example formats:
-    {{"action": "start", "category": "work", "description": "coding the new feature"}}
-    {{"action": "end"}}
-    {{"action": "none"}}
-    
-    Text to analyze: {text}
-    """
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that classifies task-related commands."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
+        logger.error(f"Error transcribing audio: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Transcription failed"
         )
+
+async def save_chat_history(db: AsyncSession, user_id: int, text: str) -> ChatHistory:
+    """
+    Save chat history to database
+    """
+    chat_history = ChatHistory(
+        text=text,
+        user_id=user_id,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.add(chat_history)
+    await db.commit()
+    await db.refresh(chat_history)
+    return chat_history
+
+async def process_audio(db: AsyncSession, user_id: int, audio_data: bytes) -> ChatHistory:
+    """
+    Process audio data by transcribing it and categorizing the text.
+    
+    Args:
+        db: Database session
+        user_id: ID of the user who uploaded the audio
+        audio_data: Raw audio data bytes
         
-        # Parse the response
-        response_content = response.choices[0].message.content
-        task_info = json.loads(response_content)
-        return task_info
+    Returns:
+        ChatHistory object with transcribed text and categorized entries
+        
+    Raises:
+        HTTPException: If there's an error processing the audio
+    """
+    try:
+        # Transcribe audio
+        transcription = await transcribe_audio(audio_data)
+        
+        # Save chat history
+        chat_history = await save_chat_history(db, user_id, transcription)
+        
+        # Only categorize if there's non-empty text
+        if transcription.strip():
+            # Categorize text
+            categories = await categorize_text(transcription)
+            
+            if categories:
+                # Create categorized entries
+                entries = []
+                for cat in categories:
+                    if not isinstance(cat, dict):
+                        logger.warning(f"Invalid category format: {cat}")
+                        continue
+                        
+                    category = cat.get("category")
+                    content = cat.get("content")
+                    
+                    if not category or not content:
+                        logger.warning(f"Missing category or content: {cat}")
+                        continue
+                        
+                    # Validate category
+                    try:
+                        if category not in [c.value for c in ContentCategory]:
+                            logger.warning(f"Invalid category value: {category}")
+                            continue
+                            
+                        entry = CategorizedEntry(
+                            chat_history_id=chat_history.id,
+                            user_id=user_id,
+                            category=category,
+                            content=content
+                        )
+                        entries.append(entry)
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error creating entry for category {category}: {str(e)}")
+                        continue
+                
+                if entries:
+                    db.add_all(entries)
+                    await db.commit()
+                    await db.refresh(chat_history)
+        
+        return chat_history
+        
     except Exception as e:
-        logger.error(f"Error in task classification: {str(e)}")
-        return {"action": "none"}
+        logger.error(f"Error processing audio: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing audio: {str(e)}"
+        )

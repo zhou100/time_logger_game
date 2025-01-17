@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, List
 from datetime import datetime
+from enum import Enum
 from .models import TaskCategory, ContentCategory
 
 class UserBase(BaseModel):
@@ -12,9 +13,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskBase(BaseModel):
     category: TaskCategory
@@ -29,41 +28,53 @@ class TaskResponse(TaskBase):
     start_time: datetime
     end_time: Optional[datetime] = None
     duration: Optional[float] = None
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskSummary(BaseModel):
     category: TaskCategory
     total_hours: float
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: str | None = None
+
 class CategorizedEntryBase(BaseModel):
     category: ContentCategory
-    extracted_content: str
+    content: str
+    created_at: datetime
 
 class CategorizedEntryCreate(CategorizedEntryBase):
     chat_history_id: int
+    user_id: int
 
 class CategorizedEntryResponse(CategorizedEntryBase):
     id: int
     chat_history_id: int
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
+    user_id: int
+    model_config = ConfigDict(from_attributes=True)
 
 class ChatHistoryBase(BaseModel):
-    transcribed_text: str
-    audio_path: Optional[str] = None
+    text: str
 
 class ChatHistoryCreate(ChatHistoryBase):
-    pass
+    user_id: int
 
 class ChatHistoryResponse(ChatHistoryBase):
     id: int
     user_id: int
+    text: str
     created_at: datetime
-    categorized_entries: List[CategorizedEntryResponse] = []
-    
-    class Config:
-        from_attributes = True
+    categorized_entries: List[CategorizedEntryResponse]
+    model_config = ConfigDict(from_attributes=True)
+
+    @property
+    def categories(self) -> List[str]:
+        """Get unique categories from related entries."""
+        return list(set(entry.category.value for entry in self.categorized_entries))
+
+class EntriesResponse(BaseModel):
+    entries: List[ChatHistoryResponse]
+    total: int

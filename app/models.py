@@ -1,70 +1,72 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum as SQLAlchemyEnum
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from typing import List
 from .database import Base
-from datetime import datetime
-import enum
+from datetime import datetime, timezone, timedelta
+from enum import Enum
 
-class TaskCategory(str, enum.Enum):
-    STUDY = "study"
-    WORKOUT = "workout"
-    FAMILY_TIME = "family_time"
-    WORK = "work"
-    HOBBY = "hobby"
+class TaskCategory(str, Enum):
+    TODO = "todo"
+    MEETING = "meeting"
+    BREAK = "break"
     OTHER = "other"
 
-class ContentCategory(str, enum.Enum):
-    TODO = "todo"
-    IDEA = "idea"
-    THOUGHT = "thought"
-    TIME_RECORD = "time_record"
+class ContentCategory(str, Enum):
+    todo = "todo"
+    idea = "idea"
+    thought = "thought"
+    time_record = "time_record"
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    username = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(unique=True, index=True)
+    username: Mapped[str] = mapped_column(unique=True, index=True)
+    hashed_password: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Relationships
-    tasks = relationship("Task", back_populates="user")
-    chat_history = relationship("ChatHistory", back_populates="user")
+    tasks: Mapped[List["Task"]] = relationship(back_populates="user")
+    chat_history: Mapped[List["ChatHistory"]] = relationship(back_populates="user")
+    categorized_entries: Mapped[List["CategorizedEntry"]] = relationship(back_populates="user")
 
 class Task(Base):
     __tablename__ = "tasks"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    category = Column(Enum(TaskCategory))
-    start_time = Column(DateTime, default=datetime.utcnow)
-    end_time = Column(DateTime, nullable=True)
-    duration = Column(Float, nullable=True)  # in hours
-    description = Column(String, nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    category: Mapped[TaskCategory] = mapped_column(SQLAlchemyEnum(TaskCategory))
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration: Mapped[int | None] = mapped_column(nullable=True)  # Duration in seconds
+    description: Mapped[str | None] = mapped_column(nullable=True)
     
     # Relationships
-    user = relationship("User", back_populates="tasks")
+    user: Mapped["User"] = relationship(back_populates="tasks")
 
 class ChatHistory(Base):
-    __tablename__ = "chat_history"
+    __tablename__ = "chat_histories"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    audio_path = Column(String, nullable=True)
-    transcribed_text = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
     # Relationships
-    user = relationship("User", back_populates="chat_history")
-    categorized_entries = relationship("CategorizedEntry", back_populates="chat_history")
+    user: Mapped["User"] = relationship(back_populates="chat_history")
+    categorized_entries: Mapped[List["CategorizedEntry"]] = relationship(back_populates="chat_history", lazy="joined")
 
 class CategorizedEntry(Base):
     __tablename__ = "categorized_entries"
 
-    id = Column(Integer, primary_key=True, index=True)
-    chat_history_id = Column(Integer, ForeignKey("chat_history.id"))
-    category = Column(Enum(ContentCategory))
-    extracted_content = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    chat_history_id: Mapped[int] = mapped_column(ForeignKey("chat_histories.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    category: Mapped[ContentCategory] = mapped_column(SQLAlchemyEnum(ContentCategory))
+    content: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
     # Relationships
-    chat_history = relationship("ChatHistory", back_populates="categorized_entries")
+    chat_history: Mapped["ChatHistory"] = relationship(back_populates="categorized_entries")
+    user: Mapped["User"] = relationship(back_populates="categorized_entries")

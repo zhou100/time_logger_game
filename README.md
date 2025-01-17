@@ -21,6 +21,8 @@ A FastAPI-based voice-enabled time tracking and content organization system. Upl
 
 ## System Architecture
 
+![System Architecture Diagram](mermaid-diagram-2025-01-16-224340.svg)
+
 ### Data Layer
 
 Database Schema:

@@ -6,9 +6,26 @@ Implementing Voice Transcription API with Database Integration
 ### Progress
 [X] Created database models for chat history and categorized entries
 [X] Added Pydantic schemas for request/response handling
-[X] Created categorization service using GPT-3.5-turbo
+[X] Created categorization service using GPT-4o-mini
 [X] Updated audio processing endpoint to save transcriptions
 [X] Successfully applied database migrations
+[X] Added comprehensive integration tests for audio processing
+[X] Added endpoints for retrieving categorized entries with pagination and filtering
+[X] Added tests for retrieval endpoints
+[X] Fix categorization service to handle invalid categories gracefully
+[X] Update save_chat_history to properly handle category content
+[X] Add proper relationship loading in database queries
+[X] Update test cases to verify category handling
+[X] Simplify audio processing service
+
+### Next Steps
+[ ] Implement error handling for database operations
+[ ] Add unit tests for database operations
+[ ] Add performance optimization for large result sets
+[ ] Implement caching for frequent queries
+[ ] Run the test suite to verify all changes
+[ ] Consider adding more edge case tests
+[ ] Document the category handling behavior in README
 
 ### Database Schema
 1. Chat History Table
@@ -25,13 +42,7 @@ Implementing Voice Transcription API with Database Integration
    - extracted_content
    - created_at
 
-### Next Steps
-[ ] Test audio transcription with database integration
-[ ] Add endpoints for retrieving categorized entries
-[ ] Implement error handling for database operations
-[ ] Add unit tests for database operations
-
-## Lessons Learned
+### Lessons Learned
 1. When using Flask's `render_template`, make sure to put HTML files in the `templates` directory
 2. When serving an API, it's better to use `jsonify` for consistent JSON responses
 3. Base64 encoded credentials for HTTP Basic Auth: `dm9pY2Vub3RlX2FwaTpWTlRfc2VjdXJlXzIwMjUh`
@@ -41,14 +52,50 @@ Implementing Voice Transcription API with Database Integration
    - Use `postgresql.ENUM` for PostgreSQL enum types
    - Set `create_type=False` and use `checkfirst=True` to handle existing types
    - Be careful with enum type changes in migrations
+7. Always use db.refresh with explicit relationship names for proper async loading
+8. Handle invalid data gracefully with sensible defaults instead of exceptions
+9. Keep test cases focused and independent
+10. Use proper async context managers for database operations
+11. Maintain consistent state between tests using fixtures
+12. When using unittest.mock.patch, patch the object where it's being used, not where it's defined
+13. For example, if module A defines a function and module B imports it as `from A import func`, patch 'B.func' not 'A.func'
+14. This is because Python imports create a new reference to the object, and you need to patch that specific reference
+15. Example: `patch('app.services.audio.categorize_text')` not `patch('app.services.categorization.categorize_text')`
+16. Use `lazy="joined"` in relationship to eagerly load related objects
+17. Use `db.add_all()` instead of multiple `db.add()` for better performance when adding multiple objects
+18. Always refresh objects after commit to ensure relationships are up to date
+19. Use timezone-aware datetime objects with SQLAlchemy columns
+20. Replace datetime.utcnow() with datetime.now(timezone.utc)
+21. Use lifespan event handlers instead of on_event for startup/shutdown events
+22. Use HTTPException for API errors with specific status codes and messages
+23. Propagate errors through the stack without wrapping them unnecessarily
+24. Add context to error messages for better debugging
+25. Log errors at appropriate levels (error for failures, warning for invalid data)
+26. Handle edge cases explicitly (empty input, invalid data)
+27. Test edge cases and error conditions
+28. Mock external dependencies at the right level (where they're used)
+29. Use descriptive test names that indicate what's being tested
+30. Add proper assertions that check both positive and negative cases
+31. Keep tests focused and independent
+32. Use fixtures for common setup
 
-## Testing Plan
+### Milestones
+### 2025-01-17: Fixed Async Audio Tests and Improved Error Handling
+- Fixed issues with async audio processing tests
+- Added proper error handling throughout the stack
+- Improved test coverage with edge cases
+- Updated to timezone-aware datetime handling
+- Improved code quality and documentation
+- Added better logging and error messages
+- All tests passing with good coverage
+
+### Testing Plan
 ### Testing Plan
 1. Audio Processing Flow Test
    - Record test audio files with different types of content
    - Test transcription accuracy with Whisper API
    - Verify transcribed text is saved to chat_history table
-   - Check categorization accuracy with GPT-3.5-turbo
+   - Check categorization accuracy with GPT-4o-mini
    - Verify categorized entries are saved correctly
 
 2. API Endpoint Tests
@@ -70,6 +117,47 @@ Implementing Voice Transcription API with Database Integration
    - Test with network failures
    - Test with database connection issues
    - Test with invalid categories
+
+### Testing Progress
+✅ Audio Processing Tests:
+- Unit tests for transcription service
+- Unit tests for categorization
+- Unit tests for database operations
+- Integration tests for complete flow
+- Error case handling tests
+
+✅ Category Retrieval Tests:
+- Pagination functionality
+- Category filtering
+- Date range filtering
+- Parameter validation
+- Authorization checks
+
+🚧 Next Testing Tasks:
+1. [ ] Add database concurrency tests
+2. [ ] Add performance tests for large audio files
+3. [ ] Add load tests for pagination endpoints
+
+### Implementation Notes
+1. Audio Processing Flow:
+   - File upload validation working
+   - Transcription integration complete
+   - Database storage verified
+   - Error handling implemented
+
+2. Category Retrieval:
+   - Pagination implemented (skip/limit)
+   - Date filtering added
+   - Category filtering working
+   - Basic error handling in place
+
+3. Areas for Improvement:
+   - Add retry logic for OpenAI API calls
+   - Implement caching for frequent queries
+   - Add logging for better debugging
+   - Consider adding file cleanup for temporary audio files
+   - Add result count for pagination
+   - Consider implementing cursor-based pagination for better performance
 
 ## System Overview: Time Logger Game
 

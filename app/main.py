@@ -1,32 +1,35 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from .database import engine, Base
-from .routers import users, tasks, audio
-from .config import settings
+from .routers import audio, entries, auth, categories
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Shutdown
+    await engine.dispose()
 
-app = FastAPI(
-    title="Time Logger Game",
-    description="An audio-based task tracking system",
-    version="1.0.0"
-)
+app = FastAPI(lifespan=lifespan)
 
-# Add CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(users.router, prefix="/api", tags=["users"])
-app.include_router(audio.router, prefix="/api", tags=["audio"])
-app.include_router(tasks.router, prefix="/api", tags=["tasks"])
+app.include_router(auth.router)
+app.include_router(audio.router)
+app.include_router(categories.router)
+app.include_router(entries.router)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Time Logger Game API"}
+    return {"message": "Time Logger Game API"}

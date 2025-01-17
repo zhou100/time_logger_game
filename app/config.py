@@ -7,7 +7,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # Database settings
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://time_game:3VIspJYH2vfWkFLHb2BnJw@localhost:5432/timelogger")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://time_game:3VIspJYH2vfWkFLHb2BnJw@localhost:5432/timelogger")
     
     # JWT settings
     SECRET_KEY: str = os.getenv("SECRET_KEY", "c58ea36676a3425d37fd14682f615d94669dceeeda579781488749f1a2bc57b0")
