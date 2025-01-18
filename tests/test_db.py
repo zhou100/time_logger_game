@@ -6,7 +6,7 @@ from sqlalchemy import select
 def test_chat_history_creation(test_db, test_user):
     chat_history = ChatHistory(
         user_id=test_user.id,
-        transcribed_text="Test transcription",
+        text="Test transcription",
         audio_path="test.mp3"
     )
     test_db.add(chat_history)
@@ -15,7 +15,7 @@ def test_chat_history_creation(test_db, test_user):
     
     assert chat_history.id is not None
     assert chat_history.user_id == test_user.id
-    assert chat_history.transcribed_text == "Test transcription"
+    assert chat_history.text == "Test transcription"
     assert chat_history.audio_path == "test.mp3"
     assert isinstance(chat_history.created_at, datetime)
 
@@ -23,7 +23,7 @@ def test_categorized_entry_creation(test_db, test_user):
     # Create chat history first
     chat_history = ChatHistory(
         user_id=test_user.id,
-        transcribed_text="Test transcription"
+        text="Test transcription"
     )
     test_db.add(chat_history)
     test_db.commit()
@@ -48,7 +48,7 @@ def test_chat_history_relationship(test_db, test_user):
     # Create chat history with categorized entries
     chat_history = ChatHistory(
         user_id=test_user.id,
-        transcribed_text="Test transcription"
+        text="Test transcription"
     )
     test_db.add(chat_history)
     test_db.commit()
@@ -85,7 +85,7 @@ def test_user_relationship(test_db, test_user):
     chat_histories = [
         ChatHistory(
             user_id=test_user.id,
-            transcribed_text=f"Test transcription {i}"
+            text=f"Test transcription {i}"
         )
         for i in range(3)
     ]

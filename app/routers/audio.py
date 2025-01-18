@@ -8,10 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/api/audio",
-    tags=["audio"]
-)
+router = APIRouter(tags=["audio"])
 
 @router.post("/upload")
 async def upload_audio(

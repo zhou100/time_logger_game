@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import engine, Base
-from .routers import audio, entries, auth, categories
+from .routers import auth, audio, chat, entries, categories, tasks, users
+import logging
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,11 +28,24 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router)
-app.include_router(audio.router)
-app.include_router(categories.router)
-app.include_router(entries.router)
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(audio.router, prefix="/api/audio", tags=["audio"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
+app.include_router(entries.router, prefix="/api/entries", tags=["entries"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+app.include_router(users.router, prefix="/api/users", tags=["users"])
+
+# Debug: Print all registered routes
+print("\nRegistered Routes:")
+print("-" * 50)
+for route in app.routes:
+    print(f"Path: {route.path}")
+    print(f"Name: {route.name}")
+    print(f"Methods: {route.methods}")
+    print(f"Endpoint: {route.endpoint}")
+    print("-" * 50)
 
 @app.get("/")
 async def root():
-    return {"message": "Time Logger Game API"}
+    return {"message": "Welcome to the Time Logger Game API"}

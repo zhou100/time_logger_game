@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://time_game:3VIspJYH2vfWkFLHb2BnJw@localhost:5432/timelogger")
     
     # JWT settings
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "c58ea36676a3425d37fd14682f615d94669dceeeda579781488749f1a2bc57b0")
+    SECRET_KEY: str = "your-secret-key-here"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     

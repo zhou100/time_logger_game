@@ -43,10 +43,11 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a task categorizer. Analyze the given text and break it down into categories:
-                                todo (tasks/actions), idea (new ideas/suggestions), 
-                                thought (general thoughts/observations), time_record (time-related notes).
+                    "content": """You are a task categorizer. Analyze the given text and break it down into EXACTLY these categories:
+                                'todo' (tasks/actions), 'idea' (new ideas/suggestions), 
+                                'thought' (general thoughts/observations), 'time_record' (time-related notes).
                                 Return a JSON array where each item has 'category' and 'content' fields.
+                                The category MUST be one of: 'todo', 'idea', 'thought', 'time_record' (exactly as written).
                                 Example: [{"category": "todo", "content": "Buy groceries"},
                                         {"category": "idea", "content": "Start a blog"}]"""
                 },
@@ -59,12 +60,17 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
         
         try:
             categories = json.loads(response.choices[0].message.content)
+            logger.info(f"GPT categorization response: {categories}")
+            
             if not isinstance(categories, list):
                 logger.warning(f"Invalid GPT response format - expected list, got {type(categories)}")
                 return []
             
             # Validate each category
             valid_categories = []
+            valid_category_values = [cat.value for cat in ContentCategory]
+            logger.info(f"Valid category values: {valid_category_values}")
+            
             for item in categories:
                 if not isinstance(item, dict):
                     logger.warning(f"Invalid category format - expected dict, got {type(item)}")
@@ -78,12 +84,8 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
                     logger.warning(f"Invalid field types in category: {item}")
                     continue
                     
-                if item["category"] not in [cat.value for cat in ContentCategory]:
-                    logger.warning(f"Invalid category value: {item['category']}")
-                    continue
-                    
-                if not item["content"].strip():
-                    logger.warning(f"Empty content in category: {item}")
+                if item["category"] not in valid_category_values:
+                    logger.warning(f"Invalid category value: {item['category']}, valid values are: {valid_category_values}")
                     continue
                     
                 valid_categories.append(item)

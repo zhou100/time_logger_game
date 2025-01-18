@@ -6,10 +6,10 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 class TaskCategory(str, Enum):
-    TODO = "todo"
-    MEETING = "meeting"
-    BREAK = "break"
-    OTHER = "other"
+    TODO = "TODO"
+    MEETING = "MEETING"
+    BREAK = "BREAK"
+    OTHER = "OTHER"
 
 class ContentCategory(str, Enum):
     todo = "todo"
@@ -36,7 +36,7 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    category: Mapped[TaskCategory] = mapped_column(SQLAlchemyEnum(TaskCategory))
+    category: Mapped[str] = mapped_column(SQLAlchemyEnum(TaskCategory))
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration: Mapped[int | None] = mapped_column(nullable=True)  # Duration in seconds

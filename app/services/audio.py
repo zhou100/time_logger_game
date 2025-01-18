@@ -30,23 +30,47 @@ async def transcribe_audio(audio_data: bytes) -> str:
     """
     try:
         # Save audio data to temporary file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+            logger.info(f"Writing {len(audio_data)} bytes to temporary file")
             temp_file.write(audio_data)
-            temp_file.seek(0)
+            temp_file.flush()
+            temp_path = temp_file.name
+            
+        try:
+            # Log OpenAI API key status (safely)
+            api_key = os.getenv("OPENAI_API_KEY")
+            logger.info(f"OpenAI API key present: {bool(api_key)}")
             
             # Transcribe using OpenAI API
-            response = await client.audio.transcriptions.create(
-                file=temp_file,
-                model="whisper-1"
-            )
+            logger.info(f"Starting transcription of {temp_path}...")
+            with open(temp_path, "rb") as audio_file:
+                response = await client.audio.transcriptions.create(
+                    file=audio_file,
+                    model="whisper-1",
+                    language="zh"  # Explicitly specify Chinese
+                )
+            logger.info("Transcription successful")
             
-            return response.text
+            # Get the transcribed text
+            text = response.text
+            logger.info(f"Transcribed text: {text}")
+            
+            return text
+            
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete temporary file {temp_path}: {e}")
             
     except Exception as e:
         logger.error(f"Error transcribing audio: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.exception("Full traceback:")
         raise HTTPException(
             status_code=500,
-            detail="Transcription failed"
+            detail=f"Transcription failed: {str(e)}"
         )
 
 async def save_chat_history(db: AsyncSession, user_id: int, text: str) -> ChatHistory:
@@ -107,15 +131,15 @@ async def process_audio(db: AsyncSession, user_id: int, audio_data: bytes) -> Ch
                         
                     # Validate category
                     try:
-                        if category not in [c.value for c in ContentCategory]:
-                            logger.warning(f"Invalid category value: {category}")
-                            continue
-                            
+                        # Convert string category to ContentCategory enum
+                        category_enum = ContentCategory(category)
+                        
                         entry = CategorizedEntry(
                             chat_history_id=chat_history.id,
                             user_id=user_id,
-                            category=category,
-                            content=content
+                            category=category_enum,
+                            content=content,
+                            created_at=datetime.now(timezone.utc)
                         )
                         entries.append(entry)
                     except (ValueError, TypeError) as e:

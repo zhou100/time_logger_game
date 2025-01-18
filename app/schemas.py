@@ -27,7 +27,7 @@ class TaskResponse(TaskBase):
     user_id: int
     start_time: datetime
     end_time: Optional[datetime] = None
-    duration: Optional[float] = None
+    duration: Optional[int] = None  # Duration in seconds
     model_config = ConfigDict(from_attributes=True)
 
 class TaskSummary(BaseModel):

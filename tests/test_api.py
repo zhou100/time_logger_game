@@ -52,7 +52,7 @@ def test_process_audio_success(client, test_auth_headers, test_audio_file):
         
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["transcribed_text"] == "Test transcription"
+        assert data["text"] == "Test transcription"
         assert len(data["categorized_entries"]) == 2
 
 def test_get_entries_by_category_unauthorized(client):

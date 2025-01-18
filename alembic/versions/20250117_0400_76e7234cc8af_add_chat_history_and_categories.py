@@ -1,13 +1,14 @@
-"""add_chat_history_and_categories
+"""add chat history and categories
 
 Revision ID: 76e7234cc8af
 Revises: 20250108_2030
-Create Date: 2025-01-17 04:00:54.418561+00:00
+Create Date: 2025-01-17 04:00:45.000000
 
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from app.models import ContentCategory
 
 # revision identifiers, used by Alembic.
 revision = '76e7234cc8af'
@@ -22,30 +23,28 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=True),
         sa.Column('audio_path', sa.String(), nullable=True),
-        sa.Column('transcribed_text', sa.String(), nullable=False),
+        sa.Column('text', sa.String(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_chat_history_id'), 'chat_history', ['id'], unique=False)
     
-    # Create categorized_entries table with content category enum
-    content_category_enum = postgresql.ENUM('TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD', name='contentcategory', create_type=False)
-    content_category_enum.create(op.get_bind(), checkfirst=True)
-    
     op.create_table('categorized_entries',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('chat_history_id', sa.Integer(), nullable=True),
-        sa.Column('category', content_category_enum, nullable=True),
-        sa.Column('extracted_content', sa.String(), nullable=False),
+        sa.Column('user_id', sa.Integer(), nullable=True),
+        sa.Column('category', postgresql.ENUM('todo', 'idea', 'thought', 'time_record', name='content_category', create_type=False), nullable=False),
+        sa.Column('content', sa.String(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['chat_history_id'], ['chat_history.id'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_categorized_entries_id'), 'categorized_entries', ['id'], unique=False)
     
     # Update tasks table enum
-    task_category_enum = postgresql.ENUM('STUDY', 'WORKOUT', 'FAMILY_TIME', 'WORK', 'HOBBY', 'OTHER', name='taskcategory', create_type=False)
+    task_category_enum = sa.Enum('STUDY', 'WORKOUT', 'FAMILY_TIME', 'WORK', 'HOBBY', 'OTHER', name='task_category', create_type=False)
     task_category_enum.create(op.get_bind(), checkfirst=True)
     
     # Update nullable columns
@@ -53,7 +52,7 @@ def upgrade() -> None:
                existing_type=sa.INTEGER(),
                nullable=True)
     op.alter_column('tasks', 'start_time',
-               existing_type=postgresql.TIMESTAMP(),
+               existing_type=sa.DateTime(),
                nullable=True)
     op.create_index(op.f('ix_tasks_id'), 'tasks', ['id'], unique=False)
     
@@ -86,7 +85,7 @@ def downgrade() -> None:
                existing_type=sa.VARCHAR(),
                nullable=False)
     op.alter_column('tasks', 'start_time',
-               existing_type=postgresql.TIMESTAMP(),
+               existing_type=sa.DateTime(),
                nullable=False)
     
     op.alter_column('tasks', 'user_id',
