@@ -1,29 +1,28 @@
-from datetime import datetime, timezone
-from typing import Dict, Any
-import logging
+from datetime import datetime, timedelta
+from typing import Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..config import settings
 from ..database import get_db
 from ..models import User
 from ..schemas import UserCreate, UserResponse
 from ..auth import (
-    verify_password,
     create_access_token,
     get_password_hash,
-    get_current_user,
-    authenticate_user
+    verify_password,
+    get_current_user
 )
+from ..config import settings
 
-router = APIRouter(tags=["authentication"])
-
+import logging
 logger = logging.getLogger(__name__)
+router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-@router.post("/token")
+@router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -31,7 +30,7 @@ async def login(
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    logger.debug(f"Login attempt for username: {form_data.username}")
+    logger.debug(f"Login attempt for email: {form_data.username}")
     
     # Find user by email
     result = await db.execute(select(User).where(User.email == form_data.username))
@@ -55,12 +54,15 @@ async def login(
     
     # Create access token
     logger.debug(f"Creating access token for user: {form_data.username}")
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(
+        data={"sub": user.email},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    user: UserCreate = Body(...),
+    user: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -77,20 +79,11 @@ async def register(
             detail="Email already registered"
         )
     
-    result = await db.execute(select(User).where(User.username == user.username))
-    if result.scalar_one_or_none():
-        logger.debug(f"Username already taken: {user.username}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
-        )
-    
     # Create new user
     logger.debug(f"Creating new user with email: {user.email}")
     hashed_password = get_password_hash(user.password)
     db_user = User(
         email=user.email,
-        username=user.username,
         hashed_password=hashed_password
     )
     
@@ -101,8 +94,10 @@ async def register(
     logger.debug(f"Successfully created user with email: {user.email}")
     return db_user
 
-@router.get("/me")
-async def read_users_me(current_user: User = Depends(get_current_user)):
+@router.get("/me", response_model=UserResponse)
+async def read_users_me(
+    current_user: User = Depends(get_current_user)
+):
     """
     Get current user
     """

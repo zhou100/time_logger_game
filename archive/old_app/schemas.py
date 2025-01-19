@@ -6,7 +6,6 @@ from .models import TaskCategory, ContentCategory
 
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
 
 class UserCreate(UserBase):
     password: str
