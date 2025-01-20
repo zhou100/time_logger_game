@@ -4,10 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock, patch, MagicMock
 from .conftest import test_user, async_client, auth_async_client, test_db
-from app.models import ChatHistory, CategorizedEntry, ContentCategory
+from app.models import Audio, CategorizedEntry, ContentCategory
 from app.services.audio import process_audio
 from app.services.categorization import categorize_text
 from datetime import datetime, timezone
+import os
 
 @pytest.mark.asyncio
 async def test_transcribe_audio_mock():
@@ -20,36 +21,36 @@ async def test_classify_task_mock():
     pass
 
 @pytest.mark.asyncio
-async def test_save_chat_history(test_db):
+async def test_save_audio(test_db):
     # Create test data
-    text = "Test message"
+    transcribed_text = "Test transcription"
     user_id = 1
 
-    # Save chat history
+    # Save audio
     async with test_db as session:
-        chat_history = ChatHistory(
-            text=text,
+        audio = Audio(
+            transcribed_text=transcribed_text,
             user_id=user_id,
             created_at=datetime.now(timezone.utc)
         )
-        session.add(chat_history)
+        session.add(audio)
         await session.commit()
-        await session.refresh(chat_history)
+        await session.refresh(audio)
 
-        # Query the saved chat history using unique()
+        # Query the saved audio using unique()
         result = await session.execute(
-            select(ChatHistory).where(ChatHistory.id == chat_history.id)
+            select(Audio).where(Audio.id == audio.id)
         )
-        saved_history = result.unique().scalar_one()
+        saved_audio = result.unique().scalar_one()
 
-        assert saved_history.text == text
-        assert saved_history.user_id == user_id
+        assert saved_audio.transcribed_text == transcribed_text
+        assert saved_audio.user_id == user_id
 
 @pytest.mark.asyncio
 async def test_process_audio_endpoint_integration(auth_async_client, test_user):
     # Create test audio file
     test_file = {
-        "file": ("test.mp3", b"test audio content", "audio/mpeg")
+        "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
     }
 
     # Mock OpenAI API call
@@ -70,8 +71,8 @@ async def test_process_audio_endpoint_integration(auth_async_client, test_user):
         # Check response
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "chat_history_id" in data
-        assert "text" in data
+        assert "audio_id" in data
+        assert "transcribed_text" in data
         assert "categories" in data
         assert isinstance(data["categories"], list)
 
@@ -98,7 +99,7 @@ async def test_process_audio_endpoint_transcription_error(auth_async_client, tes
     # Mock transcription error
     with patch('app.services.audio.client.audio.transcriptions.create', side_effect=Exception("Transcription failed")):
         test_file = {
-            "file": ("test.mp3", b"test audio content", "audio/mpeg")
+            "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
         }
 
         # Send request
@@ -115,7 +116,7 @@ async def test_process_audio_endpoint_transcription_error(auth_async_client, tes
 async def test_process_audio_endpoint_unauthorized(async_client):
     # Create test audio file
     test_file = {
-        "file": ("test.mp3", b"test audio content", "audio/mpeg")
+        "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
     }
 
     # Send request without auth token
@@ -149,7 +150,7 @@ async def test_process_audio(test_user, test_db):
         result = await process_audio(test_db, test_user.id, audio_data)
 
         # Verify transcription
-        assert result.text == mock_transcription
+        assert result.transcribed_text == mock_transcription
         
         # Verify that categorize_text was called with correct args
         mock_categorize.assert_called_once_with(mock_transcription)
@@ -157,10 +158,10 @@ async def test_process_audio(test_user, test_db):
         # Verify categorized entries
         assert len(result.categorized_entries) == 1
         entry = result.categorized_entries[0]
+        assert entry.text == "Test todo"
         assert entry.category == ContentCategory.todo
-        assert entry.content == "Test todo"
         assert entry.user_id == test_user.id
-        assert entry.chat_history_id == result.id
+        assert entry.audio_id == result.id
 
 @pytest.mark.asyncio
 async def test_process_audio_with_empty_categories(test_user, test_db):
@@ -182,7 +183,7 @@ async def test_process_audio_with_empty_categories(test_user, test_db):
         result = await process_audio(test_db, test_user.id, audio_data)
 
         # Verify transcription
-        assert result.text == mock_transcription
+        assert result.transcribed_text == mock_transcription
         
         # Verify that categorize_text was called with correct args
         mock_categorize.assert_called_once_with(mock_transcription)
@@ -210,7 +211,7 @@ async def test_process_audio_with_invalid_categories(test_user, test_db):
         result = await process_audio(test_db, test_user.id, audio_data)
 
         # Verify transcription
-        assert result.text == mock_transcription
+        assert result.transcribed_text == mock_transcription
         
         # Verify that categorize_text was called with correct args
         mock_categorize.assert_called_once_with(mock_transcription)
@@ -235,7 +236,7 @@ async def test_process_audio_with_malformed_json(test_user, test_db):
         result = await process_audio(test_db, test_user.id, b"test audio")
         
         # Verify transcription was saved
-        assert result.text == mock_transcription
+        assert result.transcribed_text == mock_transcription
         # Verify no categorized entries were created
         assert len(result.categorized_entries) == 0
 
@@ -256,7 +257,7 @@ async def test_process_audio_with_none_categories(test_user, test_db):
         result = await process_audio(test_db, test_user.id, b"test audio")
         
         # Verify transcription was saved
-        assert result.text == mock_transcription
+        assert result.transcribed_text == mock_transcription
         # Verify no categorized entries were created
         assert len(result.categorized_entries) == 0
 
@@ -277,7 +278,7 @@ async def test_process_audio_with_empty_text(test_user, test_db):
         result = await process_audio(test_db, test_user.id, b"test audio")
         
         # Verify empty transcription was saved
-        assert result.text == ""
+        assert result.transcribed_text == ""
         # Verify no categorized entries were created
         assert len(result.categorized_entries) == 0
         # Verify categorize_text was not called

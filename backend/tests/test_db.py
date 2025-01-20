@@ -1,103 +1,113 @@
+"""
+Database tests
+"""
+from app.models import Audio, CategorizedEntry, ContentCategory
 import pytest
 from datetime import datetime
-from app.models import ChatHistory, CategorizedEntry, ContentCategory
-from sqlalchemy import select
+import os
 
-def test_chat_history_creation(test_db, test_user):
-    chat_history = ChatHistory(
+def test_audio_creation(test_db, test_user):
+    """Test creating an audio entry"""
+    audio = Audio(
+        transcribed_text="Test message",
         user_id=test_user.id,
-        text="Test transcription",
-        audio_path="test.mp3"
+        audio_path=os.path.join("tests", "fixtures", "audio", "test.mp3")
     )
-    test_db.add(chat_history)
+    test_db.add(audio)
     test_db.commit()
-    test_db.refresh(chat_history)
-    
-    assert chat_history.id is not None
-    assert chat_history.user_id == test_user.id
-    assert chat_history.text == "Test transcription"
-    assert chat_history.audio_path == "test.mp3"
-    assert isinstance(chat_history.created_at, datetime)
+    test_db.refresh(audio)
+
+    assert audio.id is not None
+    assert audio.transcribed_text == "Test message"
+    assert audio.user_id == test_user.id
+    assert audio.audio_path == os.path.join("tests", "fixtures", "audio", "test.mp3")
+    assert isinstance(audio.created_at, datetime)
 
 def test_categorized_entry_creation(test_db, test_user):
-    # Create chat history first
-    chat_history = ChatHistory(
-        user_id=test_user.id,
-        text="Test transcription"
+    """Test creating a categorized entry"""
+    # First create an audio
+    audio = Audio(
+        transcribed_text="Test message",
+        user_id=test_user.id
     )
-    test_db.add(chat_history)
+    test_db.add(audio)
     test_db.commit()
-    
-    # Create categorized entry
+
+    # Now create a categorized entry
     entry = CategorizedEntry(
-        chat_history_id=chat_history.id,
+        text="Test entry",
         category=ContentCategory.TODO,
-        extracted_content="Test todo item"
+        audio_id=audio.id
     )
     test_db.add(entry)
     test_db.commit()
     test_db.refresh(entry)
-    
+
     assert entry.id is not None
-    assert entry.chat_history_id == chat_history.id
+    assert entry.text == "Test entry"
     assert entry.category == ContentCategory.TODO
-    assert entry.extracted_content == "Test todo item"
+    assert entry.audio_id == audio.id
     assert isinstance(entry.created_at, datetime)
 
-def test_chat_history_relationship(test_db, test_user):
-    # Create chat history with categorized entries
-    chat_history = ChatHistory(
-        user_id=test_user.id,
-        text="Test transcription"
+def test_audio_relationship(test_db, test_user):
+    """Test the relationship between audio and categorized entries"""
+    # Create an audio
+    audio = Audio(
+        transcribed_text="Test message",
+        user_id=test_user.id
     )
-    test_db.add(chat_history)
+    test_db.add(audio)
     test_db.commit()
-    
+
+    # Create multiple entries
     entries = [
         CategorizedEntry(
-            chat_history_id=chat_history.id,
-            category=category,
-            extracted_content=f"Test {category.value}"
+            text=f"Test entry {i}",
+            category=ContentCategory.TODO,
+            audio_id=audio.id
         )
-        for category in [ContentCategory.TODO, ContentCategory.IDEA]
+        for i in range(3)
     ]
     test_db.add_all(entries)
     test_db.commit()
-    
-    # Test relationships
-    test_db.refresh(chat_history)
-    assert len(chat_history.categorized_entries) == 2
-    assert chat_history.user == test_user
-    
+
+    # Refresh to get the relationship
+    test_db.refresh(audio)
+
+    assert len(audio.entries) == 3
+    assert all(entry.audio_id == audio.id for entry in audio.entries)
+
     # Test cascade delete
-    test_db.delete(chat_history)
+    test_db.delete(audio)
     test_db.commit()
     test_db.flush()
-    
-    # Verify entries are deleted
+
+    # Check that entries were deleted
     remaining_entries = test_db.execute(
-        select(CategorizedEntry).where(CategorizedEntry.chat_history_id == chat_history.id)
+        select(CategorizedEntry).filter_by(audio_id=audio.id)
     ).scalars().all()
     assert len(remaining_entries) == 0
 
 def test_user_relationship(test_db, test_user):
-    # Create multiple chat histories for user
-    chat_histories = [
-        ChatHistory(
-            user_id=test_user.id,
-            text=f"Test transcription {i}"
+    """Test the relationship between user and audios"""
+    # Create multiple audios for the user
+    audios = [
+        Audio(
+            transcribed_text=f"Test message {i}",
+            user_id=test_user.id
         )
         for i in range(3)
     ]
-    test_db.add_all(chat_histories)
+    test_db.add_all(audios)
     test_db.commit()
-    
-    # Test user relationship
+
+    # Refresh to get the relationship
     test_db.refresh(test_user)
-    assert len(test_user.chat_history) == 3
-    
-    # Test ordering by created_at
+
+    assert len(test_user.audios) == 3
+    assert all(a.user_id == test_user.id for a in test_user.audios)
+    assert all(isinstance(a.created_at, datetime) for a in test_user.audios)
     assert all(
-        h1.created_at <= h2.created_at
-        for h1, h2 in zip(test_user.chat_history[:-1], test_user.chat_history[1:])
+        a1.created_at <= a2.created_at
+        for a1, a2 in zip(test_user.audios[:-1], test_user.audios[1:])
     )

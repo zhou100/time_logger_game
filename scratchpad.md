@@ -1,7 +1,52 @@
 # Scratchpad
 
 ## Current Task
-Frontend Development and API Integration
+Backend Testing Review and End-to-End Test Preparation
+
+### Backend Test Setup Review
+[X] Examined directory structure and components
+[X] Verified pytest configuration
+[ ] Review existing test coverage
+[ ] Setup test database with proper migrations
+[ ] Configure comprehensive logging
+[ ] Plan end-to-end test scenarios
+
+### Key Components to Test
+1. Authentication Flow
+   - Registration
+   - Login
+   - Token validation
+
+2. Audio Processing
+   - Recording
+   - Transcription
+   - Storage
+
+3. Categorization Service
+   - GPT API integration
+   - Category assignment
+   - Error handling
+
+4. Database Operations
+   - CRUD operations
+   - Migration handling
+   - Data integrity
+
+### Next Steps
+1. Review existing test coverage:
+   - Analyze current test files
+   - Identify gaps in coverage
+   - Plan new test cases
+
+2. Setup test environment:
+   - Verify database migrations
+   - Configure test data
+   - Setup logging
+
+3. Implement end-to-end tests:
+   - Create comprehensive test scenarios
+   - Add proper assertions
+   - Ensure proper cleanup
 
 ### Tech Stack
 - Frontend:
@@ -37,35 +82,6 @@ Frontend Development and API Integration
 [ ] Add daily/weekly goals
 [ ] Add user settings
 [ ] Add tests
-
-### Next Steps
-1. Add persistent storage for user stats and progress:
-   - Store stats in local storage or database
-   - Sync across sessions
-   - Track historical data
-
-2. Implement achievements system:
-   - Define achievement criteria
-   - Create achievement badges
-   - Add achievement notifications
-   - Track progress towards achievements
-
-3. Add daily and weekly goals:
-   - Set default goals
-   - Allow custom goal setting
-   - Add progress tracking
-   - Add completion rewards
-
-4. Add user settings:
-   - Theme preferences
-   - Notification settings
-   - Goal preferences
-   - Audio settings
-
-5. Write tests:
-   - Component tests
-   - Integration tests
-   - API integration tests
 
 ### Recent Changes
 1. Enhanced Recording Interface:
@@ -104,6 +120,17 @@ Frontend Development and API Integration
    - Use Material-UI's Fade and Grow components
    - Implement proper loading states
    - Handle transitions carefully
+
+### Testing OpenAI API Responses
+- Use namedtuples (Message, Choice, Response) to create properly structured mock responses that match the OpenAI API format
+- Mock response content should be a string that can be parsed as JSON, not a dict or Mock object
+- When testing error cases, remember that errors from categorize_text are wrapped in "Failed to categorize text: ..."
+- Set mock responses on service.client.chat.completions.create.return_value instead of mock_openai.return_value
+- Mock _validate_api_key to avoid actual API calls during testing
+- Test both valid and invalid JSON responses to ensure proper error handling
+
+### Model Name
+- The go-to GPT model is 'gpt-4o-mini' and it's correct, not a typo
 
 ### Code Reorganization (2025-01-18)
 

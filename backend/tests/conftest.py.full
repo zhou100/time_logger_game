@@ -8,15 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 
-from app.models.base import Base
-from app.models.user import User
-from app.models.audio import Audio
-from app.models.categories import CategorizedEntry, ContentCategory
 from app.main import app
+from app.database import get_db
+from app.models import Base, User, Audio, CategorizedEntry, ContentCategory
 from app.utils.auth import get_password_hash, create_access_token
-from app.database import get_db, override_get_db
 
 # Use in-memory SQLite for testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -42,7 +39,7 @@ async def test_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 @pytest.fixture
-def client() -> TestClient:
+def client() -> Generator:
     """Create a test client"""
     with TestClient(app) as c:
         yield c
@@ -61,7 +58,7 @@ async def test_user(test_db: AsyncSession) -> User:
     return user
 
 @pytest.fixture
-def auth_headers(test_user: User) -> dict:
+async def auth_headers(test_user: User) -> dict:
     """Create authorization headers"""
     access_token = create_access_token(
         data={"sub": test_user.email}
@@ -69,16 +66,15 @@ def auth_headers(test_user: User) -> dict:
     return {"Authorization": f"Bearer {access_token}"}
 
 @pytest.fixture
-def async_client() -> TestClient:
+def async_client() -> Generator:
     """Create an async test client"""
-    with TestClient(app) as c:
-        yield c
+    with TestClient(app) as ac:
+        yield ac
 
 @pytest.fixture
-def auth_async_client(async_client: TestClient, auth_headers: dict, test_db: AsyncSession) -> TestClient:
+def auth_async_client(async_client: TestClient, auth_headers: dict) -> TestClient:
     """Create an authenticated async test client"""
     async_client.headers.update(auth_headers)
-    app.dependency_overrides[get_db] = override_get_db(test_db)
     return async_client
 
 @pytest_asyncio.fixture
@@ -95,23 +91,18 @@ async def test_audio_with_categories(test_db: AsyncSession, test_user: User) -> 
     await test_db.refresh(audio)
 
     # Create categorized entries
-    categories = [
+    entries = [
         CategorizedEntry(
-            text="Test todo",
-            category=ContentCategory.TODO,
-            audio_id=audio.id,
-            user_id=test_user.id,
-            created_at=datetime.now(timezone.utc)
-        ),
-        CategorizedEntry(
-            text="Test idea",
-            category=ContentCategory.IDEA,
+            text=f"Test {category.value}",
+            category=category,
             audio_id=audio.id,
             user_id=test_user.id,
             created_at=datetime.now(timezone.utc)
         )
+        for category in [ContentCategory.TODO, ContentCategory.IDEA]
     ]
-    test_db.add_all(categories)
+    test_db.add_all(entries)
     await test_db.commit()
 
+    await test_db.refresh(audio)
     return audio

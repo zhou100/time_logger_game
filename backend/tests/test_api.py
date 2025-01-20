@@ -2,6 +2,7 @@ from fastapi import status
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from io import BytesIO
+import os
 from app.services.auth import create_access_token
 from app.models import ContentCategory
 
@@ -9,7 +10,7 @@ from app.models import ContentCategory
 def test_audio_file():
     file_content = b"test audio content"
     mock_file = MagicMock()
-    mock_file.filename = "test.mp3"
+    mock_file.filename = os.path.join("tests", "fixtures", "audio", "test.mp3")
     mock_file.content_type = "audio/mpeg"
     mock_file.headers = {"content-type": "audio/mpeg"}
     mock_file.read = AsyncMock(return_value=file_content)

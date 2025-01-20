@@ -64,12 +64,12 @@ def test_mandarin_audio_processing():
         result = response.json()
         print("\nAudio Processing Results:")
         print("-" * 50)
-        print(f"Chat History ID: {result.get('chat_history_id')}")
-        print(f"\nTranscribed Text:\n{json.dumps(result.get('text'), ensure_ascii=False)}")
+        print(f"Audio ID: {result.get('audio_id')}")
+        print(f"\nTranscribed Text:\n{json.dumps(result.get('transcription'), ensure_ascii=False)}")
         print("\nExtracted Categories:")
         print("-" * 50)
-        for entry in result.get("categorized_entries", []):
-            print(f"• {entry['category']}: {json.dumps(entry['content'], ensure_ascii=False)}")
+        for entry in result.get("categories", []):
+            print(f"• {entry['category']}: {json.dumps(entry['text'], ensure_ascii=False)}")
     else:
         print(f"Error: {response.text}")
 

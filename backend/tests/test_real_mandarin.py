@@ -62,25 +62,25 @@ def test_real_mandarin_audio():
         result = response.json()
         print("\nAudio Processing Results:")
         print("-" * 50)
-        print(f"Chat History ID: {result.get('chat_history_id')}")
-        print(f"\nTranscribed Text:\n{json.dumps(result.get('text'), ensure_ascii=False, indent=2)}")
+        print(f"Audio ID: {result.get('audio_id')}")
+        print(f"\nTranscribed Text:\n{json.dumps(result.get('transcription'), ensure_ascii=False, indent=2)}")
         
-        # Step 4: Retrieve chat history with categories
-        chat_id = result.get('chat_history_id')
-        if chat_id:
-            print("\nRetrieving chat history with categories...")
+        # Step 4: Retrieve audio with categories
+        audio_id = result.get('audio_id')
+        if audio_id:
+            print("\nRetrieving audio with categories...")
             response = requests.get(
-                f"{BASE_URL}/api/chat/history/{chat_id}",
+                f"{BASE_URL}/api/audio/{audio_id}",
                 headers=headers
             )
             if response.status_code == 200:
-                history = response.json()
+                audio = response.json()
                 print("\nCategories from database:")
                 print("-" * 50)
-                for entry in history.get("categorized_entries", []):
-                    print(f"• {entry['category']}: {json.dumps(entry['content'], ensure_ascii=False, indent=2)}")
+                for category in audio.get("categories", []):
+                    print(f"• {category['category']}: {json.dumps(category['text'], ensure_ascii=False, indent=2)}")
             else:
-                print(f"Error retrieving chat history: {response.text}")
+                print(f"Error retrieving audio: {response.text}")
     else:
         print(f"Error: {response.text}")
 
