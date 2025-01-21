@@ -21,7 +21,7 @@ if os.getenv("TEST_MODE") == "true":
 else:
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/time_logger"
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/time_logger_game"
     )
     logger.info(f"Running in production mode with database URL: {DATABASE_URL}")
 

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { TextField, Button, Box, Typography, Link, Alert, Container } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import AuthService from '../../services/auth';
 
 export const RegisterForm: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -37,23 +36,6 @@ export const RegisterForm: React.FC = () => {
         } catch (err) {
             console.log('Registration error:', err);
             setError(err instanceof Error ? err.message : 'Registration failed');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleTestConnection = async () => {
-        try {
-            setLoading(true);
-            await AuthService.testConnection();
-            setSuccess('Test connection successful!');
-            // Clear success message after a few seconds
-            setTimeout(() => {
-                setSuccess(null);
-            }, 3000);
-        } catch (err) {
-            console.log('Test connection error:', err);
-            setError(err instanceof Error ? err.message : 'Test connection failed');
         } finally {
             setLoading(false);
         }
@@ -139,15 +121,6 @@ export const RegisterForm: React.FC = () => {
                         disabled={loading}
                     >
                         {loading ? 'Registering...' : 'Register'}
-                    </Button>
-
-                    <Button
-                        fullWidth
-                        variant="outlined"
-                        onClick={handleTestConnection}
-                        disabled={loading}
-                    >
-                        {loading ? 'Testing...' : 'Test Connection'}
                     </Button>
 
                     <Typography align="center" mt={2}>

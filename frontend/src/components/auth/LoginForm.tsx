@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TextField, Button, Box, Typography, Link, Alert, Container } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 export const LoginForm: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -9,6 +9,7 @@ export const LoginForm: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const { login, registrationSuccess, clearRegistrationSuccess } = useAuth();
+    const navigate = useNavigate();
 
     useEffect(() => {
         // Clear registration success message when component unmounts
@@ -24,6 +25,8 @@ export const LoginForm: React.FC = () => {
         try {
             setLoading(true);
             await login({ username, password });
+            console.log('Login successful, navigating to home');
+            navigate('/'); // Navigate to home page after successful login
         } catch (err) {
             console.error('Login error:', err);
             setError(err instanceof Error ? err.message : 'Login failed');

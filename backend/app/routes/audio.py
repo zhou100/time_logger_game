@@ -35,9 +35,10 @@ async def upload_audio(
         
         # Check if file is an audio file
         if not file.content_type.startswith('audio/'):
+            logger.error(f"Invalid content type: {file.content_type}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="File must be an audio file"
+                detail=f"File must be an audio file, got {file.content_type}"
             )
         
         # Process audio using service
@@ -45,12 +46,15 @@ async def upload_audio(
         
         return JSONResponse(content=result)
     
+    except HTTPException as e:
+        logger.error(f"HTTP error: {str(e)}", exc_info=True)
+        raise e
     except Exception as e:
         logger.error(f"Error processing audio: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )
+        ) from e
 
 @router.get("/audio", status_code=status.HTTP_200_OK)
 async def get_audio_entries(
@@ -82,12 +86,15 @@ async def get_audio_entries(
         
         return JSONResponse(content={"entries": audio_entries})
         
+    except HTTPException as e:
+        logger.error(f"HTTP error: {str(e)}", exc_info=True)
+        raise e
     except Exception as e:
         logger.error(f"Error fetching audio entries: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )
+        ) from e
 
 @router.get("/audio/{audio_id}", status_code=status.HTTP_200_OK)
 async def get_audio_entry(
@@ -110,6 +117,7 @@ async def get_audio_entry(
         audio = result.scalar_one_or_none()
         
         if not audio:
+            logger.error(f"Audio entry {audio_id} not found for user {current_user.id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Audio entry not found"
@@ -121,11 +129,12 @@ async def get_audio_entry(
             "created_at": audio.created_at
         })
         
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        logger.error(f"HTTP error: {str(e)}", exc_info=True)
+        raise e
     except Exception as e:
         logger.error(f"Error fetching audio entry: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )
+        ) from e

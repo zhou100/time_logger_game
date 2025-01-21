@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type { 
     LoginRequest, 
     LoginResponse, 
@@ -6,31 +6,132 @@ import type {
     TranscriptionResponse,
     ApiError 
 } from '../types/api';
+import AuthService from './auth';
 
-// API endpoints configuration
+// API Configuration
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 export const API_ENDPOINTS = {
     AUTH: {
-        LOGIN: '/api/login',
-        REGISTER: '/api/register',
-        ME: '/api/me'
+        TOKEN: '/api/auth/token',
+        REGISTER: '/api/auth/register',
+        ME: '/api/auth/me'
     },
     AUDIO: {
         UPLOAD: '/api/audio/upload'
     }
 };
 
-// Create axios instance
+// Create axios instance with default config
 const api = axios.create({
-    baseURL: 'http://localhost:8000',  // Updated to match our FastAPI server port
+    baseURL: API_BASE_URL,
     headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
     },
-    withCredentials: true,
-    auth: {
-        username: process.env.REACT_APP_API_USERNAME || 'admin',  // Default value for development
-        password: process.env.REACT_APP_API_PASSWORD || 'admin'   // Default value for development
-    }
+    withCredentials: true
 });
+
+// Track if we're currently refreshing the token
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+// Subscribe to token refresh
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+    refreshSubscribers.push(cb);
+};
+
+// Notify subscribers about new token
+const onTokenRefreshed = (token: string) => {
+    refreshSubscribers.forEach(cb => cb(token));
+    refreshSubscribers = [];
+};
+
+// Add request interceptor for auth token and debugging
+api.interceptors.request.use(async (request: InternalAxiosRequestConfig) => {
+    // Skip token for auth endpoints
+    if (request.url?.includes('/api/auth/')) {
+        return request;
+    }
+
+    try {
+        const token = await AuthService.getValidToken();
+        if (token) {
+            request.headers.Authorization = `Bearer ${token}`;
+        }
+    } catch (error) {
+        console.error('Error getting valid token:', error);
+    }
+    
+    // Ensure proper Content-Type for FormData
+    if (request.data instanceof FormData) {
+        delete request.headers['Content-Type'];
+    }
+    
+    // Debug logging
+    console.log('Starting Request:', {
+        url: request.url,
+        method: request.method,
+        headers: request.headers,
+        data: request.data instanceof FormData ? 'FormData' : request.data
+    });
+    return request;
+});
+
+// Add response interceptor for token refresh and debugging
+api.interceptors.response.use(
+    response => {
+        console.log('Response:', {
+            status: response.status,
+            headers: response.headers,
+            data: response.data
+        });
+        return response;
+    },
+    async (error: AxiosError) => {
+        const originalRequest = error.config;
+        if (!originalRequest) {
+            return Promise.reject(error);
+        }
+
+        // Handle 401 errors
+        if (error.response?.status === 401 && !originalRequest.headers['X-Retry']) {
+            if (!isRefreshing) {
+                isRefreshing = true;
+
+                try {
+                    const newToken = await AuthService.refreshToken();
+                    originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+                    originalRequest.headers['X-Retry'] = 'true';
+                    onTokenRefreshed(newToken);
+                    return api(originalRequest);
+                } catch (refreshError) {
+                    refreshSubscribers = [];
+                    throw refreshError;
+                } finally {
+                    isRefreshing = false;
+                }
+            } else {
+                // Wait for token refresh
+                return new Promise(resolve => {
+                    subscribeTokenRefresh(token => {
+                        originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                        originalRequest.headers['X-Retry'] = 'true';
+                        resolve(api(originalRequest));
+                    });
+                });
+            }
+        }
+
+        console.error('Response Error:', {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+            headers: error.response?.headers
+        });
+        return Promise.reject(error);
+    }
+);
 
 // Error handling helper
 function handleApiError(error: AxiosError) {
@@ -49,22 +150,11 @@ function handleApiError(error: AxiosError) {
         if (typeof errorResponse.detail === 'string') {
             throw new Error(errorResponse.detail);
         }
-        throw new Error(errorResponse.detail[0]?.msg || 'Please check your input and try again.');
-    } else if (!error.response) {
-        throw new Error('Network error. Please check your connection and try again.');
+        throw new Error('Validation error. Please check your input.');
     } else {
         throw new Error('An unexpected error occurred. Please try again.');
     }
 }
-
-// Add token to requests if available
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
 
 // Auth API
 export const authApi = {
@@ -76,7 +166,7 @@ export const authApi = {
             formData.append('password', data.password);
 
             const response = await api.post(
-                API_ENDPOINTS.AUTH.LOGIN,
+                API_ENDPOINTS.AUTH.TOKEN,
                 formData,
                 {
                     headers: {
