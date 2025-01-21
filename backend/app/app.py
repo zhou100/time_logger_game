@@ -314,6 +314,10 @@ async def transcribe_with_time(request: Request, username: str = Depends(verify_
             detail=f"Error processing audio file: {str(e)}"
         )
 
+from .routes import auth, users
+
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(router)
 
 if __name__ == '__main__':

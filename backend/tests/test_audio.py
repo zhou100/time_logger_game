@@ -4,64 +4,71 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock, patch, MagicMock
 from .conftest import test_user, async_client, auth_async_client, test_db
-from app.models import Audio, CategorizedEntry, ContentCategory
-from app.services.audio import process_audio
-from app.services.categorization import categorize_text
-from datetime import datetime, timezone
+from app.models import Audio
+from app.services.audio import process_audio, transcribe_audio, save_audio
 import os
 
 @pytest.mark.asyncio
-async def test_transcribe_audio_mock():
-    # Test implementation...
-    pass
-
-@pytest.mark.asyncio
-async def test_classify_task_mock():
-    # Test implementation...
-    pass
+async def test_transcribe_audio():
+    """Test audio transcription with mocked OpenAI API"""
+    # Mock OpenAI API response
+    mock_response = {"text": "Test transcription"}
+    
+    with patch('openai.Audio.atranscribe', new_callable=AsyncMock) as mock_transcribe:
+        mock_transcribe.return_value = mock_response
+        
+        # Create test file
+        test_file_path = "test.mp3"
+        with open(test_file_path, "wb") as f:
+            f.write(b"test audio content")
+        
+        try:
+            # Test transcription
+            result = await transcribe_audio(test_file_path)
+            assert result == "Test transcription"
+            mock_transcribe.assert_called_once()
+        finally:
+            # Cleanup
+            if os.path.exists(test_file_path):
+                os.remove(test_file_path)
 
 @pytest.mark.asyncio
 async def test_save_audio(test_db):
+    """Test saving audio to database"""
     # Create test data
     transcribed_text = "Test transcription"
     user_id = 1
 
     # Save audio
     async with test_db as session:
-        audio = Audio(
-            transcribed_text=transcribed_text,
-            user_id=user_id,
-            created_at=datetime.now(timezone.utc)
-        )
-        session.add(audio)
-        await session.commit()
-        await session.refresh(audio)
-
-        # Query the saved audio using unique()
+        audio = await save_audio(session, user_id, transcribed_text)
+        
+        # Verify saved audio
+        assert audio.transcribed_text == transcribed_text
+        assert audio.user_id == user_id
+        assert audio.id is not None
+        
+        # Query to double check
         result = await session.execute(
             select(Audio).where(Audio.id == audio.id)
         )
-        saved_audio = result.unique().scalar_one()
-
+        saved_audio = result.scalar_one()
         assert saved_audio.transcribed_text == transcribed_text
-        assert saved_audio.user_id == user_id
 
 @pytest.mark.asyncio
 async def test_process_audio_endpoint_integration(auth_async_client, test_user):
+    """Test the complete audio upload and processing flow"""
     # Create test audio file
     test_file = {
-        "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
+        "file": ("test.mp3", b"test audio content", "audio/mpeg")
     }
 
     # Mock OpenAI API call
-    mock_response = MagicMock()
-    mock_response.text = "Test transcription"
+    mock_response = {"text": "Test transcription"}
     
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = [{"category": "todo", "content": "Test todo"}]
-    
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.categorization.categorize_text', new=mock_categorize):
+    with patch('openai.Audio.atranscribe', new_callable=AsyncMock) as mock_transcribe:
+        mock_transcribe.return_value = mock_response
+        
         # Send request
         response = await auth_async_client.post(
             "/api/audio/upload",
@@ -71,13 +78,13 @@ async def test_process_audio_endpoint_integration(auth_async_client, test_user):
         # Check response
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "audio_id" in data
+        assert "id" in data
         assert "transcribed_text" in data
-        assert "categories" in data
-        assert isinstance(data["categories"], list)
+        assert data["transcribed_text"] == "Test transcription"
 
 @pytest.mark.asyncio
 async def test_process_audio_endpoint_invalid_format(auth_async_client, test_user):
+    """Test uploading invalid file format"""
     # Create invalid file
     test_file = {
         "file": ("test.txt", b"not an audio file", "text/plain")
@@ -92,16 +99,20 @@ async def test_process_audio_endpoint_invalid_format(auth_async_client, test_use
     # Check response
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     data = response.json()
-    assert "Invalid file format" in data["detail"]
+    assert "File must be an audio file" in data["detail"]
 
 @pytest.mark.asyncio
 async def test_process_audio_endpoint_transcription_error(auth_async_client, test_user):
+    """Test handling of transcription errors"""
+    # Create test file
+    test_file = {
+        "file": ("test.mp3", b"test audio content", "audio/mpeg")
+    }
+    
     # Mock transcription error
-    with patch('app.services.audio.client.audio.transcriptions.create', side_effect=Exception("Transcription failed")):
-        test_file = {
-            "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
-        }
-
+    with patch('openai.Audio.atranscribe', new_callable=AsyncMock) as mock_transcribe:
+        mock_transcribe.side_effect = Exception("Transcription failed")
+        
         # Send request
         response = await auth_async_client.post(
             "/api/audio/upload",
@@ -110,176 +121,59 @@ async def test_process_audio_endpoint_transcription_error(auth_async_client, tes
 
         # Check response
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Transcription failed" in response.json()["detail"]
+        data = response.json()
+        assert "Transcription failed" in data["detail"]
 
 @pytest.mark.asyncio
-async def test_process_audio_endpoint_unauthorized(async_client):
-    # Create test audio file
-    test_file = {
-        "file": (os.path.join("tests", "fixtures", "audio", "test.mp3"), b"test audio content", "audio/mpeg")
-    }
-
-    # Send request without auth token
-    response = await async_client.post(
-        "/api/audio/upload",
-        files=test_file
-    )
-
-    # Check response
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+async def test_get_audio_entries(auth_async_client, test_user, test_db):
+    """Test retrieving paginated audio entries"""
+    # Create test entries
+    async with test_db as session:
+        entries = []
+        for i in range(3):
+            audio = await save_audio(
+                session, 
+                test_user["id"], 
+                f"Test transcription {i}"
+            )
+            entries.append(audio)
+    
+    # Test pagination
+    response = await auth_async_client.get("/api/audio?skip=0&limit=2")
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert "Not authenticated" in data["detail"]
+    assert len(data["entries"]) == 2
+    
+    # Test skip
+    response = await auth_async_client.get("/api/audio?skip=2&limit=2")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert len(data["entries"]) == 1
 
 @pytest.mark.asyncio
-async def test_process_audio(test_user, test_db):
-    # Mock data
-    mock_transcription = "Test transcription"
-    mock_categories = [{"category": "todo", "content": "Test todo"}]
-    audio_data = b"test audio content"
-
-    # Mock OpenAI API call
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = mock_categories
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, audio_data)
-
-        # Verify transcription
-        assert result.transcribed_text == mock_transcription
-        
-        # Verify that categorize_text was called with correct args
-        mock_categorize.assert_called_once_with(mock_transcription)
-        
-        # Verify categorized entries
-        assert len(result.categorized_entries) == 1
-        entry = result.categorized_entries[0]
-        assert entry.text == "Test todo"
-        assert entry.category == ContentCategory.todo
-        assert entry.user_id == test_user.id
-        assert entry.audio_id == result.id
+async def test_get_audio_entry(auth_async_client, test_user, test_db):
+    """Test retrieving a specific audio entry"""
+    # Create test entry
+    async with test_db as session:
+        audio = await save_audio(
+            session,
+            test_user["id"],
+            "Test transcription"
+        )
+    
+    # Test retrieval
+    response = await auth_async_client.get(f"/api/audio/{audio.id}")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["id"] == audio.id
+    assert data["transcribed_text"] == "Test transcription"
+    
+    # Test non-existent entry
+    response = await auth_async_client.get("/api/audio/99999")
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.asyncio
-async def test_process_audio_with_empty_categories(test_user, test_db):
-    # Mock data
-    mock_transcription = "Test transcription"
-    mock_categories = []
-    audio_data = b"test audio content"
-
-    # Mock OpenAI API call
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = mock_categories
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, audio_data)
-
-        # Verify transcription
-        assert result.transcribed_text == mock_transcription
-        
-        # Verify that categorize_text was called with correct args
-        mock_categorize.assert_called_once_with(mock_transcription)
-        
-        # Verify no categorized entries were created
-        assert len(result.categorized_entries) == 0
-
-@pytest.mark.asyncio
-async def test_process_audio_with_invalid_categories(test_user, test_db):
-    # Mock data
-    mock_transcription = "Test transcription"
-    mock_categories = [{"category": "invalid", "content": "Test content"}]
-    audio_data = b"test audio content"
-
-    # Mock OpenAI API call
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = mock_categories
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, audio_data)
-
-        # Verify transcription
-        assert result.transcribed_text == mock_transcription
-        
-        # Verify that categorize_text was called with correct args
-        mock_categorize.assert_called_once_with(mock_transcription)
-        
-        # Verify no categorized entries were created
-        assert len(result.categorized_entries) == 0
-
-@pytest.mark.asyncio
-async def test_process_audio_with_malformed_json(test_user, test_db):
-    # Mock data
-    mock_transcription = "Test transcription"
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    # Mock categorize_text to return malformed JSON
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = "invalid json"
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, b"test audio")
-        
-        # Verify transcription was saved
-        assert result.transcribed_text == mock_transcription
-        # Verify no categorized entries were created
-        assert len(result.categorized_entries) == 0
-
-@pytest.mark.asyncio
-async def test_process_audio_with_none_categories(test_user, test_db):
-    # Mock data
-    mock_transcription = "Test transcription"
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    # Mock categorize_text to return None
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = None
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, b"test audio")
-        
-        # Verify transcription was saved
-        assert result.transcribed_text == mock_transcription
-        # Verify no categorized entries were created
-        assert len(result.categorized_entries) == 0
-
-@pytest.mark.asyncio
-async def test_process_audio_with_empty_text(test_user, test_db):
-    # Mock data
-    mock_transcription = ""
-    mock_response = MagicMock()
-    mock_response.text = mock_transcription
-
-    # Mock categorize_text
-    mock_categorize = AsyncMock()
-    mock_categorize.return_value = []
-
-    with patch('app.services.audio.client.audio.transcriptions.create', return_value=mock_response), \
-         patch('app.services.audio.categorize_text', new=mock_categorize):
-        
-        result = await process_audio(test_db, test_user.id, b"test audio")
-        
-        # Verify empty transcription was saved
-        assert result.transcribed_text == ""
-        # Verify no categorized entries were created
-        assert len(result.categorized_entries) == 0
-        # Verify categorize_text was not called
-        mock_categorize.assert_not_called()
+async def test_get_audio_entry_unauthorized(async_client):
+    """Test unauthorized access to audio entry"""
+    response = await async_client.get("/api/audio/1")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED

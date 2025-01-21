@@ -1,23 +1,22 @@
 """
 Audio upload and processing routes.
 """
-import os
 import logging
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..utils.transcription import get_transcription_service
-from ..utils.categorization import get_categorization_service
+from sqlalchemy import select
+from typing import List, Optional
+from ..services.audio import process_audio
 from ..models.audio import Audio
-from ..models.categories import CategorizedEntry, ContentCategory
-from ..database import get_db
+from ..db import get_db
 from ..utils.auth import get_current_user
 from ..models.user import User
 from datetime import datetime, timezone
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 router = APIRouter()
 
@@ -41,55 +40,91 @@ async def upload_audio(
                 detail="File must be an audio file"
             )
         
-        # Read file content
-        content = await file.read()
+        # Process audio using service
+        result = await process_audio(db, current_user.id, file)
         
-        # Transcribe audio
-        transcription_service = get_transcription_service()
-        transcribed_text = await transcription_service.transcribe_audio(content)
-        logger.info(f"Transcribed text: {transcribed_text}")
-        
-        # Categorize text
-        categorization_service = get_categorization_service()
-        categories = await categorization_service.categorize_text(transcribed_text)
-        logger.info(f"Categories: {categories}")
-        
-        # Save to database
-        audio = Audio(
-            transcribed_text=transcribed_text,
-            user_id=current_user.id,
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(audio)
-        await db.commit()
-        await db.refresh(audio)
-        
-        # Save categorized entries
-        categorized_entries = []
-        for category_data in categories:
-            entry = CategorizedEntry(
-                text=category_data["content"],
-                category=ContentCategory[category_data["category"].upper()],
-                audio_id=audio.id,
-                user_id=current_user.id,
-                created_at=datetime.now(timezone.utc)
-            )
-            categorized_entries.append(entry)
-        
-        if categorized_entries:
-            db.add_all(categorized_entries)
-            await db.commit()
-        
-        return JSONResponse(
-            content={
-                "audio_id": audio.id,
-                "transcribed_text": transcribed_text,
-                "categories": categories
-            }
-        )
+        return JSONResponse(content=result)
     
     except Exception as e:
         logger.error(f"Error processing audio: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/audio", status_code=status.HTTP_200_OK)
+async def get_audio_entries(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Get paginated audio entries for the current user.
+    """
+    try:
+        logger.info(f"Fetching audio entries for user {current_user.id}")
+        
+        # Query audio entries
+        query = select(Audio).where(Audio.user_id == current_user.id)\
+            .order_by(Audio.created_at.desc())\
+            .offset(skip).limit(limit)
+            
+        result = await db.execute(query)
+        entries = result.scalars().all()
+        
+        # Format response
+        audio_entries = [{
+            "id": entry.id,
+            "transcribed_text": entry.transcribed_text,
+            "created_at": entry.created_at
+        } for entry in entries]
+        
+        return JSONResponse(content={"entries": audio_entries})
+        
+    except Exception as e:
+        logger.error(f"Error fetching audio entries: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/audio/{audio_id}", status_code=status.HTTP_200_OK)
+async def get_audio_entry(
+    audio_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> JSONResponse:
+    """
+    Get a specific audio entry by ID.
+    """
+    try:
+        logger.info(f"Fetching audio entry {audio_id} for user {current_user.id}")
+        
+        # Query audio entry
+        query = select(Audio).where(
+            Audio.id == audio_id,
+            Audio.user_id == current_user.id
+        )
+        result = await db.execute(query)
+        audio = result.scalar_one_or_none()
+        
+        if not audio:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Audio entry not found"
+            )
+        
+        return JSONResponse(content={
+            "id": audio.id,
+            "transcribed_text": audio.transcribed_text,
+            "created_at": audio.created_at
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching audio entry: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

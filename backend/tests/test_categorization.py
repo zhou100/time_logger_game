@@ -1,8 +1,11 @@
+"""
+Test categorization functionality
+"""
 import pytest
 import os
 import json
 import logging
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 from collections import namedtuple
 from app.utils.categorization import CategoryType, get_categorization_service, CategorizationService
 from openai import OpenAI, OpenAIError
@@ -28,7 +31,7 @@ def mock_openai():
         # Mock chat completions
         instance.chat = Mock()
         instance.chat.completions = Mock()
-        instance.chat.completions.create = Mock()
+        instance.chat.completions.create = AsyncMock()  # Use AsyncMock for async method
         
         # Configure the mock class to return our instance
         mock_client.return_value = instance
@@ -49,7 +52,7 @@ def create_mock_response():
     return _create_mock_response
 
 @pytest.fixture
-def service(mock_openai):
+async def service(mock_openai):
     service = CategorizationService()
     service._validate_api_key = Mock()
     service.client = mock_openai.return_value
@@ -79,13 +82,14 @@ class TestServiceInitialization:
         assert hasattr(service, 'client')
 
 class TestTextCategorization:
-    def test_categorize_text_success(self, service, mock_openai, create_mock_response):
+    @pytest.mark.asyncio
+    async def test_categorize_text_success(self, service, mock_openai, create_mock_response):
         # Create mock response
         mock_response = create_mock_response([{"category": "TODO", "extracted_content": "buy groceries tomorrow"}])
         service.client.chat.completions.create.return_value = mock_response
         
         # Call the method
-        categories = service.categorize_text("Test input")
+        categories = await service.categorize_text("Test input")
         
         # Verify the result
         assert isinstance(categories, list)
@@ -109,21 +113,24 @@ class TestTextCategorization:
             response_format={"type": "json_object"}
         )
 
-    def test_categorize_text_api_error(self, service, mock_openai):
+    @pytest.mark.asyncio
+    async def test_categorize_text_api_error(self, service, mock_openai):
         service.client.chat.completions.create.side_effect = OpenAIError("API Error")
         text = "test text for api error"
         
         with pytest.raises(Exception, match="Failed to categorize text"):
-            service.categorize_text(text)
+            await service.categorize_text(text)
 
-    def test_empty_categories_response(self, service, mock_openai, create_mock_response):
+    @pytest.mark.asyncio
+    async def test_empty_categories_response(self, service, mock_openai, create_mock_response):
         mock_response = create_mock_response([])
         service.client.chat.completions.create.return_value = mock_response
         
-        categories = service.categorize_text("text without any categories")
+        categories = await service.categorize_text("text without any categories")
         assert isinstance(categories, list)
         assert len(categories) == 0
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("invalid_content,expected_error", [
         ("invalid json content", "Failed to parse API response"),
         ('{"wrong_key": "wrong value"}', "Failed to categorize text: Categories field is missing or not a list"),
@@ -131,7 +138,7 @@ class TestTextCategorization:
         ('{"categories": null}', "Failed to categorize text: Categories field is missing or not a list"),
         ('{"categories": "not a list"}', "Failed to categorize text: Categories field is missing or not a list")
     ])
-    def test_response_format_validation(self, service, mock_openai, invalid_content, expected_error):
+    async def test_response_format_validation(self, service, mock_openai, invalid_content, expected_error):
         # Create a mock response with invalid content directly
         mock_response = Mock()
         mock_choice = Mock()
@@ -146,9 +153,10 @@ class TestTextCategorization:
         service.client.chat.completions.create.return_value = mock_response
         
         with pytest.raises(Exception, match=expected_error):
-            service.categorize_text("test text for format validation")
+            await service.categorize_text("test text for format validation")
 
-    def test_multiple_categories_response(self, service, mock_openai, create_mock_response):
+    @pytest.mark.asyncio
+    async def test_multiple_categories_response(self, service, mock_openai, create_mock_response):
         content = [
             {"category": "TODO", "extracted_content": "buy groceries tomorrow and call mom"},
             {"category": "IDEA", "extracted_content": "idea for a new project"}
@@ -156,7 +164,7 @@ class TestTextCategorization:
         mock_response = create_mock_response(content)
         service.client.chat.completions.create.return_value = mock_response
         
-        categories = service.categorize_text("test text with multiple categories")
+        categories = await service.categorize_text("test text with multiple categories")
         
         assert isinstance(categories, list)
         assert len(categories) == 2
@@ -187,11 +195,12 @@ class TestPromptFormatting:
         assert text in prompt
 
 class TestGPTConfiguration:
-    def test_gpt_model_name(self, service, mock_openai, create_mock_response):
+    @pytest.mark.asyncio
+    async def test_gpt_model_name(self, service, mock_openai, create_mock_response):
         mock_response = create_mock_response([{"category": "TODO", "extracted_content": "Test task"}])
         service.client.chat.completions.create.return_value = mock_response
         
-        service.categorize_text("Test input")
+        await service.categorize_text("Test input")
         
         service.client.chat.completions.create.assert_called_once_with(
             model="gpt-4o-mini",
@@ -203,6 +212,7 @@ class TestGPTConfiguration:
             response_format={"type": "json_object"}
         )
 
+@pytest.mark.asyncio
 class TestTranscribedAudioExamples:
     @pytest.mark.parametrize("example", [
         {"text": "I need to buy groceries tomorrow and also remember to call mom", "expected_category": "TODO"},
@@ -210,11 +220,11 @@ class TestTranscribedAudioExamples:
         {"text": "I spent 2 hours working on the project documentation today", "expected_category": "TIME_RECORD"},
         {"text": "I've been thinking about how technology affects our daily lives", "expected_category": "THOUGHT"}
     ])
-    def test_transcribed_audio_examples(self, service, mock_openai, create_mock_response, example):
+    async def test_transcribed_audio_examples(self, service, mock_openai, create_mock_response, example):
         mock_response = create_mock_response([{"category": example["expected_category"], "extracted_content": example["text"]}])
         service.client.chat.completions.create.return_value = mock_response
         
-        categories = service.categorize_text(example["text"])
+        categories = await service.categorize_text(example["text"])
         
         assert isinstance(categories, list)
         assert len(categories) == 1
@@ -224,14 +234,15 @@ class TestTranscribedAudioExamples:
         assert len(actual_category["extracted_content"]) > 0
 
 class TestLoggingOutput:
-    def test_logging_output(self, service, mock_openai, caplog, create_mock_response):
+    @pytest.mark.asyncio
+    async def test_logging_output(self, service, mock_openai, caplog, create_mock_response):
         caplog.set_level(logging.DEBUG)
         
         mock_response = create_mock_response([{"category": "THOUGHT", "extracted_content": "test text"}])
         service.client.chat.completions.create.return_value = mock_response
         
         text = "test text for logging"
-        service.categorize_text(text)
+        await service.categorize_text(text)
         
         assert any("Categorizing text" in record.message for record in caplog.records)
         assert any("Raw API response content" in record.message for record in caplog.records)

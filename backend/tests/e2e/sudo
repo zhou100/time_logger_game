@@ -1,0 +1,7 @@
+● postgresql.service - PostgreSQL RDBMS
+     Loaded: loaded (/lib/systemd/system/postgresql.service; enabled; vendor preset: enabled)
+     Active: active (exited) since Mon 2025-01-20 13:00:54 PST; 6h ago
+   Main PID: 23096 (code=exited, status=0/SUCCESS)
+
+Jan 20 13:00:54 DESKTOP-1KHNGE1 systemd[1]: Starting PostgreSQL RDBMS...
+Jan 20 13:00:54 DESKTOP-1KHNGE1 systemd[1]: Finished PostgreSQL RDBMS.
