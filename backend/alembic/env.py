@@ -17,6 +17,14 @@ from app.models import Base
 # access to the values within the .ini file in use.
 config = context.config
 
+# Get the database URL from environment variable and convert it to sync URL
+db_url = os.environ["DATABASE_URL"]
+if db_url.startswith("postgresql+asyncpg://"):
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+
+# Set the database URL
+config.set_main_option("sqlalchemy.url", db_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
@@ -50,8 +58,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection,
-            target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata
         )
 
         with context.begin_transaction():

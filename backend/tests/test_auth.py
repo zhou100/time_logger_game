@@ -1,3 +1,6 @@
+"""
+Test authentication endpoints
+"""
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -48,62 +51,93 @@ def client() -> TestClient:
 
 @pytest.mark.asyncio
 async def test_register(client: TestClient, test_db: AsyncSession):
+    """Test user registration."""
     response = client.post(
-        "/api/register",
-        json={"email": "test@example.com", "password": "testpassword"}
+        "/api/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "testpass123"
+        }
     )
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
+    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email(client: TestClient, test_db: AsyncSession):
+    """Test registration with duplicate email."""
     # First registration
     response = client.post(
-        "/api/register",
-        json={"email": "test@example.com", "password": "testpassword"}
+        "/api/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "testpass123"
+        }
     )
     assert response.status_code == 200
 
-    # Second registration with same email
+    # Try to register with same email
     response = client.post(
-        "/api/register",
-        json={"email": "test@example.com", "password": "testpassword"}
+        "/api/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "different_password"
+        }
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Email already registered"
+    assert "Email already registered" in response.json()["detail"]
 
 @pytest.mark.asyncio
 async def test_login(client: TestClient, test_db: AsyncSession):
-    # First register a user
+    """Test user login."""
+    # Register a user first
     client.post(
-        "/api/register",
-        json={"email": "test@example.com", "password": "testpassword"}
+        "/api/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "testpass123"
+        }
     )
 
-    # Then try to login
+    # Try to login
     response = client.post(
-        "/api/token",
-        data={"username": "test@example.com", "password": "testpassword"}
+        "/api/auth/token",
+        data={
+            "username": "test@example.com",
+            "password": "testpass123",
+            "grant_type": "password"
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
+    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: TestClient, test_db: AsyncSession):
-    # First register a user
+    """Test login with wrong password."""
+    # Register a user first
     client.post(
-        "/api/register",
-        json={"email": "test@example.com", "password": "testpassword"}
+        "/api/auth/register",
+        json={
+            "email": "test@example.com",
+            "password": "testpass123"
+        }
     )
 
-    # Then try to login with wrong password
+    # Try to login with wrong password
     response = client.post(
-        "/api/token",
-        data={"username": "test@example.com", "password": "wrongpassword"}
+        "/api/auth/token",
+        data={
+            "username": "test@example.com",
+            "password": "wrongpass",
+            "grant_type": "password"
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password"
+    assert "Incorrect email or password" in response.json()["detail"]

@@ -7,6 +7,11 @@ from .conftest import test_user, async_client, auth_async_client, test_db
 from app.models import Audio
 from app.services.audio import process_audio, transcribe_audio, save_audio
 import os
+from httpx import AsyncClient
+from app.models.user import User
+from app.models.audio import Audio
+
+pytestmark = pytest.mark.asyncio
 
 @pytest.mark.asyncio
 async def test_transcribe_audio():
@@ -33,48 +38,55 @@ async def test_transcribe_audio():
                 os.remove(test_file_path)
 
 @pytest.mark.asyncio
-async def test_save_audio(test_db):
+async def test_save_audio(test_db: AsyncSession):
     """Test saving audio to database"""
     # Create test data
     transcribed_text = "Test transcription"
+    filename = "test.mp3"
+    content_type = "audio/mpeg"
+    file_path = "/tmp/test.mp3"
     user_id = 1
-
-    # Save audio
+    
     async with test_db as session:
-        audio = await save_audio(session, user_id, transcribed_text)
-        
-        # Verify saved audio
-        assert audio.transcribed_text == transcribed_text
-        assert audio.user_id == user_id
-        assert audio.id is not None
-        
-        # Query to double check
-        result = await session.execute(
-            select(Audio).where(Audio.id == audio.id)
+        # Create audio entry
+        audio = Audio(
+            transcribed_text=transcribed_text,
+            filename=filename,
+            content_type=content_type,
+            file_path=file_path,
+            user_id=user_id
         )
-        saved_audio = result.scalar_one()
-        assert saved_audio.transcribed_text == transcribed_text
+        session.add(audio)
+        await session.commit()
+        await session.refresh(audio)
+        
+        # Verify saved data
+        assert audio.id is not None
+        assert audio.transcribed_text == transcribed_text
+        assert audio.filename == filename
+        assert audio.content_type == content_type
+        assert audio.file_path == file_path
 
 @pytest.mark.asyncio
-async def test_process_audio_endpoint_integration(auth_async_client, test_user):
+async def test_process_audio_endpoint_integration(auth_async_client: AsyncClient, test_user: User):
     """Test the complete audio upload and processing flow"""
     # Create test audio file
     test_file = {
-        "file": ("test.mp3", b"test audio content", "audio/mpeg")
+        "file": ("test.mp3", b"test audio data", "audio/mpeg")
     }
-
+    
     # Mock OpenAI API call
     mock_response = {"text": "Test transcription"}
     
     with patch('openai.Audio.atranscribe', new_callable=AsyncMock) as mock_transcribe:
         mock_transcribe.return_value = mock_response
         
-        # Send request
+        # Upload and process audio
         response = await auth_async_client.post(
             "/api/audio/upload",
             files=test_file
         )
-
+        
         # Check response
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -83,7 +95,7 @@ async def test_process_audio_endpoint_integration(auth_async_client, test_user):
         assert data["transcribed_text"] == "Test transcription"
 
 @pytest.mark.asyncio
-async def test_process_audio_endpoint_invalid_format(auth_async_client, test_user):
+async def test_process_audio_endpoint_invalid_format(auth_async_client: AsyncClient, test_user: User):
     """Test uploading invalid file format"""
     # Create invalid file
     test_file = {
@@ -102,7 +114,7 @@ async def test_process_audio_endpoint_invalid_format(auth_async_client, test_use
     assert "File must be an audio file" in data["detail"]
 
 @pytest.mark.asyncio
-async def test_process_audio_endpoint_transcription_error(auth_async_client, test_user):
+async def test_process_audio_endpoint_transcription_error(auth_async_client: AsyncClient, test_user: User):
     """Test handling of transcription errors"""
     # Create test file
     test_file = {
@@ -125,17 +137,21 @@ async def test_process_audio_endpoint_transcription_error(auth_async_client, tes
         assert "Transcription failed" in data["detail"]
 
 @pytest.mark.asyncio
-async def test_get_audio_entries(auth_async_client, test_user, test_db):
+async def test_get_audio_entries(auth_async_client: AsyncClient, test_user: User, test_db: AsyncSession):
     """Test retrieving paginated audio entries"""
     # Create test entries
     async with test_db as session:
         entries = []
         for i in range(3):
-            audio = await save_audio(
-                session, 
-                test_user["id"], 
-                f"Test transcription {i}"
+            audio = Audio(
+                transcribed_text=f"Test transcription {i}",
+                filename="test.mp3",
+                content_type="audio/mpeg",
+                file_path="/tmp/test.mp3",
+                user_id=test_user.id
             )
+            session.add(audio)
+            await session.commit()
             entries.append(audio)
     
     # Test pagination
@@ -151,15 +167,20 @@ async def test_get_audio_entries(auth_async_client, test_user, test_db):
     assert len(data["entries"]) == 1
 
 @pytest.mark.asyncio
-async def test_get_audio_entry(auth_async_client, test_user, test_db):
+async def test_get_audio_entry(auth_async_client: AsyncClient, test_user: User, test_db: AsyncSession):
     """Test retrieving a specific audio entry"""
     # Create test entry
     async with test_db as session:
-        audio = await save_audio(
-            session,
-            test_user["id"],
-            "Test transcription"
+        audio = Audio(
+            transcribed_text="Test transcription",
+            filename="test.mp3",
+            content_type="audio/mpeg",
+            file_path="/tmp/test.mp3",
+            user_id=test_user.id
         )
+        session.add(audio)
+        await session.commit()
+        await session.refresh(audio)
     
     # Test retrieval
     response = await auth_async_client.get(f"/api/audio/{audio.id}")
@@ -173,7 +194,7 @@ async def test_get_audio_entry(auth_async_client, test_user, test_db):
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.asyncio
-async def test_get_audio_entry_unauthorized(async_client):
+async def test_get_audio_entry_unauthorized(async_client: AsyncClient):
     """Test unauthorized access to audio entry"""
     response = await async_client.get("/api/audio/1")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

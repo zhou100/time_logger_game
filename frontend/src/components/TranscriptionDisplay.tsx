@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
   Box, 
   Paper, 
@@ -8,7 +8,12 @@ import {
   Fade,
   Grow,
 } from '@mui/material';
+import { useDispatch, useSelector } from 'react-redux';
+import { addItem, setError, clearError } from '../store/contentSlice';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CategorizedContent from './CategorizedContent';
+import Logger from '../utils/logger';
+import { RootState } from '../store/store';
 
 interface TranscriptionDisplayProps {
   transcription: string | null;
@@ -16,11 +21,28 @@ interface TranscriptionDisplayProps {
   error?: string;
 }
 
+// Generate a random numeric ID
+const generateNumericId = () => {
+  return Math.floor(Math.random() * 1000000000);
+};
+
 const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
   transcription,
   isLoading,
   error,
 }) => {
+  const dispatch = useDispatch();
+  const storeError = useSelector((state: RootState) => state.content.error);
+
+  useEffect(() => {
+    if (error) {
+      Logger.error('Transcription error:', error);
+      dispatch(setError(error));
+    } else {
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
+
   return (
     <Fade in={true} timeout={800}>
       <Box
@@ -50,10 +72,10 @@ const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
           </Box>
         )}
 
-        {error && (
+        {(error || storeError) && (
           <Grow in={true}>
             <Alert severity="error" sx={{ width: '100%' }}>
-              {error}
+              {error || storeError}
             </Alert>
           </Grow>
         )}
@@ -95,41 +117,15 @@ const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
                   color: 'text.primary',
                   fontFamily: "'Roboto', sans-serif",
                   position: 'relative',
-                  '&::before': {
-                    content: '"""',
-                    position: 'absolute',
-                    left: -20,
-                    top: -10,
-                    fontSize: '2em',
-                    color: 'primary.main',
-                    opacity: 0.2,
-                  },
                 }}
               >
                 {transcription}
               </Typography>
-
-              <Box
-                sx={{
-                  mt: 3,
-                  pt: 2,
-                  borderTop: '1px solid',
-                  borderColor: 'divider',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <Typography variant="caption" color="textSecondary">
-                  Word count: {transcription.split(/\s+/).length}
-                </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  Characters: {transcription.length}
-                </Typography>
-              </Box>
             </Paper>
           </Grow>
         )}
+
+        <CategorizedContent />
       </Box>
     </Fade>
   );

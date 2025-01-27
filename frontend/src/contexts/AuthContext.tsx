@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const refreshAccessToken = useCallback(async () => {
         try {
-            return await AuthService.refreshToken();
+            return await AuthService.getNewToken();
         } catch (error) {
             console.error('Token refresh failed:', error);
             logout();

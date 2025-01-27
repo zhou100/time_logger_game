@@ -4,6 +4,8 @@ import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
 import { useReactMediaRecorder } from 'react-media-recorder';
 
+type RecordingStatus = 'idle' | 'recording' | 'stopped' | 'acquiring_media';
+
 interface RecordButtonProps {
   onRecordingComplete: (blob: Blob) => Promise<void>;
 }
@@ -167,57 +169,64 @@ const RecordButton: React.FC<RecordButtonProps> = memo(({ onRecordingComplete })
   }, []);
 
   return (
-    <Box sx={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 2,
-      position: 'relative',
-      width: '200px'
-    }}>
-      {hasError && (
-        <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
-          {getStatusMessage()}
+    <Box 
+      component="div" 
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center',
+        position: 'relative'
+      }}
+    >
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2, width: '100%' }}
+          onClose={() => setError(null)}
+        >
+          {error}
         </Alert>
       )}
       
       <IconButton
-        onClick={handleClick}
-        disabled={isLoading}
-        color={isRecording ? 'error' : 'primary'}
-        size="large"
-        aria-label={isRecording ? 'Stop Recording' : 'Start Recording'}
+        onClick={status === 'recording' ? handleStopRecording : startRecording}
+        disabled={isStoppingRecording || status === 'acquiring_media'}
+        aria-label={status === 'recording' ? 'Stop recording' : 'Start recording'}
         sx={{
-          width: 80,
-          height: 80,
-          borderRadius: '50%',
-          border: '2px solid',
-          borderColor: 'currentColor',
-          transition: 'all 0.3s ease'
+          width: 56,
+          height: 56,
+          backgroundColor: status === 'recording' ? 'error.main' : 'primary.main',
+          color: 'white',
+          '&:hover': {
+            backgroundColor: status === 'recording' ? 'error.dark' : 'primary.dark',
+          },
         }}
       >
-        {isLoading ? (
-          <CircularProgress size={40} />
-        ) : isRecording ? (
-          <StopIcon sx={{ fontSize: 40 }} />
-        ) : (
-          <MicIcon sx={{ fontSize: 40 }} />
-        )}
+        {status === 'recording' ? <StopIcon /> : <MicIcon />}
       </IconButton>
 
-      <Typography variant="body2" color="text.secondary">
-        {getStatusMessage()}
-      </Typography>
+      {status === 'acquiring_media' && (
+        <CircularProgress 
+          size={24} 
+          sx={{ 
+            position: 'absolute', 
+            top: '50%', 
+            left: '50%', 
+            marginTop: '-12px', 
+            marginLeft: '-12px' 
+          }} 
+        />
+      )}
 
-      {isRecording && (
-        <Box sx={{ width: '100%', mt: 1 }}>
-          <Typography variant="body2" align="center" color="text.secondary">
-            {formatTime(recordingTime)}
+      {status === 'recording' && (
+        <Box sx={{ width: '100%', mt: 2 }}>
+          <Typography variant="caption" align="center" display="block">
+            Recording: {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
           </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={(recordingTime % 60) * 1.67}
-            sx={{ mt: 1 }}
+          <LinearProgress 
+            variant="determinate" 
+            value={(recordingTime % 60) * 1.67} 
+            sx={{ mt: 1 }} 
           />
         </Box>
       )}

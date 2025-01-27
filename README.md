@@ -1,6 +1,6 @@
 # Time Logger Game
 
-A FastAPI-based voice-enabled time tracking and content organization system. Upload audio notes and let the system automatically categorize and organize your content while tracking your time.
+A FastAPI and React-based voice-enabled time tracking and content organization system. Upload audio notes and let the system automatically categorize and organize your content while tracking your time.
 
 ## Features
 
@@ -9,9 +9,30 @@ A FastAPI-based voice-enabled time tracking and content organization system. Upl
 - User authentication and multi-user support
 - RESTful API with OpenAPI documentation
 - Structured data storage with PostgreSQL
+- Modern, responsive React-based UI
+- Real-time audio recording and processing
+- Material-UI components for consistent design
+- Mobile-first approach for use on any device
+
+## Product Vision
+
+### Target Users
+- Students tracking study sessions and capturing lecture notes
+- Professionals managing work time and capturing meeting insights
+- Creative workers organizing ideas and tracking project time
+- Personal development enthusiasts monitoring growth activities
+- Anyone wanting an effortless way to track time and organize thoughts
+
+### Key Benefits
+- Natural Interface: Voice-based input removes friction from time tracking and note-taking
+- AI-Powered Organization: Automatic categorization saves time and maintains structure
+- Comprehensive Tracking: Combine time data with contextual notes for better insights
+- Flexible Use: Works for both structured (time tracking) and unstructured (ideas, thoughts) content
+- Cross-Platform: Access your data from any device through the web interface
 
 ## Core Technologies
 
+### Backend
 - FastAPI web framework for efficient API development
 - PostgreSQL database for reliable data storage
 - SQLAlchemy ORM with Alembic for database management and migrations
@@ -19,9 +40,177 @@ A FastAPI-based voice-enabled time tracking and content organization system. Upl
   * Whisper API for accurate audio transcription
   * GPT-4o-mini for advanced text processing and categorization
 
+### Frontend
+- React for building interactive user interfaces
+- Material-UI for consistent, modern design components
+- React Router for client-side routing
+- Redux for state management
+- Web Audio API for voice recording
+- Responsive design for mobile and desktop use
+
 ## System Architecture
 
-![System Architecture Diagram](mermaid-diagram-2025-01-16-224340.svg)
+```mermaid
+graph TD
+    %% Frontend Section
+    subgraph Frontend[Browser/Mobile Client]
+        UI[User Interface]
+        subgraph ReactComponents[React Components]
+            App[App Component]
+            Nav[Navigation]
+            Auth[Auth Provider]
+            
+            subgraph CoreFeatures[Core Features]
+                TR[Time Tracker]
+                AR[Audio Recorder]
+                CV[Content Viewer]
+                PF[Profile Manager]
+            end
+            
+            subgraph GameFeatures[Gamification]
+                PS[Points System]
+                LB[Leaderboards]
+                ACH[Achievements]
+                CHL[Challenges]
+            end
+            
+            subgraph Analytics[Analytics & Insights]
+                TD[Time Dashboard]
+                VZ[Visualizations]
+                IG[Insight Generator]
+            end
+            
+            App --> Nav
+            App --> Auth
+            Auth --> CoreFeatures
+            Auth --> GameFeatures
+            Auth --> Analytics
+            Nav --> CoreFeatures
+        end
+        
+        subgraph StateManagement[State Management]
+            RS[(Redux Store)]
+            subgraph Slices
+                AS[Auth Slice]
+                TS[Timer Slice]
+                CS[Content Slice]
+                US[User Slice]
+                GS[Game Slice]
+            end
+            RS --> Slices
+        end
+        
+        subgraph Services
+            APIS[API Service]
+            WA[Web Audio API]
+            ST[Storage Service]
+            SW[Service Worker]
+        end
+        
+        CoreFeatures --> RS
+        GameFeatures --> RS
+        Analytics --> RS
+        RS --> CoreFeatures
+        AR --> WA
+        CoreFeatures --> APIS
+        CoreFeatures --> ST
+        SW -->|Offline Support| ST
+    end
+
+    %% Backend Flow
+    subgraph Backend[Server]
+        B[FastAPI Web Server]
+        C{Authentication}
+        
+        subgraph Processing[Content Processing]
+            D[Audio Processing]
+            F[OpenAI Whisper API]
+            G[Transcribed Text]
+            H[GPT-4o-mini API]
+            
+            subgraph AIFeatures[AI Analysis]
+                I[Content Categorization]
+                SEN[Sentiment Analysis]
+                SUM[Summary Generation]
+                ACT[Action Items Extraction]
+                CAL[Calendar Suggestions]
+            end
+        end
+        
+        B -->|Authenticates| C
+        C -->|Success| Processing
+        C -->|Failure| E[Return Error]
+        D -->|Sends to| F
+        F -->|Returns| G
+        G -->|Processes with| H
+        H --> AIFeatures
+    end
+
+    %% Database Section
+    subgraph Database
+        J[(PostgreSQL Database)]
+        
+        subgraph CoreTables[Core Tables]
+            L[Users]
+            M[ChatHistory]
+            N[CategorizedEntries]
+            O[Tasks]
+        end
+        
+        subgraph GameTables[Game Tables]
+            PT[Points]
+            ST[Streaks]
+            BG[Badges]
+            CH[Challenges]
+        end
+        
+        J -->|Contains| CoreTables
+        J -->|Contains| GameTables
+    end
+
+    %% API Endpoints
+    subgraph APIEndpoints[API Endpoints]
+        subgraph CoreAPI[Core APIs]
+            P["/audio/process"]
+            Q["/categories/category"]
+            R["/tasks/action"]
+            S["/users"]
+        end
+        
+        subgraph GameAPI[Game APIs]
+            GP["/points"]
+            GL["/leaderboard"]
+            GA["/achievements"]
+            GC["/challenges"]
+        end
+        
+        subgraph AnalyticsAPI[Analytics APIs]
+            AA["/insights"]
+            AT["/trends"]
+            AS["/summaries"]
+        end
+    end
+
+    %% Cross-component Connections
+    APIS -->|Calls| B
+    AIFeatures -->|Stores in| J
+    J -->|Retrieves via| APIEndpoints
+    APIEndpoints -->|Serves| APIS
+    SW -->|Syncs when online| B
+
+    %% Styling
+    classDef frontendStyle fill:#e1f5fe,stroke:#333,stroke-width:2px
+    classDef backendStyle fill:#e8f5e9,stroke:#333,stroke-width:2px
+    classDef dbStyle fill:#fff3e0,stroke:#333,stroke-width:2px
+    classDef apiStyle fill:#f3e5f5,stroke:#333,stroke-width:2px
+    classDef gameStyle fill:#fce4ec,stroke:#333,stroke-width:2px
+    
+    class Frontend frontendStyle
+    class Backend,Processing backendStyle
+    class Database,CoreTables,GameTables dbStyle
+    class APIEndpoints,CoreAPI,GameAPI,AnalyticsAPI apiStyle
+    class GameFeatures,GameAPI gameStyle
+```
 
 ### Data Layer
 
@@ -55,27 +244,113 @@ Tasks:
   - end_time
   - duration
   - description
+
+Points:
+  - id (PK)
+  - user_id (FK -> Users)
+  - points
+  - created_at
+
+Streaks:
+  - id (PK)
+  - user_id (FK -> Users)
+  - streak
+  - created_at
+
+Badges:
+  - id (PK)
+  - user_id (FK -> Users)
+  - badge
+  - created_at
+
+Challenges:
+  - id (PK)
+  - user_id (FK -> Users)
+  - challenge
+  - created_at
 ```
 
-### API Endpoints
+## Installation (Local Development & Testing)
 
-#### Audio Processing
-- POST `/audio/process` - Upload and process audio files
-- Returns transcribed and categorized content
+Follow these steps to set up both the FastAPI backend and the React frontend for local development and testing.
 
-#### Content Management
-- GET `/categories/{category}` - Retrieve content by category
-- Supports filtering and pagination
+### 1. Clone the Repository
+```bash
+git clone https://github.com/zhou100/time_logger_game.git
+cd time_logger_game
+```
 
-#### Time Tracking
-- POST `/tasks/start` - Start a new task
-- POST `/tasks/end/{task_id}` - End a task
+### 2. Backend Setup
 
-#### User Management
-- POST `/users` - Create new user
-- GET `/users/me` - Retrieve current user info
+#### Create and Activate a Python Virtual Environment
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-## Installation
+#### Install Backend Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+#### Set Up Environment Variables
+1. Create a new `.env` file in the project root:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` with your configuration:
+```
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+OPENAI_API_KEY=your_openai_api_key
+SECRET_KEY=your_secret_key
+```
+
+#### Initialize the Database
+```bash
+cd backend
+alembic upgrade head
+```
+
+### 3. Frontend Setup
+
+#### Install Frontend Dependencies
+```bash
+cd frontend
+npm install  # or yarn install
+```
+
+### 4. Running the Application
+
+#### Start the Backend Server
+From the project root directory:
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+The FastAPI server will be available at http://localhost:8000
+
+#### Start the Frontend Development Server
+In a new terminal, from the project root:
+```bash
+cd frontend
+npm start  # or yarn start
+```
+The React application will be available at http://localhost:3000
+
+### 5. Accessing the Application
+
+- Web Interface: http://localhost:3000
+- API Documentation: http://localhost:8000/docs
+- API Redoc: http://localhost:8000/redoc
+
+## Docker Setup for Local Development
+
+### Prerequisites
+- Docker
+- Docker Compose
+
+### Getting Started with Docker
 
 1. Clone the repository:
 ```bash
@@ -83,60 +358,57 @@ git clone https://github.com/yourusername/time_logger_game.git
 cd time_logger_game
 ```
 
-2. Create a virtual environment:
+2. Start the development environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+docker compose up --build
 ```
 
-3. Install dependencies:
+This will:
+- Build and start the backend service on port 10000
+- Build and start the frontend service on port 3000
+- Set up hot-reloading for both services
+
+3. Access the application:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:10000
+- API Documentation: http://localhost:10000/docs
+
+### Development with Docker
+
+- The Docker setup includes volume mounts, so your code changes will automatically trigger rebuilds
+- Backend files are mounted at `/app` in the backend container
+- Frontend files are mounted at `/app` in the frontend container
+- Both services support hot-reloading for a smooth development experience
+
+### Useful Docker Commands
+
 ```bash
-pip install -r requirements.txt
+# Start services in detached mode
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+
+# Rebuild specific service
+docker compose build backend  # or frontend
+
+# Restart specific service
+docker compose restart backend  # or frontend
 ```
 
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
+### Troubleshooting
 
-5. Initialize the database:
-```bash
-alembic upgrade head
-```
+1. If the frontend can't connect to the backend:
+   - Ensure both services are running (`docker compose ps`)
+   - Check if the `REACT_APP_API_URL` environment variable is set correctly
+   - Verify network connectivity between containers
 
-6. Run the application:
-```bash
-uvicorn app.main:app --reload
-```
-
-## Environment Variables
-
-Create a `.env` file with the following variables:
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-OPENAI_API_KEY=your_openai_api_key
-SECRET_KEY=your_secret_key
-```
-
-## Usage
-
-1. Start the server:
-```bash
-uvicorn app.main:app --reload
-```
-
-2. Access the API documentation:
-```
-http://localhost:8000/docs
-```
-
-3. Create a user account and obtain authentication credentials
-
-4. Use the API endpoints to:
-   - Upload audio files
-   - Track time
-   - Retrieve categorized content
+2. For permission issues:
+   - Ensure the `temp` directory has correct permissions
+   - Run `docker compose down` and rebuild with `docker compose up --build`
 
 ## Development
 
@@ -174,6 +446,31 @@ alembic upgrade head
 ## Model Usage
 - Audio Transcription: `whisper-1`
 - Text Processing: `gpt-4o-mini`
+
+## Future Improvements
+
+### Technical Enhancements
+- Mobile application development (iOS/Android)
+- Offline support with local-first architecture
+- Real-time collaboration features
+- Calendar integration (Google Calendar, iCal)
+- Enhanced analytics and reporting
+- API integrations with popular productivity tools
+
+### Product Features
+- Gamification elements for engagement
+- Social features for accountability
+- Custom categories and workflows
+- Advanced visualization of time patterns
+- AI-powered productivity insights
+- Team and organization support
+
+### Infrastructure
+- Multi-region deployment
+- Enhanced security features
+- Automated backup systems
+- Performance optimization
+- Scalability improvements
 
 ## Contributing
 

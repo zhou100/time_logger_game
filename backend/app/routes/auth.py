@@ -72,29 +72,23 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    """Login endpoint that returns access and refresh tokens."""
     logger.debug(f"Login attempt for user: {form_data.username}")
     logger.debug(f"Form data: {form_data.__dict__}")
     
     try:
-        # Create test user if it doesn't exist
-        test_user = await get_user(db, "test@example.com")
-        if not test_user:
-            logger.info("Creating test user...")
-            from ..models.user import User
-            test_user = User(
-                email="test@example.com",
-                hashed_password=get_password_hash("password123"),
-                is_active=True
-            )
-            db.add(test_user)
-            await db.commit()
-            await db.refresh(test_user)
-            logger.info("Test user created successfully")
-        
+        # Get the user
         user = await get_user(db, form_data.username)
-        logger.debug(f"Found user: {user.email if user else None}")
-        
-        if not user or not verify_password(form_data.password, user.hashed_password):
+        if not user:
+            logger.warning(f"Login failed - user not found: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify password
+        if not verify_password(form_data.password, user.hashed_password):
             logger.warning(f"Failed login attempt for user: {form_data.username}")
             logger.debug(f"Password verification failed for user: {form_data.username}")
             raise HTTPException(
@@ -116,6 +110,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         logger.debug(f"Response: {response}")
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error during login: {str(e)}")
         logger.exception("Login error details:")
@@ -128,38 +124,56 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
 async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Refresh access token using refresh token."""
     try:
+        logger.info(f"Refresh token request received")
+        
         # Verify refresh token
-        payload = jwt.decode(request.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
+        try:
+            payload = jwt.decode(request.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            logger.info(f"Token decoded successfully: {payload}")
+        except JWTError as e:
+            logger.error(f"JWT decode error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token",
+                detail=f"Invalid refresh token: {str(e)}",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+        email: str = payload.get("sub")
+        if email is None:
+            logger.error("No email in token payload")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token: no email",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
         # Get user from database
         user = await get_user(db, email)
         if user is None:
+            logger.error(f"User not found: {email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
+        logger.info(f"Creating new tokens for user: {email}")
         # Create new tokens
         access_token = create_access_token(data={"sub": email})
         refresh_token = create_refresh_token(data={"sub": email})
+        
+        logger.info("Token refresh successful")
         return Token(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer"
         )
-    except JWTError:
+    except Exception as e:
+        logger.error(f"Unexpected error in refresh_token: {str(e)}")
+        logger.exception("Refresh token error details:")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
         )
 
 # Test endpoint

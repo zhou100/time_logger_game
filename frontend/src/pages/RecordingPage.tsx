@@ -21,13 +21,41 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RecordButton from '../components/RecordButton';
 import TranscriptionDisplay from '../components/TranscriptionDisplay';
 import { audioApi } from '../services/api';
-import type { TranscriptionResponse } from '../types/api';
+import { Category } from '../types/api';
+import { useDispatch } from 'react-redux';
+import { addItem } from '../store/contentSlice';
+import Logger from '../utils/logger';
+
+const categoryMap: Record<string, Category> = {
+  'TODO': Category.TODO,
+  'IDEA': Category.IDEA,
+  'THOUGHT': Category.THOUGHT,
+  'TIME_RECORD': Category.TIME_RECORD,
+  'TO-DO': Category.TODO,
+  'TIME RECORD': Category.TIME_RECORD,
+  'todo': Category.TODO,
+  'idea': Category.IDEA,
+  'thought': Category.THOUGHT,
+  'time_record': Category.TIME_RECORD,
+};
+
+const getCategory = (category: string): Category => {
+  const normalizedCategory = category.toUpperCase().trim();
+  const mappedCategory = categoryMap[normalizedCategory];
+  
+  if (!mappedCategory) {
+    Logger.warn(`Unsupported category "${category}" defaulted to THOUGHT`);
+    return Category.THOUGHT;
+  }
+  
+  return mappedCategory;
+};
 
 const RecordingPage: React.FC = () => {
+  const dispatch = useDispatch();
   const [transcription, setTranscription] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [categories, setCategories] = useState<Array<{category: string; extracted_content: string}>>([]);
   const [stats, setStats] = useState({
     totalRecordings: 0,
     totalMinutes: 0,
@@ -40,13 +68,48 @@ const RecordingPage: React.FC = () => {
   const handleRecordingComplete = useCallback(async (blob: Blob) => {
     setIsTranscribing(true);
     setError(undefined);
-    setCategories([]);
 
     try {
+      Logger.debug('Processing recording...');
       const response = await audioApi.uploadAudio(blob);
+      Logger.debug('API Response:', {
+        hasTranscription: !!response.transcribed_text,
+        categoriesCount: response.categories?.length || 0,
+        categories: response.categories?.map(c => c.category)
+      });
+
       setTranscription(response.transcribed_text);
-      setCategories(response.categories);
       
+      // Map API response categories to expected format and dispatch to store
+      if (response.categories && Array.isArray(response.categories)) {
+        Logger.debug('Processing categories from response:', {
+          categories: response.categories,
+          validCategories: Object.values(Category)
+        });
+
+        response.categories.forEach((cat, index) => {
+          if (!cat.category || !cat.extracted_content) {
+            Logger.warn('Invalid category data:', cat);
+            return;
+          }
+
+          const category = getCategory(cat.category);
+          Logger.debug(`Adding item with category: ${category}`, {
+            originalCategory: cat.category,
+            mappedCategory: category,
+            content: cat.extracted_content,
+            allCategories: Object.values(Category)
+          });
+          
+          dispatch(addItem({
+            id: Date.now() + index,
+            text: cat.extracted_content,
+            category,
+            timestamp: new Date().toISOString()
+          }));
+        });
+      }
+
       // Update stats
       setStats(prev => ({
         totalRecordings: prev.totalRecordings + 1,
@@ -57,13 +120,12 @@ const RecordingPage: React.FC = () => {
       // Update level progress
       setLevelProgress(prev => Math.min(100, prev + Math.floor(Math.random() * 30)));
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to transcribe audio';
-      setError(errorMessage);
-      console.error('Transcription error:', err);
+      Logger.error('Error processing recording:', err);
+      setError(err instanceof Error ? err.message : 'Error processing recording');
     } finally {
       setIsTranscribing(false);
     }
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (transcription) {
@@ -192,55 +254,11 @@ const RecordingPage: React.FC = () => {
           }}
         >
           <RecordButton onRecordingComplete={handleAudioUpload} />
-          <TranscriptionDisplay
+          <TranscriptionDisplay 
             transcription={transcription}
             isLoading={isTranscribing}
             error={error}
           />
-          
-          {categories && categories.length > 0 && (
-            <Fade in={true} timeout={1000}>
-              <Box sx={{ width: '100%', mt: 4 }}>
-                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                  Time Categories
-                </Typography>
-                <List>
-                  {categories.map((cat, index) => (
-                    <ListItem 
-                      key={index}
-                      sx={{
-                        mb: 2,
-                        backgroundColor: 'rgba(0,0,0,0.02)',
-                        borderRadius: 2,
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0,0,0,0.04)',
-                          transform: 'translateX(8px)',
-                        }
-                      }}
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Chip 
-                              label={cat.category} 
-                              color="primary" 
-                              size="small"
-                              sx={{ 
-                                fontWeight: 500,
-                                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                              }}
-                            />
-                            <Typography sx={{ ml: 1 }}>{cat.extracted_content}</Typography>
-                          </Box>
-                        }
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-            </Fade>
-          )}
         </Paper>
       </Box>
     </Container>

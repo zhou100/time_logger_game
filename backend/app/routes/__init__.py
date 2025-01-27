@@ -13,6 +13,6 @@ router = APIRouter()
 
 # Include sub-routers
 router.include_router(categories_router)
-router.include_router(audio_router, tags=["audio"])  # Remove prefix to match test expectations
+router.include_router(audio_router, tags=["audio"])
 
 __all__ = ['router']

@@ -14,12 +14,26 @@ export interface RegisterRequest {
     password: string;
 }
 
+// Category types
+export enum Category {
+    TODO = 'TODO',
+    IDEA = 'IDEA',
+    THOUGHT = 'THOUGHT',
+    TIME_RECORD = 'TIME_RECORD'
+}
+
+// Ensure Category values are valid at runtime
+const CATEGORY_VALUES = Object.values(Category);
+if (!CATEGORY_VALUES.every(value => typeof value === 'string')) {
+    throw new Error('All Category enum values must be strings');
+}
+
 // Audio processing types
 export interface TranscriptionResponse {
     chat_history_id: number;
     transcribed_text: string;
     categories: Array<{
-        category: string;
+        category: Category;
         extracted_content: string;
     }>;
 }

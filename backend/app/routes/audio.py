@@ -44,6 +44,12 @@ async def upload_audio(
         # Process audio using service
         result = await process_audio(db, current_user.id, file)
         
+        # Ensure all datetime objects are serialized
+        if isinstance(result.get('created_at'), datetime):
+            result['created_at'] = result['created_at'].isoformat()
+        if isinstance(result.get('updated_at'), datetime):
+            result['updated_at'] = result['updated_at'].isoformat()
+        
         return JSONResponse(content=result)
     
     except HTTPException as e:
@@ -53,8 +59,8 @@ async def upload_audio(
         logger.error(f"Error processing audio: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+            detail="Server error. Please try again later."
+        )
 
 @router.get("/audio", status_code=status.HTTP_200_OK)
 async def get_audio_entries(
@@ -64,37 +70,31 @@ async def get_audio_entries(
     current_user: User = Depends(get_current_user)
 ) -> JSONResponse:
     """
-    Get paginated audio entries for the current user.
+    Get paginated list of audio entries for the current user.
     """
     try:
-        logger.info(f"Fetching audio entries for user {current_user.id}")
+        query = (
+            select(Audio)
+            .where(Audio.user_id == current_user.id)
+            .order_by(Audio.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
         
-        # Query audio entries
-        query = select(Audio).where(Audio.user_id == current_user.id)\
-            .order_by(Audio.created_at.desc())\
-            .offset(skip).limit(limit)
-            
         result = await db.execute(query)
         entries = result.scalars().all()
         
-        # Format response
-        audio_entries = [{
-            "id": entry.id,
-            "transcribed_text": entry.transcribed_text,
-            "created_at": entry.created_at
-        } for entry in entries]
+        # Convert entries to dict with proper datetime handling
+        audio_entries = [entry.to_dict() for entry in entries]
         
         return JSONResponse(content={"entries": audio_entries})
         
-    except HTTPException as e:
-        logger.error(f"HTTP error: {str(e)}", exc_info=True)
-        raise e
     except Exception as e:
         logger.error(f"Error fetching audio entries: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+            detail="Server error. Please try again later."
+        )
 
 @router.get("/audio/{audio_id}", status_code=status.HTTP_200_OK)
 async def get_audio_entry(
@@ -106,35 +106,32 @@ async def get_audio_entry(
     Get a specific audio entry by ID.
     """
     try:
-        logger.info(f"Fetching audio entry {audio_id} for user {current_user.id}")
-        
-        # Query audio entry
-        query = select(Audio).where(
-            Audio.id == audio_id,
-            Audio.user_id == current_user.id
-        )
+        # Get audio entry
+        query = select(Audio).where(Audio.id == audio_id)
         result = await db.execute(query)
         audio = result.scalar_one_or_none()
         
+        # Check if audio exists
         if not audio:
-            logger.error(f"Audio entry {audio_id} not found for user {current_user.id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Audio entry not found"
+                detail=f"Audio entry {audio_id} not found"
             )
         
-        return JSONResponse(content={
-            "id": audio.id,
-            "transcribed_text": audio.transcribed_text,
-            "created_at": audio.created_at
-        })
+        # Check if user owns this audio
+        if audio.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this audio entry"
+            )
+        
+        return JSONResponse(content=audio.to_dict())
         
     except HTTPException as e:
-        logger.error(f"HTTP error: {str(e)}", exc_info=True)
         raise e
     except Exception as e:
         logger.error(f"Error fetching audio entry: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        ) from e
+            detail="Server error. Please try again later."
+        )
