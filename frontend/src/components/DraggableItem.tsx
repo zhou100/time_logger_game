@@ -45,11 +45,13 @@ const DraggableItem: React.FC<DraggableItemProps> = ({
               transition: 'transform 0.2s ease'
             }}
           >
-            <ContentCard 
-              item={item}
-              categoryColor={color}
-              isDragging={snapshot.isDragging}
-            />
+           <ContentCard 
+            item={item}
+            categoryColor={color}
+            isDragging={snapshot.isDragging}
+            index={index}
+            isDragEnabled={!isDragDisabled}
+          />
           </Box>
         );
       }}

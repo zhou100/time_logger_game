@@ -12,6 +12,7 @@ import { RegisterForm } from './components/auth/RegisterForm';
 import RecordingPage from './pages/RecordingPage';
 import NavBar from './components/NavBar';
 import { Box } from '@mui/material';
+import './styles/errorBoundaries.css';
 
 function App() {
   return (
@@ -42,7 +43,7 @@ function App() {
             >
               <NavBar />
               <Box 
-                component="main" 
+                aria-label="main-content"
                 sx={{ 
                   flexGrow: 1,
                   position: 'relative',

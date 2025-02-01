@@ -1,19 +1,13 @@
-FROM node:18-slim
 
-# Set working directory
+FROM node:18.16.0-alpine AS builder
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy application code
+RUN npm ci
 COPY . .
+RUN npm run build
 
-# Expose port
-EXPOSE 3000
-
-# Start development server
-CMD ["npm", "start"]
+FROM nginx:1.25.3-alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

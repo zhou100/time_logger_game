@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { DragDropContext } from 'react-beautiful-dnd';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -67,7 +66,7 @@ describe('DroppableContainer', () => {
       </TestWrapper>
     );
 
-    const container = screen.getByTestId(`droppable-${Category.TODO}`);
+    const container = screen.getByTestId(`droppable-content-${Category.TODO}`);
     expect(container).toBeInTheDocument();
     expect(container).toHaveAttribute('data-rbd-droppable-id', Category.TODO);
   });
@@ -142,7 +141,7 @@ describe('DroppableContainer', () => {
       </TestWrapper>
     );
 
-    const container = screen.getByTestId(`droppable-${Category.TODO}`);
+    const container = screen.getByTestId(`droppable-content-${Category.TODO}`);
     expect(container).toHaveAttribute('data-rbd-droppable-id', Category.TODO);
     expect(container).toHaveStyle({ 
       minHeight: '200px',

@@ -1,4 +1,4 @@
-import React from 'react';
+import { act } from 'react';
 import { render, screen } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -41,8 +41,11 @@ const mockItems = {
 };
 
 describe('CategorizedContent', () => {
-  const mockStore = createMockStore({
-    content: mockItems
+  // Mock store setup
+  const mockStore = configureStore({
+    reducer: {
+      content: (state = { items: [], isLoading: false }, action) => state,
+    },
   });
 
   // Test 1: Basic render test
@@ -55,9 +58,9 @@ describe('CategorizedContent', () => {
       </Provider>
     );
 
-    // Check that all category containers are rendered
-    [Category.TODO, Category.IDEA, Category.THOUGHT, Category.TIME_RECORD].forEach(category => {
-      const container = screen.getByTestId(`droppable-${category}`);
+    // Check if all category containers are present
+    Object.values(Category).forEach(category => {
+      const container = screen.getByTestId(`droppable-content-${category}`);
       expect(container).toBeInTheDocument();
       expect(container).toHaveAttribute('data-rbd-droppable-id', category);
     });
@@ -66,7 +69,9 @@ describe('CategorizedContent', () => {
   // Test 2: Item render test
   test('renders draggable item in correct container', () => {
     render(
-      <Provider store={mockStore}>
+      <Provider store={createMockStore({
+        content: mockItems
+      })}>
         <DragDropContext onDragEnd={() => {}}>
           <CategorizedContent />
         </DragDropContext>
@@ -74,19 +79,17 @@ describe('CategorizedContent', () => {
     );
 
     // Verify the test item is in the TODO container
-    const todoContainer = screen.getByTestId(`droppable-${Category.TODO}`);
+    const todoContainer = screen.getByTestId(`droppable-content-${Category.TODO}`);
     const item = screen.getByTestId('draggable-1');
     expect(todoContainer).toContainElement(item);
   });
 
   // Test 3: Loading state
-  test('shows loading indicator when loading is true', () => {
-    const loadingStore = createMockStore({
-      content: {
-        items: [],
-        isLoading: true,
-        error: null
-      }
+  test('shows loading state correctly', () => {
+    const loadingStore = configureStore({
+      reducer: {
+        content: (state = { items: [], isLoading: true }, action) => state,
+      },
     });
 
     render(
@@ -97,7 +100,12 @@ describe('CategorizedContent', () => {
       </Provider>
     );
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // Check if loading styles are applied
+    Object.values(Category).forEach(category => {
+      const container = screen.getByTestId(`droppable-content-${category}`);
+      expect(container).toBeInTheDocument();
+      expect(container).toHaveStyle({ opacity: '0.5', pointerEvents: 'none' });
+    });
   });
 
   // Test 4: Error state

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { act } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -6,6 +6,7 @@ import ContentCard from '../ContentCard';
 import { Category } from '../../types/api';
 import contentReducer from '../../store/contentSlice';
 import '@testing-library/jest-dom';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 // Mock the logger
 jest.mock('../../utils/logger', () => ({
@@ -39,9 +40,28 @@ describe('ContentCard', () => {
   // Test 1: Basic render test
   test('renders item content correctly', () => {
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     expect(screen.getByText(mockItem.text)).toBeInTheDocument();
@@ -50,9 +70,28 @@ describe('ContentCard', () => {
   // Test 2: Edit mode test
   test('enters edit mode and updates content', () => {
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     // Enter edit mode
@@ -72,9 +111,28 @@ describe('ContentCard', () => {
   // Test 3: Delete test
   test('handles delete action', () => {
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     fireEvent.click(screen.getByTestId('delete-button'));
@@ -84,9 +142,28 @@ describe('ContentCard', () => {
   // Test 4: Cancel edit test
   test('cancels edit mode without saving changes', () => {
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     // Enter edit mode
@@ -108,9 +185,28 @@ describe('ContentCard', () => {
   test('applies category color correctly', () => {
     const categoryColor = '#ff0000';
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} categoryColor={categoryColor} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} categoryColor={categoryColor} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     const card = screen.getByTestId('content-card');
@@ -120,9 +216,28 @@ describe('ContentCard', () => {
   // Test 6: Drag state test
   test('applies drag styling when dragging', () => {
     render(
-      <Provider store={mockStore}>
-        <ContentCard item={mockItem} isDragging={true} />
-      </Provider>
+      <DragDropContext onDragEnd={jest.fn()}>
+        <Droppable droppableId="test">
+          {(provided) => (
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Provider store={mockStore}>
+                <Draggable draggableId="1" index={0}>
+                  {(provided) => (
+                    <div
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      ref={provided.innerRef}
+                    >
+                      <ContentCard item={mockItem} index={0} isDragging={true} />
+                    </div>
+                  )}
+                </Draggable>
+              </Provider>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
     );
 
     const card = screen.getByTestId('content-card');

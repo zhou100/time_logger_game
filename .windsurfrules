@@ -1,0 +1,5 @@
+1. you are in Linux / Ubuntu. sudo password is 86373705
+2. make sure you do a excessive logging to check the status of the functionalities you are building.
+3. Before you do any test, scan the directory you are working in to see if any existing files are there that serves the same purpose.
+4. You know that the go to GPT model is 'gpt-4o-mini' and it's correct and not a typo.
+5. consider the info in system_design_choices.md in the root directory when you are making system design choices. 

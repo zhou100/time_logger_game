@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Box } from '@mui/material';
-import { Droppable } from 'react-beautiful-dnd';
+import { Box, CircularProgress } from '@mui/material';
+import { Droppable, Draggable } from 'react-beautiful-dnd';
 import { ContentItem } from '../store/contentSlice';
 import { Category } from '../types/api';
 import Logger from '../utils/logger';
-import DraggableItem from './DraggableItem';
+import ContentCard from './ContentCard';
+import DragErrorBoundary from './DragErrorBoundary';
 
 interface DroppableContainerProps {
   droppableId: string;
@@ -12,6 +13,7 @@ interface DroppableContainerProps {
   items: ContentItem[];
   isDragEnabled: boolean;
   color: string;
+  isLoading?: boolean;
 }
 
 const DroppableContainer: React.FC<DroppableContainerProps> = ({
@@ -19,7 +21,8 @@ const DroppableContainer: React.FC<DroppableContainerProps> = ({
   category,
   items,
   isDragEnabled,
-  color
+  color,
+  isLoading,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -46,49 +49,96 @@ const DroppableContainer: React.FC<DroppableContainerProps> = ({
     };
   }, [droppableId, category, items, isDragEnabled]);
 
+  useEffect(() => {
+    if (!containerRef.current) {
+      Logger.error('Failed to attach container ref', {
+        droppableId,
+        category
+      });
+    }
+  }, [containerRef, droppableId, category]);
+
   const filteredItems = items.filter(item => item.category === category);
   
-  return (
-    <Droppable droppableId={droppableId}>
-      {(provided, snapshot) => {
-        Logger.debug(`Rendering Droppable content for ${droppableId}:`, {
-          isDraggingOver: snapshot.isDraggingOver,
-          itemCount: filteredItems.length,
-          items: filteredItems.map(i => ({
-            id: i.id,
-            category: i.category
-          }))
-        });
+  console.log('DroppableContainer rendered with items:', items);
 
-        return (
-          <Box
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            data-testid={`droppable-${droppableId}`}
-            minHeight="200px"
-            sx={{ 
-              transition: 'background-color 0.2s ease',
-              backgroundColor: snapshot.isDraggingOver ? `${color}30` : 'transparent',
-              border: '1px dashed transparent',
-              '&:hover': {
-                border: `1px dashed ${color}`
-              }
-            }}
-          >
-            {filteredItems.map((item, index) => (
-              <DraggableItem
-                key={item.id}
-                item={item}
-                index={index}
-                isDragDisabled={!isDragEnabled}
-                color={color}
-              />
-            ))}
-            {provided.placeholder}
-          </Box>
-        );
+  return (
+    <Box
+      sx={{
+        minHeight: '100px',
+        padding: '8px',
+        backgroundColor: 'transparent',
       }}
-    </Droppable>
+      data-testid={`droppable-${droppableId}`}
+    >
+      <DragErrorBoundary>
+        <DragErrorBoundary>
+          <Droppable droppableId={droppableId}>
+            {(provided, snapshot) => {
+              Logger.debug(`Rendering Droppable content for ${droppableId}:`, {
+                isDraggingOver: snapshot.isDraggingOver,
+                itemCount: filteredItems.length,
+                items: filteredItems.map(i => ({
+                  id: i.id,
+                  category: i.category
+                }))
+              });
+
+              return (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  data-testid={`droppable-content-${droppableId}`}
+                >
+                  <Box
+                    sx={{
+                      minHeight: 200,
+                      padding: '8px',
+                      transition: 'background-color 0.2s ease',
+                      backgroundColor: snapshot.isDraggingOver ? `${color}30` : 'transparent',
+                      ...(isLoading && { 
+                        opacity: 0.5,
+                        pointerEvents: 'none'
+                      })
+                    }}
+                  >
+                    {isLoading && (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                        <CircularProgress />
+                      </Box>
+                    )}
+                    {filteredItems.map((item, index) => (
+                      <Draggable
+                        key={item.id}
+                        draggableId={String(item.id)}
+                        index={index}
+                        isDragDisabled={!isDragEnabled}
+                      >
+                        {(provided, snapshot) => (
+                         <Box
+                         ref={provided.innerRef}
+                         {...provided.draggableProps}
+                         {...provided.dragHandleProps}
+                       >
+                         <ContentCard
+                           item={item}
+                           isDragging={snapshot.isDragging}
+                           index={index}
+                           isDragEnabled={isDragEnabled}
+                         />
+                       </Box>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </Box>
+                </div>
+              );
+            }}
+          </Droppable>
+        </DragErrorBoundary>
+      </DragErrorBoundary>
+    </Box>
   );
 };
 

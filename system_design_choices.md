@@ -1,0 +1,4 @@
+- Test architecture must follow react-testing-library best practices
+- All drag interactions must validate both DOM and Redux state
+- Async operations require minimum 3s timeout buffers
+- All async tests must use waitFor with 5s timeout\n- State changes require Redux mock updates\n- Drag interactions need full context hierarchy

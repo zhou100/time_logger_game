@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Box, 
   Grid, 
@@ -13,7 +13,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import { moveItem } from '../store/contentSlice';
+import { moveItem, updateItem } from '../store/contentSlice';
 import { Category } from '../types/api';
 import { SvgIconComponent } from '@mui/icons-material';
 import Logger from '../utils/logger';
@@ -85,16 +85,21 @@ CATEGORIES.forEach(category => {
 
 const CategorizedContent: React.FC = () => {
   const dispatch = useDispatch();
-  const { items, isLoading, error } = useSelector((state: RootState) => state.content);
+  const content = useSelector((state: RootState) => state.content);
+  const { isLoading, error } = content;
+  const itemsArray = useMemo(() => {
+    const items = content.items;
+    return Array.isArray(items) ? items : [];
+  }, [content.items]);
   const [isDragEnabled, setIsDragEnabled] = useState(true); // Enable drag immediately
 
   useEffect(() => {
     Logger.debug('CategorizedContent mounted', {
-      itemCount: items.length,
+      itemCount: itemsArray.length,
       categories: CATEGORIES.map(c => ({
         type: c.type,
         droppableId: c.droppableId,
-        itemsInCategory: items.filter(item => item.category === c.type).length
+        itemsInCategory: itemsArray.filter(item => item.category === c.type).length
       }))
     });
 
@@ -104,14 +109,14 @@ const CategorizedContent: React.FC = () => {
       Logger.debug(`Droppable verification for ${category.droppableId}:`, {
         isPresent: !!droppableElement,
         elementId: droppableElement?.getAttribute('data-rbd-droppable-id'),
-        itemCount: items.filter(item => item.category === category.type).length
+        itemCount: itemsArray.filter(item => item.category === category.type).length
       });
     });
 
     return () => {
       Logger.debug('CategorizedContent unmounting');
     };
-  }, [items]);
+  }, [itemsArray.length]); // Only re-run if the number of items changes
 
   const handleDragStart = () => {
     // Verify droppables again at drag start
@@ -168,6 +173,16 @@ const CategorizedContent: React.FC = () => {
     }
   }, [dispatch]);
 
+  const onDragEnd = (result: DropResult) => {
+    const { draggableId, destination } = result;
+    if (!destination) return;
+
+    const draggedItem = itemsArray.find((item: any) => item.id === parseInt(draggableId));
+    if (!draggedItem) return;
+
+    dispatch(updateItem({ ...draggedItem, category: destination.droppableId as Category }));
+  };
+
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -177,7 +192,7 @@ const CategorizedContent: React.FC = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DragDropContext onDragStart={handleDragStart} onDragEnd={onDragEnd}>
           <Grid container spacing={3}>
             {CATEGORIES.map((category) => (
               <Grid item xs={12} sm={6} md={3} key={category.droppableId}>
@@ -200,7 +215,7 @@ const CategorizedContent: React.FC = () => {
                   <DroppableContainer
                     droppableId={category.droppableId}
                     category={category.type}
-                    items={items}
+                    items={itemsArray}
                     isDragEnabled={isDragEnabled}
                     color={category.color}
                   />
