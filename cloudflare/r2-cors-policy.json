@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://*.pages.dev",
+      "https://yourdomain.com",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "Content-Length"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
