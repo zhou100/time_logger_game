@@ -352,3 +352,48 @@ Services:
 - `scratchpad.md`, `planner.log`, `feedback.md` — informal notes, not production code.
 - `system_design_choice.md` — architectural decision records. Read before making large changes.
 - `.windsurfrules` — Windsurf IDE rules (similar to this file for Windsurf).
+
+---
+
+## Gstack
+
+This project uses [gstack](https://gstack.dev) for web browsing and development workflows.
+
+**Web browsing**: Always use the `/browse` skill for all web browsing. Never use `mcp__claude-in-chrome__*` tools directly.
+
+**Available skills**:
+
+| Skill | Purpose |
+|---|---|
+| `/browse` | Web browsing (use this instead of mcp__claude-in-chrome__* tools) |
+| `/office-hours` | Q&A and guidance session |
+| `/plan-ceo-review` | CEO-level plan review |
+| `/plan-eng-review` | Engineering plan review |
+| `/plan-design-review` | Design plan review |
+| `/design-consultation` | Design consultation |
+| `/review` | Code review |
+| `/ship` | Ship changes |
+| `/land-and-deploy` | Land and deploy to production |
+| `/canary` | Canary deployment |
+| `/benchmark` | Run benchmarks |
+| `/qa` | Full QA with browsing |
+| `/qa-only` | QA without deploy steps |
+| `/design-review` | Visual design review |
+| `/setup-browser-cookies` | Set up browser authentication cookies |
+| `/setup-deploy` | Set up deployment configuration |
+| `/retro` | Retrospective |
+| `/investigate` | Investigate an issue |
+| `/document-release` | Document a release |
+| `/codex` | Codex tasks |
+| `/cso` | CSO workflow |
+| `/careful` | Careful/cautious mode for risky changes |
+| `/freeze` | Freeze deployments |
+| `/guard` | Guard / protect a resource |
+| `/unfreeze` | Unfreeze deployments |
+| `/gstack-upgrade` | Upgrade gstack itself |
+
+**Troubleshooting**: If gstack skills aren't working, rebuild the binary and re-register skills:
+
+```bash
+cd .claude/skills/gstack && ./setup
+```
