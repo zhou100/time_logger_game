@@ -32,7 +32,7 @@ export enum Category {
 export interface PresignResponse {
     entry_id: string;
     upload_url: string;
-    audio_key: string;
+    upload_token: string;   // opaque signed token; echo back to /submit — never inspect or store long-term
 }
 
 export interface SubmitResponse {

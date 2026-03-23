@@ -5,14 +5,39 @@
 ```
 Browser → Cloudflare Pages (React frontend)
         → Render.com backend (FastAPI + WebSocket)
-              → Supabase (PostgreSQL)
+              → Supabase (PostgreSQL, with optional RLS)
               → Cloudflare R2 (audio storage, via presigned URLs)
         → Cloudflare R2 (direct PUT — audio never hits the app server)
 ```
 
+## Privacy model
+
+Audio files and transcripts belong strictly to the user who created them:
+
+| Layer | Control |
+|---|---|
+| API | Every query filters by `user_id = current_user.id`. 404 returned for any cross-user lookup — existence is not revealed. |
+| Storage keys | `audio/{user_id}/{entry_id}.ext` — namespaced by user. Clients never see raw keys. |
+| Upload tokens | The presigned PUT URL and its signed `upload_token` expire in 1 hour. The token is verified server-side on submit; clients cannot forge or substitute another user's key. |
+| Audio playback | `GET /entries/{id}/audio` returns a **15-minute** presigned GET URL after verifying ownership. The bucket is **private** — the key alone grants nothing. |
+| Database | Optional Supabase RLS (see `supabase-rls.sql`) provides database-level enforcement as defense-in-depth. |
+| WebSocket | Push events are scoped per user_id, verified by access token. |
+
 ---
 
 ## 1. Cloudflare R2 — Object Storage
+
+### ⚠️ Bucket must be PRIVATE
+
+R2 buckets are private by default — **do not enable public access**. All reads happen through
+presigned GET URLs issued by the backend after an ownership check. If you accidentally make
+the bucket public, any user who discovers another user's storage key can download their audio.
+
+```bash
+# Verify bucket has no public access policy
+wrangler r2 bucket info time-logger-audio
+# "public_access": should be absent or false
+```
 
 ### Create bucket
 
@@ -70,6 +95,20 @@ DATABASE_URL=postgresql+asyncpg://postgres.[project-ref]:[password]@aws-0-[regio
 ```
 
 **Free-tier note**: Direct connections require an IPv4 Add-on ($4/month). The session-mode pooler URL works on all plans without it.
+
+---
+
+## 2b. Supabase RLS — Defense-in-depth (optional but recommended)
+
+Row-Level Security adds database-level enforcement so that even if there is a bug in application
+query logic, the database itself refuses to return another user's rows.
+
+```bash
+# In Supabase dashboard → SQL Editor, paste and run:
+# cloudflare/supabase-rls.sql
+```
+
+**Requires**: session-mode pooler URL (port 5432). Does not work with transaction-mode pooler (port 6543).
 
 ---
 

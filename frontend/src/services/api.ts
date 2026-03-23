@@ -147,16 +147,18 @@ export const entriesApi = {
     },
 
     /**
-     * Phase 2: register the entry and enqueue processing.
+     * Phase 3: register the entry and enqueue processing.
+     * The upload_token (from presign) is verified server-side to recover the
+     * storage key — the client never handles the raw storage path.
      */
     async submit(
         entryId: string,
-        audioKey: string,
+        uploadToken: string,
         opts?: { recordedAt?: string; durationSeconds?: number }
     ): Promise<SubmitResponse> {
         try {
             const res = await api.post<SubmitResponse>(`/v1/entries/${entryId}/submit`, {
-                audio_key: audioKey,
+                upload_token: uploadToken,
                 recorded_at: opts?.recordedAt,
                 duration_seconds: opts?.durationSeconds,
             });
