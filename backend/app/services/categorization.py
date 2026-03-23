@@ -1,61 +1,69 @@
 """
-Text categorization service using GPT-4o-mini.
+Text categorization using GPT-4o-mini.
+Replaces the old service that used the deprecated openai.ChatCompletion.acreate() API.
 """
-
-import openai
-from typing import Dict, Any, List
 import json
 import logging
+from typing import Any, Dict
+from openai import AsyncOpenAI
+from ..settings import settings
 
-# Configure logging
 logger = logging.getLogger(__name__)
+
+_client: AsyncOpenAI | None = None
+
+
+def _get_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    return _client
+
+
+SYSTEM_PROMPT = """You are a time-logging assistant. Analyze the input and classify it.
+
+Categories:
+- TODO: a task or action that needs to be done
+- IDEA: a creative thought, suggestion, or concept
+- THOUGHT: a general observation, reflection, or note
+- TIME_RECORD: time tracking — what the user worked on and for how long
+
+Return valid JSON only, with this shape:
+{
+  "category": "TODO|IDEA|THOUGHT|TIME_RECORD",
+  "content": "cleaned-up version of the main content",
+  "confidence": 0.0 to 1.0,
+  "metadata": {
+    "priority": "high|medium|low|null",
+    "time_spent_minutes": null or integer,
+    "tags": []
+  }
+}"""
+
 
 async def categorize_text(text: str) -> Dict[str, Any]:
     """
-    Categorize text using GPT-4o-mini model.
-    
-    Args:
-        text: The text to categorize
-        
-    Returns:
-        Dict containing categorized information
+    Classify text with GPT-4o-mini. Returns a dict with category, content,
+    confidence, and metadata. On failure, returns a safe THOUGHT fallback.
     """
     try:
-        logger.info(f"Categorizing text: {text[:100]}...")
-        
-        # System message defining the task
-        system_message = """You are a text categorization assistant. Analyze the input text and categorize it into one of these types:
-        - TODO: Tasks or actions to be done
-        - IDEA: Creative thoughts or suggestions
-        - THOUGHT: General observations or reflections
-        - TIME_RECORD: Time tracking or scheduling information
-        
-        Extract relevant details and format as JSON with fields:
-        {
-            "category": "TODO|IDEA|THOUGHT|TIME_RECORD",
-            "content": "Extracted main content",
-            "metadata": {
-                "priority": "high|medium|low" (for TODOs),
-                "time_spent": "duration in minutes" (for TIME_RECORD),
-                "tags": ["relevant", "tags"]
-            }
-        }"""
-
-        # Call OpenAI API
-        response = await openai.ChatCompletion.acreate(
+        response = await _get_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": text}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text},
             ],
-            temperature=0.3
+            temperature=0.3,
+            response_format={"type": "json_object"},
         )
-
-        # Parse response
         result = json.loads(response.choices[0].message.content)
-        logger.info(f"Categorization result: {result}")
+        logger.info(f"Categorized '{text[:60]}...' → {result.get('category')}")
         return result
-
-    except Exception as e:
-        logger.error(f"Error categorizing text: {str(e)}")
-        raise
+    except Exception as exc:
+        logger.error(f"Categorization failed: {exc}")
+        return {
+            "category": "THOUGHT",
+            "content": text,
+            "confidence": 0.0,
+            "metadata": {"priority": None, "time_spent_minutes": None, "tags": []},
+        }

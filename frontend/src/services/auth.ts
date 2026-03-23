@@ -1,255 +1,136 @@
 import axios, { AxiosError } from 'axios';
-import { LoginCredentials, RegisterCredentials, AuthResponse, User } from '../types/auth';
-import api, { API_ENDPOINTS } from './api';
+import { LoginCredentials, RegisterCredentials, AuthResponse } from '../types/auth';
+import { API_BASE_URL } from './api';
 import Logger from '../utils/logger';
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
-// Create axios instance with default config
-const apiInstance = axios.create({
-    baseURL: 'http://localhost:10000/api',
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-    },
+// Separate axios instance for auth (form-encoded login)
+const authAxios = axios.create({
+    baseURL: `${API_BASE_URL}/api`,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     withCredentials: true,
 });
 
-// Create axios instance for form data requests
-const formApi = axios.create({
-    baseURL: 'http://localhost:10000/api',
-    headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-    },
+const formAxios = axios.create({
+    baseURL: `${API_BASE_URL}/api`,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     withCredentials: true,
 });
 
-// Add request interceptor for debugging
-apiInstance.interceptors.request.use(request => {
-    Logger.debug('Starting Request:', {
-        url: request.url,
-        method: request.method,
-        headers: request.headers,
-    });
-    return request;
-});
-
-// Add response interceptor for debugging
-apiInstance.interceptors.response.use(
-    response => {
-        Logger.debug('Response:', {
-            status: response.status,
-            headers: response.headers,
-        });
-        return response;
-    },
-    error => {
-        Logger.error('Response Error:', {
-            message: error.message,
-            status: error.response?.status,
-            data: error.response?.data,
-        });
-        return Promise.reject(error);
-    }
-);
-
-// Token helpers
-const decodeToken = (token: string): any => {
+function decodeToken(token: string): Record<string, unknown> | null {
     try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-            atob(base64)
-                .split('')
-                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-                .join('')
-        );
-        return JSON.parse(jsonPayload);
-    } catch (error) {
-        Logger.error('Error decoding token:', error);
+        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        return JSON.parse(decodeURIComponent(
+            atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+        ));
+    } catch {
         return null;
     }
-};
+}
 
-const isTokenExpired = (token: string): boolean => {
+function isTokenExpired(token: string): boolean {
     const decoded = decodeToken(token);
-    if (!decoded || !decoded.exp) {
-        return true;
-    }
-    const currentTime = Math.floor(Date.now() / 1000);
-    return decoded.exp <= currentTime;
-};
+    if (!decoded?.exp) return true;
+    return (decoded.exp as number) <= Math.floor(Date.now() / 1000);
+}
 
 class AuthService {
-    private accessToken: string | null = null;
-    private tokenForRefresh: string | null = null;
-    private isRefreshing: boolean = false;
-    private refreshSubscribers: ((token: string) => void)[] = [];
+    private accessToken: string | null = localStorage.getItem(TOKEN_KEY);
+    private refreshToken: string | null = localStorage.getItem(REFRESH_TOKEN_KEY);
+    private isRefreshing = false;
+    private queue: Array<(token: string) => void> = [];
 
-    constructor() {
-        // Load tokens from localStorage on initialization
-        this.accessToken = localStorage.getItem(TOKEN_KEY);
-        this.tokenForRefresh = localStorage.getItem(REFRESH_TOKEN_KEY);
-        Logger.info('Auth service initialized:', { 
-            hasAccessToken: !!this.accessToken,
-            hasRefreshToken: !!this.tokenForRefresh 
-        });
-
-        // Check token validity on initialization
-        if (this.accessToken && isTokenExpired(this.accessToken)) {
-            Logger.info('Access token expired on initialization, attempting refresh');
-            this.getNewToken().catch(error => {
-                Logger.error('Failed to refresh token on initialization:', error);
-                this.clearTokens();
-            });
-        }
+    private store(access: string, refresh: string) {
+        this.accessToken = access;
+        this.refreshToken = refresh;
+        localStorage.setItem(TOKEN_KEY, access);
+        localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
     }
 
-    private setTokens(accessToken: string, refreshToken: string) {
-        this.accessToken = accessToken;
-        this.tokenForRefresh = refreshToken;
-        localStorage.setItem(TOKEN_KEY, accessToken);
-        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-        Logger.info('Tokens updated and stored');
-    }
-
-    private clearTokens() {
+    clearTokens() {
         this.accessToken = null;
-        this.tokenForRefresh = null;
+        this.refreshToken = null;
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(REFRESH_TOKEN_KEY);
-        Logger.info('Tokens cleared');
     }
 
-    private onRefreshSuccess(token: string) {
-        this.refreshSubscribers.forEach(cb => cb(token));
-        this.refreshSubscribers = [];
+    async login(credentials: LoginCredentials): Promise<AuthResponse> {
+        const form = new URLSearchParams();
+        form.append('username', credentials.username);
+        form.append('password', credentials.password);
+        const res = await formAxios.post<AuthResponse>('/v1/auth/token', form);
+        this.store(res.data.access_token, res.data.refresh_token);
+        Logger.info(`Logged in as user_id=${res.data.user_id}`);
+        return res.data;
     }
 
-    private onRefreshFailure(error: Error) {
-        this.refreshSubscribers.forEach(cb => cb(''));
-        this.refreshSubscribers = [];
-        throw error;
+    async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+        const res = await authAxios.post<AuthResponse>('/v1/auth/register', credentials);
+        this.store(res.data.access_token, res.data.refresh_token);
+        Logger.info(`Registered user_id=${res.data.user_id}`);
+        return res.data;
     }
 
-    public async login(credentials: LoginCredentials): Promise<AuthResponse> {
-        try {
-            Logger.info('Sending login request:', { username: credentials.username });
-            
-            // Convert credentials to form data
-            const formData = new URLSearchParams();
-            formData.append('username', credentials.username);
-            formData.append('password', credentials.password);
-            
-            const response = await formApi.post<AuthResponse>(API_ENDPOINTS.AUTH.TOKEN, formData);
-
-            if (!response.data.access_token || !response.data.refresh_token) {
-                throw new Error('Invalid login response: missing tokens');
-            }
-
-            this.setTokens(response.data.access_token, response.data.refresh_token);
-            return response.data;
-        } catch (error) {
-            Logger.error('Login error:', error);
-            if (error instanceof AxiosError && error.response) {
-                const data = error.response.data;
-                if (typeof data === 'object' && data.detail) {
-                    throw new Error(data.detail);
-                }
-            }
+    async getNewToken(): Promise<string> {
+        if (!this.refreshToken) {
             this.clearTokens();
-            throw new Error('Login failed. Please check your credentials and try again.');
-        }
-    }
-
-    public async register(credentials: RegisterCredentials): Promise<User> {
-        try {
-            Logger.info('Sending registration request:', { email: credentials.email });
-            const response = await api.post<User>(API_ENDPOINTS.AUTH.REGISTER, credentials);
-            return response.data;
-        } catch (error) {
-            Logger.error('Registration error:', error);
-            throw error;
-        }
-    }
-
-    public async getNewToken(): Promise<string> {
-        if (!this.tokenForRefresh) {
-            Logger.error('No refresh token available');
-            this.clearTokens();
-            throw new Error('No refresh token available');
+            throw new Error('No refresh token');
         }
 
         if (this.isRefreshing) {
-            Logger.debug('Token refresh already in progress, waiting...');
             return new Promise((resolve, reject) => {
-                this.refreshSubscribers.push((token: string) => {
-                    if (token) {
-                        resolve(token);
-                    } else {
-                        reject(new Error('Token refresh failed'));
-                    }
+                this.queue.push((token: string) => {
+                    token ? resolve(token) : reject(new Error('Refresh failed'));
                 });
             });
         }
 
+        this.isRefreshing = true;
         try {
-            this.isRefreshing = true;
-            Logger.info('Attempting to refresh token');
-            
-            const response = await api.post<AuthResponse>(
-                API_ENDPOINTS.AUTH.REFRESH,
-                { refresh_token: this.tokenForRefresh }
-            );
-
-            if (!response.data.access_token || !response.data.refresh_token) {
-                throw new Error('Invalid refresh response: missing tokens');
+            const res = await authAxios.post<AuthResponse>('/v1/auth/refresh', {
+                refresh_token: this.refreshToken,
+            });
+            this.store(res.data.access_token, res.data.refresh_token);
+            this.queue.forEach(cb => cb(res.data.access_token));
+            this.queue = [];
+            return res.data.access_token;
+        } catch (err) {
+            this.queue.forEach(cb => cb(''));
+            this.queue = [];
+            const axiosErr = err as AxiosError;
+            if (axiosErr.response?.status === 401 || axiosErr.response?.status === 403) {
+                this.clearTokens();
             }
-
-            this.setTokens(response.data.access_token, response.data.refresh_token);
-            this.onRefreshSuccess(response.data.access_token);
-            return response.data.access_token;
-        } catch (error) {
-            Logger.error('Token refresh failed:', error);
-            if (error instanceof AxiosError) {
-                if (error.response?.status === 401 || error.response?.status === 403) {
-                    this.clearTokens();
-                }
-            }
-            this.onRefreshFailure(error as Error);
-            throw error;
+            throw err;
         } finally {
             this.isRefreshing = false;
         }
     }
 
-    public async getValidToken(): Promise<string> {
-        if (!this.accessToken) {
-            Logger.error('No access token available');
-            throw new Error('No access token available');
-        }
-
-        if (isTokenExpired(this.accessToken)) {
-            Logger.info('Access token expired, refreshing...');
-            return this.getNewToken();
-        }
-
+    async getValidToken(): Promise<string> {
+        if (!this.accessToken) throw new Error('Not authenticated');
+        if (isTokenExpired(this.accessToken)) return this.getNewToken();
         return this.accessToken;
     }
 
-    public logout(): void {
-        this.clearTokens();
+    getUserIdFromToken(): number | null {
+        if (!this.accessToken) return null;
+        const decoded = decodeToken(this.accessToken);
+        const sub = decoded?.sub;
+        if (!sub) return null;
+        const id = parseInt(sub as string, 10);
+        return isNaN(id) ? null : id;
     }
 
-    public isAuthenticated(): boolean {
+    logout() { this.clearTokens(); }
+
+    isAuthenticated(): boolean {
         return !!this.accessToken && !isTokenExpired(this.accessToken);
     }
 
-    public getStoredToken(): string | null {
-        return this.accessToken;
-    }
+    getStoredToken(): string | null { return this.accessToken; }
 }
 
 export default new AuthService();

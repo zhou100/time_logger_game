@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import AuthService from '../services/auth';
 import { User, RegisterCredentials, LoginCredentials } from '../types/auth';
+import Logger from '../utils/logger';
 
 interface AuthContextType {
     user: User | null;
@@ -16,68 +17,50 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
+    const ctx = useContext(AuthContext);
+    if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+    return ctx;
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [registrationSuccess, setRegistrationSuccess] = useState<string | null>(null);
 
-    // Check authentication status on mount
+    // Re-hydrate user from stored token on mount
     useEffect(() => {
-        const checkAuth = async () => {
+        const rehydrate = async () => {
             try {
                 if (AuthService.isAuthenticated()) {
-                    // Try to get a valid token
-                    await AuthService.getValidToken();
-                    // If successful, fetch user details
-                    // You might want to implement a getCurrentUser API endpoint
+                    const token = await AuthService.getValidToken();
+                    const userId = AuthService.getUserIdFromToken();
+                    if (userId !== null) {
+                        // Fetch the real user profile
+                        const { authApi } = await import('../services/api');
+                        const profile = await authApi.getCurrentUser();
+                        setUser({ id: profile.id, email: profile.email });
+                    }
                 }
-            } catch (error) {
-                console.error('Auth check failed:', error);
-                AuthService.logout();
+            } catch (err) {
+                Logger.error('Auth rehydration failed:', err);
+                AuthService.clearTokens();
                 setUser(null);
             }
         };
-        checkAuth();
+        rehydrate();
     }, []);
 
     const register = useCallback(async (credentials: RegisterCredentials) => {
-        try {
-            console.log('Registration started in AuthContext');
-            await AuthService.register(credentials);
-            console.log('Registration successful in AuthContext');
-            setRegistrationSuccess('Registration successful! Please log in.');
-        } catch (error) {
-            console.log('Registration failed:', error);
-            throw error;
-        }
+        const response = await AuthService.register(credentials);
+        setRegistrationSuccess('Registration successful! Please log in.');
+        Logger.info(`Registered: user_id=${response.user_id}`);
     }, []);
 
-    const clearRegistrationSuccess = useCallback(() => {
-        setRegistrationSuccess(null);
-    }, []);
+    const clearRegistrationSuccess = useCallback(() => setRegistrationSuccess(null), []);
 
     const login = useCallback(async (credentials: LoginCredentials) => {
-        try {
-            console.log('Login started in AuthContext');
-            const response = await AuthService.login(credentials);
-            console.log('Login successful, setting user state');
-            // Set a basic user object
-            setUser({
-                id: 0, // We'll update this when we implement getCurrentUser
-                email: credentials.username,
-                created_at: new Date().toISOString() // Temporary until we get it from backend
-            });
-            console.log('User state updated');
-        } catch (error) {
-            console.error('Login error:', error);
-            throw error;
-        }
+        const response = await AuthService.login(credentials);
+        setUser({ id: response.user_id, email: response.email });
+        Logger.info(`Logged in: user_id=${response.user_id}`);
     }, []);
 
     const logout = useCallback(() => {
@@ -88,26 +71,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshAccessToken = useCallback(async () => {
         try {
             return await AuthService.getNewToken();
-        } catch (error) {
-            console.error('Token refresh failed:', error);
+        } catch (err) {
+            Logger.error('Token refresh failed:', err);
             logout();
-            throw error;
+            throw err;
         }
     }, [logout]);
 
-    const value = {
-        user,
-        isAuthenticated: AuthService.isAuthenticated(),
-        register,
-        login,
-        logout,
-        registrationSuccess,
-        clearRegistrationSuccess,
-        refreshAccessToken,
-    };
-
     return (
-        <AuthContext.Provider value={value}>
+        <AuthContext.Provider value={{
+            user,
+            isAuthenticated: AuthService.isAuthenticated(),
+            register,
+            login,
+            logout,
+            registrationSuccess,
+            clearRegistrationSuccess,
+            refreshAccessToken,
+        }}>
             {children}
         </AuthContext.Provider>
     );

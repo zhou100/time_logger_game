@@ -1,32 +1,59 @@
 """
-Application settings and configuration.
+Application settings — all configuration sourced from environment variables.
 """
-from pydantic import BaseModel, ConfigDict
+from typing import List
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-import secrets
+
 
 class Settings(BaseSettings):
-    """Application settings."""
-    # JWT Settings
-    SECRET_KEY: str = "${SECRET_KEY:-your-256-bit-secret-key-keep-it-safe}"  # Override this in production
+    # ── JWT ──────────────────────────────────────────────────────────────────
+    SECRET_KEY: str = "change-me-in-production-use-a-long-random-string"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 240  # 4 hours
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30     # 30 days
+    # Access tokens are short-lived; refresh tokens stored in DB are long-lived.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # Database Settings
+    # ── Database ──────────────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/time_logger_game"
     TEST_DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/time_logger_test"
+    DB_ECHO: bool = False           # Never True in production
 
-    model_config = ConfigDict(
-        env_file=".env",
-        case_sensitive=True,
-        extra="allow"  # Allow extra fields from environment
-    )
+    # ── OpenAI ───────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: str = "dummy"
+
+    # ── Object Storage (MinIO / S3) ───────────────────────────────────────────
+    S3_ENDPOINT_URL: str = "http://minio:9000"
+    S3_ACCESS_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadmin"
+    S3_BUCKET: str = "time-logger-audio"
+    S3_REGION: str = "us-east-1"
+
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_origins(cls, v):
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
+
+    # ── App ───────────────────────────────────────────────────────────────────
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
+
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "extra": "allow",
+    }
+
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Get cached settings instance."""
     return Settings()
+
 
 settings = get_settings()
