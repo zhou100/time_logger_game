@@ -1,13 +1,13 @@
 """
 Unit tests for the worker's multi-entry classification loop.
 
-All I/O (OpenAI, storage, WebSocket, DB) is mocked.
+All I/O (OpenAI, storage, DB) is mocked.
 Tests focus on the classification insertion loop and stale-job recovery.
 """
 import uuid
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.jobs import Job, JobStatus
 from app.models.entry import Entry
@@ -30,8 +30,59 @@ def _make_job(entry_id=None):
     j = MagicMock(spec=Job)
     j.id = uuid.uuid4()
     j.entry_id = entry_id or uuid.uuid4()
-    j.status = JobStatus.processing
+    j.status = JobStatus.PROCESSING
     return j
+
+
+def _standard_patches(cat_results):
+    """Return a dict of patches common to all _process_job tests."""
+    return {
+        "app.services.worker.queue_svc": MagicMock(
+            mark_step=AsyncMock(),
+            complete_job=AsyncMock(),
+            fail_job=AsyncMock(),
+        ),
+        "app.services.worker.storage_svc": MagicMock(
+            download_bytes=AsyncMock(return_value=b"fake audio bytes"),
+        ),
+        "app.services.worker.categorize_text": AsyncMock(return_value=cat_results),
+        "app.services.worker.refine_transcript": AsyncMock(return_value="refined transcript"),
+    }
+
+
+def _mock_openai():
+    transcript_mock = MagicMock()
+    transcript_mock.text = "some transcript"
+    openai_mock = MagicMock()
+    openai_mock.return_value.audio.transcriptions.create = AsyncMock(return_value=transcript_mock)
+    return openai_mock
+
+
+def _mock_db(entry):
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=entry)))
+    db.added = []
+    original_add = db.add
+    db.add = lambda obj: db.added.append(obj)
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+    return db
+
+
+async def _run_process_job(db, job, cat_results):
+    patches = _standard_patches(cat_results)
+    with patch("app.services.worker.queue_svc", patches["app.services.worker.queue_svc"]), \
+         patch("app.services.worker.storage_svc", patches["app.services.worker.storage_svc"]), \
+         patch("app.services.worker.categorize_text", patches["app.services.worker.categorize_text"]), \
+         patch("app.services.worker.refine_transcript", patches["app.services.worker.refine_transcript"]), \
+         patch("app.services.worker._get_openai", _mock_openai()), \
+         patch("app.services.worker.tempfile.NamedTemporaryFile") as mock_tmp, \
+         patch("app.services.worker.os.unlink"), \
+         patch("builtins.open", MagicMock()):
+        mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="test.webm"))
+        mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
+        from app.services.worker import _process_job
+        await _process_job(db, job)
 
 
 # ── Classification loop: correct number of rows ───────────────────────────────
@@ -47,42 +98,11 @@ async def test_three_item_result_inserts_three_rows():
 
     entry = _make_entry()
     job = _make_job(entry_id=entry.id)
+    db = _mock_db(entry)
 
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=entry)))
-    added_objects = []
-    db.add = lambda obj: added_objects.append(obj)
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
+    await _run_process_job(db, job, cat_results)
 
-    with patch("app.services.worker.queue_svc") as mock_queue, \
-         patch("app.services.worker.storage_svc") as mock_storage, \
-         patch("app.services.worker.categorize_text", new=AsyncMock(return_value=cat_results)), \
-         patch("app.services.worker.process_entry_created", new=AsyncMock(return_value=MagicMock(current_streak=1, total_entries=1, level=1, xp=10))), \
-         patch("app.services.worker._get_openai") as mock_openai:
-
-        # Whisper mock
-        transcript_mock = MagicMock()
-        transcript_mock.text = "some transcript"
-        mock_openai.return_value.audio.transcriptions.create = AsyncMock(return_value=transcript_mock)
-
-        # Storage mock
-        mock_storage.download_bytes = AsyncMock(return_value=b"fake audio bytes")
-
-        mock_queue.mark_step = AsyncMock()
-        mock_queue.complete_job = AsyncMock()
-        mock_queue.fail_job = AsyncMock()
-
-        # Patch tempfile to avoid actual file I/O
-        with patch("app.services.worker.tempfile.NamedTemporaryFile") as mock_tmp, \
-             patch("app.services.worker.os.unlink"):
-            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="test.webm"))
-            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("builtins.open", MagicMock()):
-                from app.services.worker import _process_job
-                await _process_job(db, job)
-
-    classification_rows = [o for o in added_objects if isinstance(o, EntryClassification)]
+    classification_rows = [o for o in db.added if isinstance(o, EntryClassification)]
     assert len(classification_rows) == 3
 
 
@@ -97,37 +117,11 @@ async def test_display_order_is_sequential():
 
     entry = _make_entry()
     job = _make_job(entry_id=entry.id)
+    db = _mock_db(entry)
 
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=entry)))
-    added_objects = []
-    db.add = lambda obj: added_objects.append(obj)
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
+    await _run_process_job(db, job, cat_results)
 
-    with patch("app.services.worker.queue_svc") as mock_queue, \
-         patch("app.services.worker.storage_svc") as mock_storage, \
-         patch("app.services.worker.categorize_text", new=AsyncMock(return_value=cat_results)), \
-         patch("app.services.worker.process_entry_created", new=AsyncMock(return_value=MagicMock(current_streak=1, total_entries=1, level=1, xp=10))), \
-         patch("app.services.worker._get_openai") as mock_openai:
-
-        transcript_mock = MagicMock()
-        transcript_mock.text = "some transcript"
-        mock_openai.return_value.audio.transcriptions.create = AsyncMock(return_value=transcript_mock)
-        mock_storage.download_bytes = AsyncMock(return_value=b"fake audio bytes")
-        mock_queue.mark_step = AsyncMock()
-        mock_queue.complete_job = AsyncMock()
-        mock_queue.fail_job = AsyncMock()
-
-        with patch("app.services.worker.tempfile.NamedTemporaryFile") as mock_tmp, \
-             patch("app.services.worker.os.unlink"):
-            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="test.webm"))
-            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("builtins.open", MagicMock()):
-                from app.services.worker import _process_job
-                await _process_job(db, job)
-
-    rows = [o for o in added_objects if isinstance(o, EntryClassification)]
+    rows = [o for o in db.added if isinstance(o, EntryClassification)]
     assert [r.display_order for r in rows] == [0, 1, 2]
 
 
@@ -141,97 +135,13 @@ async def test_empty_categorization_fallback_inserts_one_thought():
 
     entry = _make_entry(transcript="full transcript text")
     job = _make_job(entry_id=entry.id)
+    db = _mock_db(entry)
 
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=entry)))
-    added_objects = []
-    db.add = lambda obj: added_objects.append(obj)
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
+    await _run_process_job(db, job, fallback)
 
-    with patch("app.services.worker.queue_svc") as mock_queue, \
-         patch("app.services.worker.storage_svc") as mock_storage, \
-         patch("app.services.worker.categorize_text", new=AsyncMock(return_value=fallback)), \
-         patch("app.services.worker.process_entry_created", new=AsyncMock(return_value=MagicMock(current_streak=1, total_entries=1, level=1, xp=10))), \
-         patch("app.services.worker._get_openai") as mock_openai:
-
-        transcript_mock = MagicMock()
-        transcript_mock.text = "full transcript text"
-        mock_openai.return_value.audio.transcriptions.create = AsyncMock(return_value=transcript_mock)
-        mock_storage.download_bytes = AsyncMock(return_value=b"bytes")
-        mock_queue.mark_step = AsyncMock()
-        mock_queue.complete_job = AsyncMock()
-        mock_queue.fail_job = AsyncMock()
-
-        with patch("app.services.worker.tempfile.NamedTemporaryFile") as mock_tmp, \
-             patch("app.services.worker.os.unlink"):
-            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="test.webm"))
-            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("builtins.open", MagicMock()):
-                from app.services.worker import _process_job
-                await _process_job(db, job)
-
-    rows = [o for o in added_objects if isinstance(o, EntryClassification)]
+    rows = [o for o in db.added if isinstance(o, EntryClassification)]
     assert len(rows) == 1
     assert rows[0].category == "THOUGHT"
-
-
-# ── WebSocket broadcast shape ─────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_websocket_broadcast_contains_categories_array():
-    """The WS broadcast sends categories array, not single category string."""
-    cat_results = [
-        {"text": "Task one", "category": "TODO"},
-        {"text": "Task two", "category": "IDEA"},
-    ]
-
-    entry = _make_entry()
-    job = _make_job(entry_id=entry.id)
-
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=entry)))
-    db.add = MagicMock()
-    db.flush = AsyncMock()
-    db.commit = AsyncMock()
-
-    ws_calls = []
-
-    async def fake_send(user_id, payload):
-        ws_calls.append(payload)
-
-    with patch("app.services.worker.queue_svc") as mock_queue, \
-         patch("app.services.worker.storage_svc") as mock_storage, \
-         patch("app.services.worker.categorize_text", new=AsyncMock(return_value=cat_results)), \
-         patch("app.services.worker.process_entry_created", new=AsyncMock(return_value=MagicMock(current_streak=1, total_entries=1, level=1, xp=10))), \
-         patch("app.services.worker._get_openai") as mock_openai, \
-         patch("app.services.worker.async_session"), \
-         patch("app.routes.v1.ws.manager") as mock_manager:
-
-        mock_manager.send_to_user = fake_send
-        transcript_mock = MagicMock()
-        transcript_mock.text = "test"
-        mock_openai.return_value.audio.transcriptions.create = AsyncMock(return_value=transcript_mock)
-        mock_storage.download_bytes = AsyncMock(return_value=b"bytes")
-        mock_queue.mark_step = AsyncMock()
-        mock_queue.complete_job = AsyncMock()
-        mock_queue.fail_job = AsyncMock()
-
-        with patch("app.services.worker.tempfile.NamedTemporaryFile") as mock_tmp, \
-             patch("app.services.worker.os.unlink"):
-            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="test.webm"))
-            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("builtins.open", MagicMock()):
-                from app.services.worker import _process_job
-                await _process_job(db, job)
-
-    classified_events = [e for e in ws_calls if e.get("type") == "entry.classified"]
-    assert len(classified_events) == 1
-    evt = classified_events[0]
-    assert "categories" in evt
-    assert isinstance(evt["categories"], list)
-    assert len(evt["categories"]) == 2
-    assert "category" not in evt  # old single-category key must be gone
 
 
 # ── Stale-job recovery ────────────────────────────────────────────────────────
@@ -244,7 +154,7 @@ async def test_stale_job_recovery_fails_old_jobs():
     stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
     stale_job = MagicMock(spec=Job)
     stale_job.id = uuid.uuid4()
-    stale_job.status = JobStatus.processing
+    stale_job.status = JobStatus.PROCESSING
     stale_job.updated_at = stale_cutoff
 
     db = AsyncMock()
@@ -269,7 +179,6 @@ async def test_stale_job_recovery_ignores_fresh_jobs():
     from app.services.worker import _recover_stale_jobs
 
     db = AsyncMock()
-    # Simulate no stale jobs found
     db.execute = AsyncMock(
         return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))))
     )
