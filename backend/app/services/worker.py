@@ -123,13 +123,19 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
         # Insert one EntryClassification row per extracted activity.
         for i, item in enumerate(cat_results):
             est_min = item.get("estimated_minutes")
+            try:
+                est_min_val = int(est_min) if est_min is not None else None
+                if est_min_val is not None and not (0 <= est_min_val <= 1440):
+                    est_min_val = None
+            except (ValueError, TypeError):
+                est_min_val = None
             classification = EntryClassification(
                 entry_id=entry.id,
                 category=item["category"],
                 extracted_text=item.get("text"),
-                estimated_minutes=int(est_min) if est_min is not None else None,
+                estimated_minutes=est_min_val,
                 display_order=i,
-                model_version="gpt-4o-mini",
+                model_version="gpt-5.4-nano",
             )
             db.add(classification)
 

@@ -138,17 +138,18 @@ const RecordingPage: React.FC = () => {
     }, [entries.length]); // eslint-disable-line
 
     const handleWeeklyReview = useCallback(async () => {
+        const shouldRegenerate = weeklyResult !== null;
         setWeeklyLoading(true);
         setWeeklyError(undefined);
         try {
-            const result = await entriesApi.generateWeeklyAudit();
+            const result = await entriesApi.generateWeeklyAudit(shouldRegenerate);
             setWeeklyResult(result);
         } catch (err) {
             setWeeklyError(err instanceof Error ? err.message : 'Weekly review failed');
         } finally {
             setWeeklyLoading(false);
         }
-    }, []);
+    }, [weeklyResult]);
 
     return (
         <Container maxWidth="md">

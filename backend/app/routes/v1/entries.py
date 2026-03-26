@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -70,10 +70,27 @@ class SubmitResponse(BaseModel):
     job_id: str
 
 
+VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+
+
 class CategoryItem(BaseModel):
     text: Optional[str]
     category: str
     estimated_minutes: Optional[int] = None
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in VALID_CATEGORIES:
+            raise ValueError(f"category must be one of {VALID_CATEGORIES}")
+        return v
+
+    @field_validator("estimated_minutes")
+    @classmethod
+    def validate_minutes(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (0 <= v <= 1440):
+            raise ValueError("estimated_minutes must be 0-1440")
+        return v
 
 
 class EntryStatusResponse(BaseModel):
@@ -176,7 +193,7 @@ async def submit_entry(
         select(AuditResult).where(
             AuditResult.user_id == current_user.id,
             AuditResult.audit_date == today_utc,
-            AuditResult.is_stale == False,
+            AuditResult.is_stale.is_(False),
         )
     )
     for ar in stale_result.scalars().all():
@@ -421,8 +438,13 @@ async def generate_audit(
     )
 
 
+class WeeklyAuditRequest(BaseModel):
+    regenerate: bool = False
+
+
 @router.post("/audit/weekly", response_model=AuditResponse)
 async def generate_weekly_audit(
+    body: WeeklyAuditRequest = WeeklyAuditRequest(),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -435,9 +457,10 @@ async def generate_weekly_audit(
     today_utc = datetime.now(timezone.utc).date()
 
     # Check cache
-    cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
-    if cached is not None:
-        return cached
+    if not body.regenerate:
+        cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
+        if cached is not None:
+            return cached
 
     # Fetch entries for the past 7 days
     week_start = datetime(
@@ -646,7 +669,7 @@ async def _get_cached_audit(
             AuditResult.user_id == user_id,
             AuditResult.audit_date == audit_date,
             AuditResult.audit_type == audit_type,
-            AuditResult.is_stale == False,
+            AuditResult.is_stale.is_(False),
         ).order_by(AuditResult.generated_at.desc()).limit(1)
     )
     cached = result.scalar_one_or_none()

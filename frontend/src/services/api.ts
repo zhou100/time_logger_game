@@ -209,9 +209,9 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async generateWeeklyAudit(): Promise<AuditResponse> {
+    async generateWeeklyAudit(regenerate = false): Promise<AuditResponse> {
         try {
-            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly');
+            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly', { regenerate });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

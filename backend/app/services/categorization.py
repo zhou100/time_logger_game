@@ -102,9 +102,10 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
         if not isinstance(results, list) or not results:
             raise ValueError("LLM returned empty or non-list result")
 
+        _VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
         valid = [
             r for r in results
-            if isinstance(r, dict) and r.get("text") and r.get("category")
+            if isinstance(r, dict) and r.get("text") and r.get("category") in _VALID_CATEGORIES
         ]
         if not valid:
             raise ValueError("No valid entries in LLM result")
