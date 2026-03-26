@@ -65,9 +65,20 @@ async def _authenticate(token: str) -> int | None:
     """Return user_id from a valid access token, or None."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("type") != "access":
+        sub: str = payload.get("sub")
+        if not sub:
             return None
-        return int(payload["sub"])
+
+        # v1 tokens: sub is numeric user_id string, e.g. "17"
+        # legacy tokens: sub is email string
+        async with async_session() as db:
+            try:
+                user_id = int(sub)
+                result = await db.execute(select(User).where(User.id == user_id))
+            except ValueError:
+                result = await db.execute(select(User).where(User.email == sub))
+            user = result.scalar_one_or_none()
+            return user.id if user else None
     except (JWTError, KeyError, ValueError):
         return None
 

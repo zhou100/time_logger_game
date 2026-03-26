@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar } from '@mui/material';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar, Button } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../contexts/AuthContext';
 import Logger from '../utils/logger';
 
 const NavBar: React.FC = () => {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, logout, googleLogin } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
     const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -31,25 +32,36 @@ const NavBar: React.FC = () => {
 
     const handleProfile = () => {
         handleClose();
-        // TODO: Implement profile page
         Logger.info('Navigate to profile page');
     };
+
+    const handleGoogleSuccess = async (response: any) => {
+        try {
+            await googleLogin(response.credential);
+            navigate('/');
+        } catch (error) {
+            Logger.error('Google login error:', error);
+        }
+    };
+
+    const showGoogleButton = !user && process.env.REACT_APP_GOOGLE_CLIENT_ID;
 
     return (
         <AppBar position="static" color="transparent" elevation={1}>
             <Toolbar>
                 <Typography
                     variant="h6"
-                    component="div"
-                    sx={{ flexGrow: 1, color: 'text.primary' }}
+                    component={RouterLink}
+                    to="/"
+                    sx={{ flexGrow: 1, color: 'text.primary', textDecoration: 'none' }}
                 >
                     Time Logger Game
                 </Typography>
-                {user && (
+                {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Typography
                             variant="body1"
-                            sx={{ 
+                            sx={{
                                 mr: 2,
                                 color: 'text.secondary',
                                 display: { xs: 'none', sm: 'block' }
@@ -87,6 +99,38 @@ const NavBar: React.FC = () => {
                             <MenuItem onClick={handleProfile}>Profile</MenuItem>
                             <MenuItem onClick={handleLogout}>Sign Out</MenuItem>
                         </Menu>
+                    </Box>
+                ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {showGoogleButton && (
+                            <GoogleLogin
+                                onSuccess={handleGoogleSuccess}
+                                onError={() => Logger.error('Google login failed')}
+                                size="medium"
+                                type="standard"
+                                shape="rectangular"
+                                text="signin"
+                                width="200"
+                            />
+                        )}
+                        <Button
+                            component={RouterLink}
+                            to="/login"
+                            variant="text"
+                            size="small"
+                            sx={{ textTransform: 'none' }}
+                        >
+                            Sign In
+                        </Button>
+                        <Button
+                            component={RouterLink}
+                            to="/register"
+                            variant="contained"
+                            size="small"
+                            sx={{ textTransform: 'none' }}
+                        >
+                            Sign Up
+                        </Button>
                     </Box>
                 )}
             </Toolbar>

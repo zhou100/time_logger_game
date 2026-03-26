@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { TextField, Button, Box, Typography, Link, Alert, Container } from '@mui/material';
+import { TextField, Button, Box, Typography, Link, Alert, Container, Divider } from '@mui/material';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+
 
 export const RegisterForm: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -10,7 +12,7 @@ export const RegisterForm: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const { register } = useAuth();
+    const { register, googleLogin } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -122,6 +124,31 @@ export const RegisterForm: React.FC = () => {
                     >
                         {loading ? 'Registering...' : 'Register'}
                     </Button>
+
+                    {process.env.REACT_APP_GOOGLE_CLIENT_ID && (
+                        <>
+                            <Divider sx={{ my: 1 }}>or</Divider>
+                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                <GoogleLogin
+                                    onSuccess={async (response: any) => {
+                                        try {
+                                            setLoading(true);
+                                            await googleLogin(response.credential);
+                                            navigate('/');
+                                        } catch (err) {
+                                            setError(err instanceof Error ? err.message : 'Google sign-up failed');
+                                        } finally {
+                                            setLoading(false);
+                                        }
+                                    }}
+                                    onError={() => setError('Google sign-up failed')}
+                                    size="large"
+                                    width="300"
+                                    text="signup_with"
+                                />
+                            </Box>
+                        </>
+                    )}
 
                     <Typography align="center" mt={2}>
                         Already have an account?{' '}

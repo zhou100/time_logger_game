@@ -40,14 +40,18 @@ export interface SubmitResponse {
     job_id: string;
 }
 
+export interface CategoryItem {
+    text: string | null;
+    category: string;
+}
+
 export interface EntryStatus {
     entry_id: string;
     job_id: string | null;
     status: 'pending' | 'processing' | 'done' | 'failed' | 'unknown';
     step: string | null;
     transcript: string | null;
-    category: string | null;
-    confidence: number | null;
+    categories: CategoryItem[];
 }
 
 export interface EntryItem {
@@ -56,8 +60,7 @@ export interface EntryItem {
     recorded_at: string | null;
     created_at: string;
     duration_seconds: number | null;
-    category: string | null;
-    confidence: number | null;
+    categories: CategoryItem[];
 }
 
 export interface EntryListResponse {
@@ -82,11 +85,21 @@ export interface UserStats {
 // ── WebSocket events ──────────────────────────────────────────────────────────
 
 export type WsEvent =
-    | { type: 'entry.classified'; entry_id: string; transcript: string; category: string }
+    | { type: 'entry.classified'; entry_id: string; transcript: string; categories: CategoryItem[] }
     | { type: 'entry.failed'; entry_id: string; error: string }
     | { type: 'stats.updated'; total_entries: number; current_streak: number; level: number; xp: number }
     | { type: 'streak.extended'; streak: number }
     | { type: 'level_up'; old_level: number; new_level: number };
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
+export interface AuditResponse {
+    entries: number;
+    breakdown: Record<string, number>;
+    audit_text: string | null;
+    generated_at: string | null;
+    message?: string;
+}
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 

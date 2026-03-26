@@ -15,7 +15,7 @@ from fastapi import UploadFile
 from ..models.audio import Audio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from ..config import settings
+from ..settings import settings
 import time
 
 # Configure logging

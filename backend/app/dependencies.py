@@ -10,7 +10,7 @@ from jose import JWTError, jwt
 
 from .models.user import User
 from .db import get_db
-from .config import settings
+from .settings import settings
 
 # Configure logging
 logger = logging.getLogger(__name__)

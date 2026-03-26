@@ -6,8 +6,11 @@ import {
     PresignResponse,
     SubmitResponse,
     EntryStatus,
+    EntryItem,
     EntryListResponse,
+    CategoryItem,
     UserStats,
+    AuditResponse,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -24,7 +27,7 @@ const api: AxiosInstance = axios.create({
 });
 
 // Public endpoints that don't need an auth header
-const PUBLIC_PATHS = ['/v1/auth/token', '/v1/auth/register', '/v1/auth/refresh'];
+const PUBLIC_PATHS = ['/v1/auth/token', '/v1/auth/register', '/v1/auth/refresh', '/v1/auth/google'];
 
 // ── Request interceptor: attach Bearer token ──────────────────────────────────
 
@@ -112,6 +115,13 @@ export const authApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
+    async googleAuth(credential: string): Promise<TokenResponse> {
+        try {
+            const res = await api.post<TokenResponse>('/v1/auth/google', { credential });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
     async getCurrentUser(): Promise<{ id: number; email: string }> {
         try {
             const res = await api.get<{ id: number; email: string }>('/v1/auth/me');
@@ -176,6 +186,26 @@ export const entriesApi = {
             const res = await api.get<EntryListResponse>('/v1/entries/', {
                 params: { skip, limit },
             });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async deleteEntry(entryId: string): Promise<void> {
+        try {
+            await api.delete(`/v1/entries/${entryId}`);
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async updateEntry(entryId: string, data: { transcript?: string; categories?: CategoryItem[] }): Promise<EntryItem> {
+        try {
+            const res = await api.patch<EntryItem>(`/v1/entries/${entryId}`, data);
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async generateAudit(date: string): Promise<AuditResponse> {
+        try {
+            const res = await api.post<AuditResponse>('/v1/entries/audit', { date });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

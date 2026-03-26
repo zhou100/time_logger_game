@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { TextField, Button, Box, Typography, Link, Alert, Container } from '@mui/material';
+import { TextField, Button, Box, Typography, Link, Alert, Container, Divider } from '@mui/material';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+
 
 export const LoginForm: React.FC = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const { login, registrationSuccess, clearRegistrationSuccess } = useAuth();
+    const { login, googleLogin, registrationSuccess, clearRegistrationSuccess } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -104,6 +106,31 @@ export const LoginForm: React.FC = () => {
                     >
                         {loading ? 'Logging in...' : 'Login'}
                     </Button>
+
+                    {process.env.REACT_APP_GOOGLE_CLIENT_ID && (
+                        <>
+                            <Divider sx={{ my: 1 }}>or</Divider>
+                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                <GoogleLogin
+                                    onSuccess={async (response: any) => {
+                                        try {
+                                            setLoading(true);
+                                            await googleLogin(response.credential);
+                                            navigate('/');
+                                        } catch (err) {
+                                            setError(err instanceof Error ? err.message : 'Google login failed');
+                                        } finally {
+                                            setLoading(false);
+                                        }
+                                    }}
+                                    onError={() => setError('Google login failed')}
+                                    size="large"
+                                    width="300"
+                                    text="signin_with"
+                                />
+                            </Box>
+                        </>
+                    )}
 
                     <Typography align="center" mt={2}>
                         Don't have an account?{' '}

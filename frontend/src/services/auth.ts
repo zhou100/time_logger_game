@@ -73,6 +73,14 @@ class AuthService {
         return res.data;
     }
 
+    async googleLogin(credential: string): Promise<AuthResponse> {
+        const { authApi } = await import('./api');
+        const res = await authApi.googleAuth(credential);
+        this.store(res.access_token, res.refresh_token);
+        Logger.info(`Google login: user_id=${res.user_id}`);
+        return res as unknown as AuthResponse;
+    }
+
     async getNewToken(): Promise<string> {
         if (!this.refreshToken) {
             this.clearTokens();

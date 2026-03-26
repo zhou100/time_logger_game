@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     # ── Object Storage (MinIO / S3) ───────────────────────────────────────────
     S3_ENDPOINT_URL: str = "http://minio:9000"
+    # Public URL reachable by browsers — replaces S3_ENDPOINT_URL in presigned URLs.
+    # Set to http://localhost:9000 for local dev; leave empty to use S3_ENDPOINT_URL.
+    S3_PUBLIC_ENDPOINT_URL: str = ""
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "time-logger-audio"
@@ -39,6 +42,9 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    # ── Google OAuth ─────────────────────────────────────────────────────────
+    GOOGLE_CLIENT_ID: str = ""  # empty = Google auth disabled
 
     # ── App ───────────────────────────────────────────────────────────────────
     ENVIRONMENT: str = "development"

@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, None] = "65a8ae71f0d5"
+down_revision: Union[str, None] = "52812e8c744e"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -53,14 +53,12 @@ def upgrade() -> None:
     op.create_index("ix_entry_metadata_entry_id", "entry_metadata", ["entry_id"])
 
     # ── jobs ──────────────────────────────────────────────────────────────────
-    job_status = postgresql.ENUM("pending", "processing", "done", "failed", name="jobstatus")
-    job_status.create(op.get_bind())
     op.create_table(
         "jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("entry_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("entries.id", ondelete="CASCADE"), nullable=False),
         sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("status", sa.Enum("pending", "processing", "done", "failed", name="jobstatus"), nullable=False, server_default="pending"),
+        sa.Column("status", postgresql.ENUM("pending", "processing", "done", "failed", name="jobstatus"), nullable=False, server_default="pending"),
         sa.Column("step", sa.String(50), nullable=True),
         sa.Column("error", sa.Text, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),

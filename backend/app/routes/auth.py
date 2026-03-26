@@ -168,6 +168,8 @@ async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_
             refresh_token=refresh_token,
             token_type="bearer"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error in refresh_token: {str(e)}")
         logger.exception("Refresh token error details:")

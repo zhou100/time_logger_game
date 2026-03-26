@@ -8,8 +8,10 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    hashed_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    google_id = Column(String, unique=True, nullable=True, index=True)
+    auth_provider = Column(String(20), default="email")  # "email" | "google"
 
     # Relationships
     entries = relationship("Entry", back_populates="user", cascade="all, delete-orphan")
@@ -30,4 +32,9 @@ class User(Base):
     @classmethod
     async def get_by_id(cls, db, user_id: int):
         result = await db.execute(select(cls).filter(cls.id == user_id))
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_google_id(cls, db, google_id: str):
+        result = await db.execute(select(cls).filter(cls.google_id == google_id))
         return result.scalar_one_or_none()
