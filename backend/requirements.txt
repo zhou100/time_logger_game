@@ -1,6 +1,5 @@
 fastapi==0.104.1
 uvicorn==0.24.0
-websockets==12.0
 sqlalchemy==2.0.23
 alembic==1.12.1
 asyncpg==0.29.0
@@ -22,8 +21,7 @@ requests==2.31.0
 PyJWT==2.8.0
 # Object storage (R2 / MinIO / S3)
 aioboto3==12.3.0
-# Supabase (auth verification)
-supabase==2.3.0
+# Supabase JWT verification handled by PyJWT (no SDK needed)
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1

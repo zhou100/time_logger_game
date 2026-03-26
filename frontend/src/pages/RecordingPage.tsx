@@ -126,12 +126,16 @@ const RecordingPage: React.FC = () => {
         }
     }, []);
 
+    const entries = entriesData?.items ?? [];
+    const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
+    const hasBreakdown = Object.keys(breakdown).length > 0;
+
     // Auto-load cached audit on mount
     useEffect(() => {
         if (entries.length > 0 && !auditResult && !auditLoading) {
             handleGenerateAudit(false);
         }
-    }, [entries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [entries.length]); // eslint-disable-line
 
     const handleWeeklyReview = useCallback(async () => {
         setWeeklyLoading(true);
@@ -145,10 +149,6 @@ const RecordingPage: React.FC = () => {
             setWeeklyLoading(false);
         }
     }, []);
-
-    const entries = entriesData?.items ?? [];
-    const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
-    const hasBreakdown = Object.keys(breakdown).length > 0;
 
     return (
         <Container maxWidth="md">

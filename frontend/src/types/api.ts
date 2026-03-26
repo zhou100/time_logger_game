@@ -43,7 +43,7 @@ export interface SubmitResponse {
 export interface CategoryItem {
     text: string | null;
     category: string;
-    estimated_minutes: number | null;
+    estimated_minutes?: number | null;
 }
 
 export interface EntryStatus {
