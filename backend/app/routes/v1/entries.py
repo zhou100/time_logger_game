@@ -246,12 +246,25 @@ async def get_entry_status(
 async def list_entries(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
+    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD, UTC)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Paginated list of the user's entries, newest first."""
+    """Paginated list of the user's entries, newest first. Optionally filter by date."""
+    base_filters = [Entry.user_id == current_user.id, Job.status != JobStatus.FAILED]
+
+    # Optional date filter
+    if date:
+        try:
+            filter_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+        day_start = filter_date
+        day_end = filter_date + timedelta(days=1)
+        base_filters.extend([Entry.created_at >= day_start, Entry.created_at < day_end])
+
     total_result = await db.execute(
-        select(func.count(Entry.id)).join(Job, Job.entry_id == Entry.id).where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED)
+        select(func.count(Entry.id)).join(Job, Job.entry_id == Entry.id).where(*base_filters)
     )
     total = total_result.scalar()
 
@@ -259,7 +272,7 @@ async def list_entries(
         select(Entry)
         .join(Job, Job.entry_id == Entry.id)
         .options(selectinload(Entry.classifications))
-        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED)
+        .where(*base_filters)
         .order_by(Entry.created_at.desc())
         .offset(skip)
         .limit(limit)

@@ -7,6 +7,7 @@ import Logger from '../utils/logger';
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
+    isLoading: boolean;
     register: (credentials: RegisterCredentials) => Promise<void>;
     login: (credentials: LoginCredentials) => Promise<void>;
     loginWithGoogle: () => Promise<void>;
@@ -27,6 +28,7 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [registrationSuccess, setRegistrationSuccess] = useState<string | null>(null);
     const useSupabase = isSupabaseConfigured;
 
@@ -39,10 +41,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (!sb) return;
                     const { data: { session } } = await sb.auth.getSession();
                     if (session?.user) {
-                        setUser({
-                            id: 0, // Supabase user — backend will resolve
-                            email: session.user.email || '',
-                        });
+                        // Fetch real DB user id from backend (needed for realtime subscriptions)
+                        try {
+                            const { authApi } = await import('../services/api');
+                            const profile = await authApi.getCurrentUser();
+                            setUser({ id: profile.id, email: session.user.email || '' });
+                        } catch {
+                            // Fallback if backend is unreachable
+                            setUser({ id: 0, email: session.user.email || '' });
+                        }
                     }
                 } else {
                     if (AuthService.isAuthenticated()) {
@@ -59,6 +66,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 Logger.error('Auth rehydration failed:', err);
                 if (!useSupabase) AuthService.clearTokens();
                 setUser(null);
+            } finally {
+                setIsLoading(false);
             }
         };
         rehydrate();
@@ -70,9 +79,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const sb = getSupabase();
         if (!sb) return;
 
-        const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = sb.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
-                setUser({ id: 0, email: session.user.email || '' });
+                try {
+                    const { authApi } = await import('../services/api');
+                    const profile = await authApi.getCurrentUser();
+                    setUser({ id: profile.id, email: session.user.email || '' });
+                } catch {
+                    setUser({ id: 0, email: session.user.email || '' });
+                }
             } else {
                 setUser(null);
             }
@@ -108,7 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             if (error) throw new Error(error.message);
             if (data.user) {
-                setUser({ id: 0, email: data.user.email || '' });
+                try {
+                    const { authApi } = await import('../services/api');
+                    const profile = await authApi.getCurrentUser();
+                    setUser({ id: profile.id, email: data.user.email || '' });
+                } catch {
+                    setUser({ id: 0, email: data.user.email || '' });
+                }
             }
         } else {
             const response = await AuthService.login(credentials);
@@ -161,6 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         <AuthContext.Provider value={{
             user,
             isAuthenticated,
+            isLoading,
             register,
             login,
             loginWithGoogle,

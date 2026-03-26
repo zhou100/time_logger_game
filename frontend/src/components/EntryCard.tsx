@@ -30,7 +30,7 @@ interface EntryCardProps {
 }
 
 const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
-    const [isEditing, setIsEditing] = useState(false);
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [editText, setEditText] = useState('');
     const [editCategory, setEditCategory] = useState('');
@@ -38,24 +38,29 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
 
-    const cat = entry.categories.length > 0 ? entry.categories[0].category : null;
-    const text = entry.categories[0]?.text ?? entry.transcript ?? 'Processing…';
+    const categories = entry.categories;
+    const hasCats = categories.length > 0;
 
-    const handleEditStart = () => {
-        setEditText(text);
-        setEditCategory(cat ?? 'THOUGHT');
-        setIsEditing(true);
+    const handleEditStart = (index: number) => {
+        const cat = categories[index];
+        setEditText(cat?.text ?? entry.transcript ?? '');
+        setEditCategory(cat?.category ?? 'THOUGHT');
+        setEditingIndex(index);
     };
 
     const handleEditSave = () => {
+        if (editingIndex === null) return;
+        // Preserve all classifications — only update the one being edited
+        const updatedCategories = categories.map((c, i) =>
+            i === editingIndex
+                ? { text: editText, category: editCategory, estimated_minutes: c.estimated_minutes }
+                : { text: c.text, category: c.category, estimated_minutes: c.estimated_minutes }
+        );
         updateEntry.mutate({
             entryId: entry.id,
-            data: {
-                transcript: editText,
-                categories: [{ text: editText, category: editCategory }],
-            },
+            data: { categories: updatedCategories },
         });
-        setIsEditing(false);
+        setEditingIndex(null);
     };
 
     const handleDelete = () => {
@@ -65,75 +70,85 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
 
     const borderStyle = `1px solid ${palette.rule}`;
 
-    if (isEditing) {
-        return (
-            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
-                    <Select
-                        size="small"
-                        value={editCategory}
-                        onChange={(e) => setEditCategory(e.target.value)}
-                        sx={{ minWidth: 130, fontSize: '0.75rem' }}
-                    >
-                        {CATEGORIES.map((c) => (
-                            <MenuItem key={c} value={c} sx={{ fontSize: '0.75rem' }}>{c}</MenuItem>
-                        ))}
-                    </Select>
-                    <IconButton size="small" onClick={handleEditSave} color="primary" disabled={updateEntry.isPending}>
-                        <CheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setIsEditing(false)}>
-                        <CloseIcon fontSize="small" />
-                    </IconButton>
-                </Box>
-                <TextField
-                    size="small"
-                    fullWidth
-                    multiline
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    sx={{ fontSize: '0.8rem' }}
-                />
-            </Box>
-        );
-    }
-
     return (
         <>
             <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                    {cat && (
-                        <Chip
-                            label={cat}
-                            size="small"
-                            sx={{
-                                fontSize: '0.65rem',
-                                height: 18,
-                                flexShrink: 0,
-                                borderColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
-                                color: CATEGORY_COLORS[cat] ?? palette.textMuted,
-                                bgcolor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}0F`,
-                            }}
-                            variant="outlined"
-                        />
-                    )}
-                    <Typography variant="body2" sx={{ lineHeight: 1.5, flex: 1 }}>
-                        {text}
+                {hasCats ? categories.map((catItem, i) => {
+                    const isEditingThis = editingIndex === i;
+
+                    if (isEditingThis) {
+                        return (
+                            <Box key={i} sx={{ mb: i < categories.length - 1 ? 1 : 0 }}>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
+                                    <Select
+                                        size="small"
+                                        value={editCategory}
+                                        onChange={(e) => setEditCategory(e.target.value)}
+                                        sx={{ minWidth: 130, fontSize: '0.75rem' }}
+                                    >
+                                        {CATEGORIES.map((c) => (
+                                            <MenuItem key={c} value={c} sx={{ fontSize: '0.75rem' }}>{c}</MenuItem>
+                                        ))}
+                                    </Select>
+                                    <IconButton size="small" onClick={handleEditSave} color="primary" disabled={updateEntry.isPending}>
+                                        <CheckIcon fontSize="small" />
+                                    </IconButton>
+                                    <IconButton size="small" onClick={() => setEditingIndex(null)}>
+                                        <CloseIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                                <TextField
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    value={editText}
+                                    onChange={(e) => setEditText(e.target.value)}
+                                    sx={{ fontSize: '0.8rem' }}
+                                />
+                            </Box>
+                        );
+                    }
+
+                    return (
+                        <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: i < categories.length - 1 ? 0.75 : 0 }}>
+                            <Chip
+                                label={catItem.category}
+                                size="small"
+                                sx={{
+                                    fontSize: '0.65rem',
+                                    height: 18,
+                                    flexShrink: 0,
+                                    borderColor: CATEGORY_COLORS[catItem.category] ?? palette.textMuted,
+                                    color: CATEGORY_COLORS[catItem.category] ?? palette.textMuted,
+                                    bgcolor: `${CATEGORY_COLORS[catItem.category] ?? palette.textMuted}0F`,
+                                }}
+                                variant="outlined"
+                            />
+                            <Typography variant="body2" sx={{ lineHeight: 1.5, flex: 1 }}>
+                                {catItem.text ?? entry.transcript ?? 'Processing…'}
+                            </Typography>
+                            {!readOnly && (
+                                <IconButton size="small" onClick={() => handleEditStart(i)} sx={{ p: 0.25, flexShrink: 0 }}>
+                                    <EditIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                                </IconButton>
+                            )}
+                        </Box>
+                    );
+                }) : (
+                    <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+                        {entry.transcript ?? 'Processing…'}
+                    </Typography>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Typography>
                     {!readOnly && (
-                        <Box sx={{ display: 'flex', gap: 0, flexShrink: 0, ml: 0.5 }}>
-                            <IconButton size="small" onClick={handleEditStart} sx={{ p: 0.25 }}>
-                                <EditIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => setConfirmDelete(true)} sx={{ p: 0.25 }}>
-                                <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                            </IconButton>
-                        </Box>
+                        <IconButton size="small" onClick={() => setConfirmDelete(true)} sx={{ p: 0.25 }}>
+                            <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        </IconButton>
                     )}
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-                    {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Typography>
             </Box>
 
             <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)} maxWidth="xs">

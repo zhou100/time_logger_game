@@ -180,10 +180,10 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async list(skip = 0, limit = 20): Promise<EntryListResponse> {
+    async list(skip = 0, limit = 20, date?: string): Promise<EntryListResponse> {
         try {
             const res = await api.get<EntryListResponse>('/v1/entries/', {
-                params: { skip, limit },
+                params: { skip, limit, ...(date ? { date } : {}) },
             });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }

@@ -4,10 +4,10 @@ import { EntryListResponse, EntryItem, CategoryItem } from '../types/api';
 
 export const ENTRIES_KEY = ['entries'] as const;
 
-export function useEntries(skip = 0, limit = 20) {
+export function useEntries(skip = 0, limit = 20, date?: string) {
     return useQuery<EntryListResponse>({
-        queryKey: [...ENTRIES_KEY, skip, limit],
-        queryFn: () => entriesApi.list(skip, limit),
+        queryKey: [...ENTRIES_KEY, skip, limit, date],
+        queryFn: () => entriesApi.list(skip, limit, date),
         placeholderData: (prev) => prev,
     });
 }

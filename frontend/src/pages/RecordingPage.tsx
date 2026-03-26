@@ -59,7 +59,8 @@ const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
-    const { data: entriesData } = useEntries(0, 20);
+    const todayUtc = useMemo(() => new Date().toISOString().split('T')[0], []);
+    const { data: entriesData } = useEntries(0, 20, todayUtc);
     const upload = useUpload();
 
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
