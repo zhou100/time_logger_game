@@ -8,12 +8,6 @@ from fastapi.responses import JSONResponse
 from .db import init_db, engine
 from .settings import settings
 
-# Legacy v0 routes (kept for backward-compatibility)
-from .routes import router as legacy_router
-from .routes import auth as legacy_auth
-from .routes import users as legacy_users
-
-# New versioned routes
 from .routes.v1 import router as v1_router
 
 logging.basicConfig(
@@ -28,7 +22,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up — initialising database and storage")
     await init_db()
 
-    # Ensure the MinIO bucket exists (no-op if already present)
+    # Ensure the storage bucket exists (no-op if already present)
     try:
         from .services.storage import ensure_bucket
         await ensure_bucket()
@@ -58,13 +52,7 @@ app.add_middleware(
 )
 
 # ── Routes ────────────────────────────────────────────────────────────────────
-# New versioned API — primary surface
 app.include_router(v1_router, prefix="/api")
-
-# Legacy routes — kept during migration, will be removed in a future version
-app.include_router(legacy_router, prefix="/api")
-app.include_router(legacy_auth.router, prefix="/api")
-app.include_router(legacy_users.router, prefix="/api")
 
 
 # ── Utility endpoints ─────────────────────────────────────────────────────────

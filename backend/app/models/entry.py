@@ -22,8 +22,12 @@ class Entry(Base):
 
     # Relationships
     user = relationship("User", back_populates="entries")
-    classification = relationship(
-        "EntryClassification", back_populates="entry", uselist=False, cascade="all, delete-orphan"
+    classifications = relationship(
+        "EntryClassification",
+        back_populates="entry",
+        uselist=True,
+        cascade="all, delete-orphan",
+        order_by="EntryClassification.display_order",
     )
     metadata_items = relationship(
         "EntryMetadata", back_populates="entry", cascade="all, delete-orphan"

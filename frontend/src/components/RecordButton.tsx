@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { Box, CircularProgress, Typography, LinearProgress, Alert, IconButton } from '@mui/material';
+import { Box, CircularProgress, Typography, LinearProgress, Alert, IconButton, keyframes } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
 import { useReactMediaRecorder } from 'react-media-recorder';
+import { palette } from '../theme';
 
-type RecordingStatus = 'idle' | 'recording' | 'stopped' | 'acquiring_media';
+const pulse = keyframes`
+    0% { box-shadow: 0 0 0 0 rgba(182, 73, 45, 0.4); }
+    70% { box-shadow: 0 0 0 14px rgba(182, 73, 45, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(182, 73, 45, 0); }
+`;
 
 interface RecordButtonProps {
   onRecordingComplete: (blob: Blob) => Promise<void>;
@@ -13,220 +18,105 @@ interface RecordButtonProps {
 const RecordButton: React.FC<RecordButtonProps> = memo(({ onRecordingComplete }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [clickAttempts, setClickAttempts] = useState(0);
   const [isStoppingRecording, setIsStoppingRecording] = useState(false);
 
-  const onRecordingStop = useCallback(async (blobUrl: string, blob: Blob) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] Recording stopped:`, {
-      blobUrl,
-      blobSize: blob?.size,
-      clickAttempts
-    });
-
+  const onRecordingStop = useCallback(async (_blobUrl: string, blob: Blob) => {
     setRecordingTime(0);
-    setClickAttempts(0);
     setIsStoppingRecording(false);
-    
+
     if (blob) {
       try {
         await onRecordingComplete(blob);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to process recording';
-        setError(errorMessage);
-        console.error(`[${timestamp}] Recording error:`, err);
+        setError(err instanceof Error ? err.message : 'Failed to process recording');
       }
     }
-  }, [onRecordingComplete, clickAttempts]);
+  }, [onRecordingComplete]);
 
-  const mediaRecorder = useReactMediaRecorder({
+  const { status, startRecording, stopRecording } = useReactMediaRecorder({
     audio: {
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: true
+      autoGainControl: true,
     },
     video: false,
-    blobPropertyBag: {
-      type: 'audio/webm'
-    },
+    blobPropertyBag: { type: 'audio/webm' },
     onStop: onRecordingStop,
     mediaRecorderOptions: {
       mimeType: 'audio/webm;codecs=opus',
-      audioBitsPerSecond: 128000
-    }
+      audioBitsPerSecond: 128000,
+    },
   });
 
-  const {
-    status,
-    startRecording,
-    stopRecording,
-    mediaBlobUrl,
-    clearBlobUrl
-  } = mediaRecorder;
-
-  // Handle recording timer
   useEffect(() => {
     let timerId: NodeJS.Timeout | null = null;
-    
     if (status === 'recording' && !isStoppingRecording) {
-      timerId = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
+      timerId = setInterval(() => setRecordingTime((prev) => prev + 1), 1000);
     }
-
-    return () => {
-      if (timerId) {
-        clearInterval(timerId);
-      }
-    };
+    return () => { if (timerId) clearInterval(timerId); };
   }, [status, isStoppingRecording]);
 
-  const handleStopRecording = useCallback(() => {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] Executing stop recording`);
-    
-    setIsStoppingRecording(true);
-    if (typeof stopRecording === 'function') {
-      try {
-        stopRecording();
-        console.log(`[${timestamp}] Stop recording function called`);
-      } catch (err) {
-        console.error(`[${timestamp}] Error stopping recording:`, err);
-        setError('Failed to stop recording');
-        setIsStoppingRecording(false);
-      }
-    } else {
-      console.error(`[${timestamp}] Stop recording function not available`);
-      setError('Stop recording function not available');
-      setIsStoppingRecording(false);
-    }
-  }, [stopRecording]);
-
-  const handleStartRecording = useCallback(() => {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] Starting recording`);
-    
-    setError(null);
-    setRecordingTime(0);
-    setIsStoppingRecording(false);
-    
-    try {
-      startRecording();
-    } catch (err) {
-      console.error(`[${timestamp}] Error starting recording:`, err);
-      setError('Failed to start recording');
-    }
-  }, [startRecording]);
-
-  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    const timestamp = new Date().toISOString();
-    
-    setClickAttempts(prev => prev + 1);
-    console.log(`[${timestamp}] Button clicked:`, {
-      currentStatus: status,
-      recordingTime,
-      isRecording: status === 'recording',
-      isStoppingRecording
-    });
-
+  const handleClick = useCallback(() => {
     if (status === 'recording' && !isStoppingRecording) {
-      handleStopRecording();
+      setIsStoppingRecording(true);
+      stopRecording();
     } else if (status !== 'recording' && !isStoppingRecording) {
-      handleStartRecording();
-    } else {
-      console.log(`[${timestamp}] Ignoring click while stopping recording`);
+      setError(null);
+      setRecordingTime(0);
+      startRecording();
     }
-  }, [status, recordingTime, isStoppingRecording, handleStopRecording, handleStartRecording]);
+  }, [status, isStoppingRecording, stopRecording, startRecording]);
 
   const isRecording = useMemo(() => status === 'recording' && !isStoppingRecording, [status, isStoppingRecording]);
-  const isLoading = useMemo(() => status === 'acquiring_media' || isStoppingRecording, [status, isStoppingRecording]);
-  const hasError = useMemo(() => 
-    Boolean(error) || ['permission_denied', 'media_aborted', 'no_specified_media_found', 'media_in_use', 'recorder_error'].includes(status),
-    [error, status]
-  );
-
-  const getStatusMessage = useCallback(() => {
-    if (hasError) {
-      return error || 'An error occurred';
-    }
-    if (isStoppingRecording) {
-      return 'Stopping recording...';
-    }
-    if (isRecording) {
-      return 'Recording in progress...';
-    }
-    if (isLoading) {
-      return 'Preparing...';
-    }
-    return 'Click to Start Recording';
-  }, [hasError, error, isStoppingRecording, isRecording, isLoading]);
-
-  const formatTime = useCallback((seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }, []);
 
   return (
-    <Box 
-      component="div" 
-      sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center',
-        position: 'relative'
-      }}
-    >
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
       {error && (
-        <Alert 
-          severity="error" 
-          sx={{ mb: 2, width: '100%' }}
-          onClose={() => setError(null)}
-        >
+        <Alert severity="error" sx={{ mb: 2, width: '100%' }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
-      
+
       <IconButton
-        onClick={status === 'recording' ? handleStopRecording : startRecording}
+        onClick={handleClick}
         disabled={isStoppingRecording || status === 'acquiring_media'}
-        aria-label={status === 'recording' ? 'Stop recording' : 'Start recording'}
+        aria-label={isRecording ? 'Stop recording' : 'Start recording'}
         sx={{
-          width: 56,
-          height: 56,
-          backgroundColor: status === 'recording' ? 'error.main' : 'primary.main',
-          color: 'white',
+          width: 72,
+          height: 72,
+          bgcolor: isRecording ? palette.accentHover : palette.accent,
+          color: '#fff',
           '&:hover': {
-            backgroundColor: status === 'recording' ? 'error.dark' : 'primary.dark',
+            bgcolor: isRecording ? palette.accent : palette.accentHover,
           },
+          animation: !isRecording && status !== 'acquiring_media' ? `${pulse} 2s infinite` : 'none',
+          transition: 'background-color 100ms ease-out',
         }}
       >
-        {status === 'recording' ? <StopIcon /> : <MicIcon />}
+        {isRecording ? <StopIcon sx={{ fontSize: 32 }} /> : <MicIcon sx={{ fontSize: 32 }} />}
       </IconButton>
 
       {status === 'acquiring_media' && (
-        <CircularProgress 
-          size={24} 
-          sx={{ 
-            position: 'absolute', 
-            top: '50%', 
-            left: '50%', 
-            marginTop: '-12px', 
-            marginLeft: '-12px' 
-          }} 
+        <CircularProgress
+          size={24}
+          sx={{ position: 'absolute', top: '50%', left: '50%', mt: '-12px', ml: '-12px', color: palette.accent }}
         />
       )}
 
-      {status === 'recording' && (
+      {isRecording && (
         <Box sx={{ width: '100%', mt: 2 }}>
-          <Typography variant="caption" align="center" display="block">
+          <Typography variant="caption" align="center" display="block" sx={{ fontVariantNumeric: 'tabular-nums' }}>
             Recording: {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
           </Typography>
-          <LinearProgress 
-            variant="determinate" 
-            value={(recordingTime % 60) * 1.67} 
-            sx={{ mt: 1 }} 
+          <LinearProgress
+            variant="determinate"
+            value={(recordingTime % 60) * 1.67}
+            sx={{
+              mt: 1,
+              '& .MuiLinearProgress-bar': {
+                backgroundColor: palette.accent,
+              },
+            }}
           />
         </Box>
       )}

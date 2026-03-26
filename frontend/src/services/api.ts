@@ -6,8 +6,10 @@ import {
     PresignResponse,
     SubmitResponse,
     EntryStatus,
+    EntryItem,
     EntryListResponse,
-    UserStats,
+    CategoryItem,
+    AuditResponse,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -24,7 +26,7 @@ const api: AxiosInstance = axios.create({
 });
 
 // Public endpoints that don't need an auth header
-const PUBLIC_PATHS = ['/v1/auth/token', '/v1/auth/register', '/v1/auth/refresh'];
+const PUBLIC_PATHS = ['/v1/auth/token', '/v1/auth/register', '/v1/auth/refresh', '/v1/auth/google'];
 
 // ── Request interceptor: attach Bearer token ──────────────────────────────────
 
@@ -112,6 +114,13 @@ export const authApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
+    async googleAuth(credential: string): Promise<TokenResponse> {
+        try {
+            const res = await api.post<TokenResponse>('/v1/auth/google', { credential });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
     async getCurrentUser(): Promise<{ id: number; email: string }> {
         try {
             const res = await api.get<{ id: number; email: string }>('/v1/auth/me');
@@ -171,22 +180,38 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async list(skip = 0, limit = 20): Promise<EntryListResponse> {
+    async list(skip = 0, limit = 20, date?: string): Promise<EntryListResponse> {
         try {
             const res = await api.get<EntryListResponse>('/v1/entries/', {
-                params: { skip, limit },
+                params: { skip, limit, ...(date ? { date } : {}) },
             });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },
-};
 
-// ── Stats API ─────────────────────────────────────────────────────────────────
-
-export const statsApi = {
-    async get(): Promise<UserStats> {
+    async deleteEntry(entryId: string): Promise<void> {
         try {
-            const res = await api.get<UserStats>('/v1/me/stats');
+            await api.delete(`/v1/entries/${entryId}`);
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async updateEntry(entryId: string, data: { transcript?: string; categories?: CategoryItem[] }): Promise<EntryItem> {
+        try {
+            const res = await api.patch<EntryItem>(`/v1/entries/${entryId}`, data);
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async generateAudit(date: string, regenerate = false): Promise<AuditResponse> {
+        try {
+            const res = await api.post<AuditResponse>('/v1/entries/audit', { date, regenerate });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async generateWeeklyAudit(regenerate = false): Promise<AuditResponse> {
+        try {
+            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly', { regenerate });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

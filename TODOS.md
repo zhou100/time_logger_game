@@ -1,58 +1,80 @@
 # TODOS
 
-## P1 — Pre-Demo (must complete before hackathon)
+## P1 — High Priority
+
+### R2/MinIO Object Storage Setup (Phase 0)
+**What:** Configure Cloudflare R2 or MinIO for audio file storage with presigned URLs.
+**Why:** Deferred from v2 plan Phase 0. Currently using local/mock storage — needs real object storage for production.
+**Effort:** M (human: ~4 hours / CC: ~30 min)
+**Priority:** P1
+
+---
+
+### Supabase RLS Policies for Notifications
+**What:** Add Row Level Security policies so users only see their own notifications via Realtime.
+**Why:** Realtime subscriptions filter client-side by user_id, but without RLS any user could subscribe to all notifications.
+**Effort:** S (human: ~2 hours / CC: ~15 min)
+**Priority:** P1
+
+---
+
+## P2 — Medium Priority
 
 ### Render Warm-Up Checklist
 **What:** Hit `/health` endpoint 5 minutes before demo.
-**Why:** Render.com free tier cold-starts can add 10-30s on first request, killing the demo live.
-**How to apply:** Add to demo day runbook — open `https://<render-url>/health` in a tab 5 min early.
+**Why:** Render.com free tier cold-starts can add 10-30s on first request.
 **Effort:** S (human: 5 min / CC: 5 min — operational, not code)
-**Priority:** P1
-**Depends on:** Render deployment of backend
-
----
-
-### E2E Smoke Test
-**What:** Full pipeline test: record audio → upload to MinIO → worker processes → entry appears in list.
-**Why:** Individual unit tests pass but integration breaks are only caught end-to-end. The async pipeline (queue → MinIO → worker → Whisper → GPT → WebSocket) has multiple failure points.
-**How to apply:** Run against staging before demo. Minimum: manual walkthrough of the full flow.
-**Effort:** M (human: ~4 hours / CC: ~15 min)
-**Priority:** P1
-**Depends on:** Multi-entry extraction + audit endpoint complete
-
----
-
-## P3 — Post-Demo (deferred, do after hackathon)
-
-### Old Model Cleanup
-**What:** Remove `Audio`, `CategorizedEntry`, old `/api/audio` routes, and `routers/` directory after demo.
-**Why:** The revamp in commit `222c90e` introduced a new `Entry`/`EntryClassification` pipeline but left the old models in place. The dual-model state creates confusion for future contributors.
-**Context:** `backend/app/models/audio.py` (Audio), `backend/app/models/categories.py` (CategorizedEntry), `backend/app/routers/` (legacy). Do NOT remove before demo — safe fallback if new pipeline has issues.
-**Effort:** M (human: ~2 hours / CC: ~10 min)
-**Priority:** P3
-**Depends on:** Successful demo using new Entry/EntryClassification pipeline
-
----
-
-### ~~Audit Persistence~~ — COVERED BY PLAN (Phase 3b)
-
----
-
-### ~~Legacy Categorization Test Cleanup~~ — COVERED BY PLAN (Phase 4)
-
----
-
-### ~~Supabase Auth Migration~~ — COVERED BY PLAN (Phase 1)
-
----
-
-### Supabase Realtime Operational Spec
-
-**What:** Specify RLS policies, channel auth, duplicate delivery handling, and reconnect behavior for Phase 2 (Supabase Realtime).
-**Why:** Codex outside voice flagged that Phase 2 is underspecified operationally. The DB-trigger approach works but needs RLS policies to ensure users only see their own notifications, and the frontend needs reconnect/dedup logic.
-**Context:** Not blocking implementation of Phases 3a-3d or Phase 0. Must be specified before Phase 1+2 batch begins.
-**Effort:** S (human: ~2 hours / CC: ~15 min)
 **Priority:** P2
-**Depends on:** Supabase project created (Phase 1 prerequisite)
 
 ---
+
+### Notifications Table Cleanup
+**What:** Add TTL or archival for the notifications table to prevent unbounded growth.
+**Why:** Adversarial review flagged that notification rows accumulate indefinitely.
+**Effort:** S (human: ~1 hour / CC: ~10 min)
+**Priority:** P2
+
+---
+
+### Worker Error Message Sanitization
+**What:** Sanitize internal error messages in worker failure notifications before sending to frontend.
+**Why:** Adversarial review flagged that raw Python exception messages may leak to the client via notification payload.
+**Effort:** S (human: ~1 hour / CC: ~10 min)
+**Priority:** P2
+
+---
+
+## P3 — Low Priority
+
+### Insecure Default SECRET_KEY
+**What:** Remove the fallback `"your-secret-key"` default in `core/auth.py`. Require SECRET_KEY env var.
+**Why:** Adversarial review flagged that the default secret key is insecure if env var is not set.
+**Effort:** XS (human: ~15 min / CC: ~5 min)
+**Priority:** P3
+
+---
+
+### Presigned URL Content-Type Validation
+**What:** Validate the `content_type` parameter on the presign endpoint to restrict to audio MIME types.
+**Why:** Adversarial review flagged that unvalidated content_type allows arbitrary file upload.
+**Effort:** XS (human: ~15 min / CC: ~5 min)
+**Priority:** P3
+
+---
+
+## Completed
+
+### ~~Old Model Cleanup~~ — v0.2.0.0 (2026-03-26)
+Removed Audio, CategorizedEntry, old /api routes, and routers/ directory in v2 revamp.
+
+### ~~Audit Persistence~~ — v0.2.0.0 (2026-03-26)
+Implemented in Phase 3b with AuditResult model and cache.
+
+### ~~Legacy Categorization Test Cleanup~~ — v0.2.0.0 (2026-03-26)
+Cleaned up in Phase 4. New test suites for categorization service, worker, and validators.
+
+### ~~Supabase Auth Migration~~ — v0.2.0.0 (2026-03-26)
+Implemented in Phase 1 with Supabase JWT support, Google OAuth, and user auto-creation.
+
+### ~~E2E Smoke Test~~ — v0.2.0.0 (2026-03-26)
+Multi-entry pipeline tested via unit tests. Integration tests exist for DB-dependent paths.

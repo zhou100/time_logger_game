@@ -1,43 +1,91 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Container,
-    Box,
-    Typography,
-    Paper,
-    LinearProgress,
-    Grid,
-    Card,
-    CardContent,
-    Badge,
-    Chip,
     Alert,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    Container,
+    LinearProgress,
+    Typography,
 } from '@mui/material';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import RecordButton from '../components/RecordButton';
-import TranscriptionDisplay from '../components/TranscriptionDisplay';
-import { useStats } from '../hooks/useStats';
-import { useEntries, useEntryStatus } from '../hooks/useEntries';
+import EntryCard from '../components/EntryCard';
+import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
+import { entriesApi } from '../services/api';
+import { AuditResponse, EntryItem } from '../types/api';
+import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
-const RecordingPage: React.FC = () => {
-    // Connect WebSocket for real-time updates
-    useWebSocket();
+/**
+ * Time-weighted breakdown:
+ * 1. All non-null estimated_minutes → exact percentages
+ * 2. Some null → fill nulls with average, show "~" prefix
+ * 3. All null → equal weight (1/N each), show "~" prefix
+ */
+function computeBreakdown(entries: EntryItem[]): { breakdown: Record<string, number>; approximate: boolean } {
+    const cats = entries.flatMap((e) => e.categories);
+    if (cats.length === 0) return { breakdown: {}, approximate: false };
 
-    const { data: stats, isLoading: statsLoading } = useStats();
-    const { data: entriesData } = useEntries(0, 10);
+    const hasAny = cats.some((c) => c.estimated_minutes != null);
+    const hasAll = cats.every((c) => c.estimated_minutes != null);
+
+    const weights: Record<string, number> = {};
+    if (hasAny) {
+        const nonNull = cats.filter((c) => c.estimated_minutes != null).map((c) => c.estimated_minutes!);
+        const avg = nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
+        for (const c of cats) {
+            const w = c.estimated_minutes ?? avg;
+            weights[c.category] = (weights[c.category] ?? 0) + w;
+        }
+    } else {
+        for (const c of cats) {
+            weights[c.category] = (weights[c.category] ?? 0) + 1;
+        }
+    }
+
+    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+    const breakdown = Object.fromEntries(
+        Object.entries(weights).map(([cat, w]) => [cat, Math.round((w / total) * 100)])
+    );
+    return { breakdown, approximate: !hasAll };
+}
+
+const RecordingPage: React.FC = () => {
+    useRealtimeNotifications();
+
+    const queryClient = useQueryClient();
+    const todayUtc = useMemo(() => new Date().toISOString().split('T')[0], []);
+    const { data: entriesData } = useEntries(0, 20, todayUtc);
     const upload = useUpload();
 
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
-    const [error, setError] = useState<string | undefined>();
+    const [uploadError, setUploadError] = useState<string | undefined>();
 
-    // Poll the status of the most recently submitted entry
+    // Audit state
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditResult, setAuditResult] = useState<AuditResponse | null>(null);
+    const [auditError, setAuditError] = useState<string | undefined>();
+
+    // Weekly coach state
+    const [weeklyLoading, setWeeklyLoading] = useState(false);
+    const [weeklyResult, setWeeklyResult] = useState<AuditResponse | null>(null);
+    const [weeklyError, setWeeklyError] = useState<string | undefined>();
+
     const { data: entryStatus } = useEntryStatus(pendingEntryId);
 
-    const transcript = entryStatus?.transcript ?? null;
+    // When status polling detects completion, refresh the entries list
+    useEffect(() => {
+        if (entryStatus?.status === 'done' || entryStatus?.status === 'failed') {
+            queryClient.invalidateQueries({ queryKey: ENTRIES_KEY });
+            setPendingEntryId(null);
+        }
+    }, [entryStatus?.status, queryClient]);
+
     const isProcessing =
         upload.isPending ||
         (!!pendingEntryId &&
@@ -46,7 +94,7 @@ const RecordingPage: React.FC = () => {
 
     const handleRecordingComplete = useCallback(
         async (blob: Blob) => {
-            setError(undefined);
+            setUploadError(undefined);
             setPendingEntryId(null);
             try {
                 Logger.info('Starting two-phase upload');
@@ -58,188 +106,304 @@ const RecordingPage: React.FC = () => {
                 Logger.info(`Entry ${entry_id} submitted for processing`);
             } catch (err) {
                 Logger.error('Upload failed:', err);
-                setError(err instanceof Error ? err.message : 'Upload failed');
+                setUploadError(err instanceof Error ? err.message : 'Upload failed');
             }
         },
         [upload]
     );
 
-    // Stats with sensible fallbacks while loading
-    const totalRecordings = stats?.total_entries ?? 0;
-    const totalMinutes = stats?.total_minutes_logged ?? 0;
-    const streak = stats?.current_streak ?? 0;
-    const level = stats?.level ?? 1;
-    const xp = stats?.xp ?? 0;
-    const xpToNext = stats?.xp_to_next_level ?? 100;
-    const levelProgress = Math.round((xp % 100) / (xpToNext + (xp % 100)) * 100) || 0;
+    const handleGenerateAudit = useCallback(async (regenerate = false) => {
+        setAuditLoading(true);
+        setAuditError(undefined);
+        if (regenerate) setAuditResult(null);
+        try {
+            const todayUtc = new Date().toISOString().split('T')[0];
+            const result = await entriesApi.generateAudit(todayUtc, regenerate);
+            setAuditResult(result);
+        } catch (err) {
+            setAuditError(err instanceof Error ? err.message : 'Audit generation failed');
+        } finally {
+            setAuditLoading(false);
+        }
+    }, []);
+
+    const entries = entriesData?.items ?? [];
+    const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
+    const hasBreakdown = Object.keys(breakdown).length > 0;
+
+    // Auto-load cached audit on mount
+    useEffect(() => {
+        if (entries.length > 0 && !auditResult && !auditLoading) {
+            handleGenerateAudit(false);
+        }
+    }, [entries.length]); // eslint-disable-line
+
+    const handleWeeklyReview = useCallback(async () => {
+        const shouldRegenerate = weeklyResult !== null;
+        setWeeklyLoading(true);
+        setWeeklyError(undefined);
+        try {
+            const result = await entriesApi.generateWeeklyAudit(shouldRegenerate);
+            setWeeklyResult(result);
+        } catch (err) {
+            setWeeklyError(err instanceof Error ? err.message : 'Weekly review failed');
+        } finally {
+            setWeeklyLoading(false);
+        }
+    }, [weeklyResult]);
 
     return (
         <Container maxWidth="md">
-            <Box sx={{ mt: 4, mb: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Typography
-                    variant="h3"
-                    component="h1"
-                    gutterBottom
-                    sx={{
-                        fontWeight: 'bold',
-                        background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                        backgroundClip: 'text',
-                        textFillColor: 'transparent',
-                        mb: 4,
-                    }}
-                >
+            <Box sx={{ mt: 4, mb: 8 }}>
+                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 4 }}>
                     Time Logger
                 </Typography>
 
-                {/* ── Stats cards ─────────────────────────────────────────────── */}
-                <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent sx={{ textAlign: 'center' }}>
-                                <Badge
-                                    badgeContent={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
-                                    color="primary"
-                                    sx={{ '& .MuiBadge-badge': { width: 22, height: 22, borderRadius: '50%' } }}
-                                >
-                                    <Typography variant="h4" color="primary">{totalRecordings}</Typography>
-                                </Badge>
-                                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                    Total Recordings
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent sx={{ textAlign: 'center' }}>
-                                <Badge
-                                    badgeContent={<AccessTimeIcon sx={{ fontSize: 16 }} />}
-                                    color="secondary"
-                                    sx={{ '& .MuiBadge-badge': { width: 22, height: 22, borderRadius: '50%' } }}
-                                >
-                                    <Typography variant="h4" color="secondary">{totalMinutes}</Typography>
-                                </Badge>
-                                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                    Minutes Logged
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent sx={{ textAlign: 'center' }}>
-                                <Badge
-                                    badgeContent={<TrendingUpIcon sx={{ fontSize: 16 }} />}
-                                    color="success"
-                                    sx={{ '& .MuiBadge-badge': { width: 22, height: 22, borderRadius: '50%' } }}
-                                >
-                                    <Typography variant="h4" color="success.main">{streak}</Typography>
-                                </Badge>
-                                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                    Day Streak
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
-
-                {/* ── Level progress ───────────────────────────────────────────── */}
-                <Box sx={{ width: '100%', mb: 4 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="body2" color="textSecondary">
-                            Level {level}
-                        </Typography>
-                        <Typography variant="body2" color="primary">
-                            {xp} XP — {xpToNext} to next level
-                        </Typography>
-                    </Box>
-                    <LinearProgress
-                        variant="determinate"
-                        value={levelProgress}
-                        sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: 'rgba(0,0,0,0.1)',
-                            '& .MuiLinearProgress-bar': {
-                                borderRadius: 4,
-                                backgroundImage: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                            },
-                        }}
-                    />
-                </Box>
-
-                {/* ── Recorder ─────────────────────────────────────────────────── */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        p: 4,
-                        width: '100%',
-                        borderRadius: 2,
-                        background: 'linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%)',
-                    }}
-                >
+                {/* ── Recorder ──────────────────────────────────────────────── */}
+                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                     <RecordButton onRecordingComplete={handleRecordingComplete} />
 
-                    {/* Processing step indicator */}
-                    {isProcessing && entryStatus?.step && (
+                    {isProcessing && (
                         <Box sx={{ mt: 2, textAlign: 'center' }}>
                             <Chip
-                                label={stepLabel(entryStatus.step)}
-                                color="primary"
+                                label={stepLabel(entryStatus?.step ?? null, upload.isPending)}
                                 size="small"
                                 variant="outlined"
+                                icon={<CircularProgress size={12} />}
                             />
                         </Box>
                     )}
 
-                    <TranscriptionDisplay
-                        transcription={transcript}
-                        isLoading={isProcessing}
-                        error={error ?? (entryStatus?.status === 'failed' ? 'Processing failed. Please try again.' : undefined)}
-                    />
+                    {(uploadError || entryStatus?.status === 'failed') && (
+                        <Alert severity="error" sx={{ mt: 2 }}>
+                            {uploadError ?? 'Processing failed. Please try again.'}
+                        </Alert>
+                    )}
 
-                    {/* Category chip once classified */}
-                    {entryStatus?.status === 'done' && entryStatus.category && (
-                        <Box sx={{ mt: 1, textAlign: 'center' }}>
-                            <Chip label={entryStatus.category} color="secondary" size="small" />
+                    {entryStatus?.status === 'done' && entryStatus.categories.length > 0 && (
+                        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            {entryStatus.categories.map((c, i) => (
+                                <Chip
+                                    key={i}
+                                    label={c.category}
+                                    size="small"
+                                    sx={{
+                                        borderColor: CATEGORY_COLORS[c.category] ?? palette.textMuted,
+                                        color: CATEGORY_COLORS[c.category] ?? palette.textMuted,
+                                        bgcolor: `${CATEGORY_COLORS[c.category] ?? palette.textMuted}0F`,
+                                    }}
+                                    variant="outlined"
+                                />
+                            ))}
                         </Box>
                     )}
-                </Paper>
 
-                {/* ── Recent entries ───────────────────────────────────────────── */}
-                {entriesData && entriesData.items.length > 0 && (
-                    <Box sx={{ width: '100%', mt: 4 }}>
-                        <Typography variant="h6" gutterBottom>Recent Entries</Typography>
-                        {entriesData.items.slice(0, 5).map((entry) => (
-                            <Paper key={entry.id} sx={{ p: 2, mb: 1 }} elevation={1}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <Typography variant="body2" sx={{ flex: 1, mr: 1 }}>
-                                        {entry.transcript ?? 'Processing…'}
+                    {entryStatus?.transcript && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic' }}>
+                            "{entryStatus.transcript}"
+                        </Typography>
+                    )}
+                </Box>
+
+                {/* ── Two-column: entries + breakdown/audit ─────────────────── */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
+
+                    {/* Left: today's entries */}
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                        <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
+                            Today's Entries {entries.length > 0 && `— ${entries.length}`}
+                        </Typography>
+
+                        {entries.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                                Record your day to see entries here.
+                            </Typography>
+                        ) : (
+                            entries.slice(0, 10).map((entry) => (
+                                <EntryCard key={entry.id} entry={entry} />
+                            ))
+                        )}
+                    </Box>
+
+                    {/* Right: breakdown bars + AI audit */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+                        {/* Category breakdown */}
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                            <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
+                                Time Breakdown — today
+                            </Typography>
+
+                            {!hasBreakdown ? (
+                                <Typography variant="body2" color="text.secondary">
+                                    Breakdown will appear once entries are classified.
+                                </Typography>
+                            ) : (
+                                Object.entries(breakdown)
+                                    .sort(([, a], [, b]) => b - a)
+                                    .map(([cat, pct]) => (
+                                        <Box key={cat} sx={{ mb: 1 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                <Typography variant="caption">
+                                                    {CATEGORY_LABELS[cat] ?? cat}
+                                                </Typography>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                                    {approximate ? '~' : ''}{pct}%
+                                                </Typography>
+                                            </Box>
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={pct}
+                                                sx={{
+                                                    '& .MuiLinearProgress-bar': {
+                                                        borderRadius: 4,
+                                                        backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                                        transition: 'width 600ms ease-out',
+                                                    },
+                                                }}
+                                            />
+                                        </Box>
+                                    ))
+                            )}
+                        </Box>
+
+                        {/* AI Audit */}
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                                <Typography variant="overline" color="text.secondary">
+                                    AI Audit
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                                    onClick={() => handleGenerateAudit(!!auditResult)}
+                                    disabled={auditLoading || entries.length === 0}
+                                >
+                                    {auditResult ? 'Regenerate' : 'Generate Audit'}
+                                </Button>
+                            </Box>
+
+                            {auditError && (
+                                <Alert severity="error" sx={{ mb: 1 }}>{auditError}</Alert>
+                            )}
+
+                            {auditResult === null && !auditLoading && !auditError && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {entries.length === 0
+                                        ? 'Record your day first.'
+                                        : 'Click "Generate Audit" for an honest breakdown of your day.'}
+                                </Typography>
+                            )}
+
+                            {auditResult?.message && !auditResult.audit_text && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {auditResult.message}
+                                </Typography>
+                            )}
+
+                            {auditResult?.audit_text && (
+                                <Box
+                                    sx={{
+                                        borderLeft: `2px solid ${palette.accent}`,
+                                        pl: 2,
+                                        py: 1,
+                                        bgcolor: 'background.paper',
+                                        borderRadius: '0 8px 8px 0',
+                                    }}
+                                >
+                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                        Your AI Coach says:
                                     </Typography>
-                                    {entry.category && (
-                                        <Chip label={entry.category} size="small" sx={{ flexShrink: 0 }} />
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                        {auditResult.audit_text}
+                                    </Typography>
+                                    {auditResult.generated_at && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                            Based on {auditResult.entries} entries · {new Date(auditResult.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </Typography>
                                     )}
                                 </Box>
-                                <Typography variant="caption" color="textSecondary">
-                                    {new Date(entry.created_at).toLocaleString()}
+                            )}
+                        </Box>
+
+                        {/* Weekly Coach Letter */}
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                                <Typography variant="overline" color="text.secondary">
+                                    Weekly Coach
                                 </Typography>
-                            </Paper>
-                        ))}
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={weeklyLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                                    onClick={handleWeeklyReview}
+                                    disabled={weeklyLoading}
+                                >
+                                    {weeklyResult ? 'Regenerate' : 'Generate Weekly Review'}
+                                </Button>
+                            </Box>
+
+                            {weeklyError && (
+                                <Alert severity="error" sx={{ mb: 1 }}>{weeklyError}</Alert>
+                            )}
+
+                            {weeklyResult === null && !weeklyLoading && !weeklyError && (
+                                <Typography variant="body2" color="text.secondary">
+                                    Get an honest weekly review comparing your days and calling out patterns.
+                                </Typography>
+                            )}
+
+                            {weeklyResult?.message && !weeklyResult.audit_text && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {weeklyResult.message}
+                                </Typography>
+                            )}
+
+                            {weeklyResult?.audit_text && (
+                                <Box
+                                    sx={{
+                                        borderLeft: `2px solid ${palette.info}`,
+                                        pl: 2,
+                                        py: 1,
+                                        bgcolor: palette.surface2,
+                                        borderRadius: '0 8px 8px 0',
+                                    }}
+                                >
+                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                        Your Weekly Coach says:
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                        {weeklyResult.audit_text}
+                                    </Typography>
+                                    {weeklyResult.generated_at && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                            Based on {weeklyResult.entries} entries this week
+                                            {weeklyResult.cached && ' (cached)'}
+                                        </Typography>
+                                    )}
+                                </Box>
+                            )}
+                        </Box>
+
                     </Box>
-                )}
+                </Box>
+
             </Box>
         </Container>
     );
 };
 
-function stepLabel(step: string): string {
+function stepLabel(step: string | null, isUploading: boolean): string {
+    if (isUploading) return 'Uploading audio…';
     switch (step) {
         case 'queued': return 'Queued…';
         case 'starting': return 'Starting…';
         case 'transcribing': return 'Transcribing audio…';
+        case 'refining': return 'Refining transcript…';
         case 'classifying': return 'Classifying…';
         case 'complete': return 'Done';
-        default: return step;
+        default: return step ?? 'Processing…';
     }
 }
 

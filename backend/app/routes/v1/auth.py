@@ -17,8 +17,10 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, ConfigDict
 from jose import jwt, JWTError
 
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
+
 from ...models.user import User
-from ...models.gamification import UserStats
 from ...models.refresh_token import RefreshToken
 from ...utils.auth import verify_password, get_password_hash, get_user, get_current_user
 from ...db import get_db
@@ -46,6 +48,10 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str  # JWT ID token from Google Identity Services
 
 
 class UserResponse(BaseModel):
@@ -108,10 +114,6 @@ async def register(user_in: UserCreate, request: Request, db: AsyncSession = Dep
     db.add(user)
     await db.flush()
 
-    # Initialise stats row
-    db.add(UserStats(user_id=user.id))
-    await db.flush()
-
     access = _make_access_token(user)
     refresh = await _make_refresh_token(db, user, request.headers.get("user-agent"))
     await db.commit()
@@ -127,7 +129,19 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     user = await get_user(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account uses Google Sign-In. Please sign in with Google.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -142,6 +156,47 @@ async def login(
 
     logger.info(f"Login: user {user.email}")
     return _token_response(access, refresh, user)
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_auth(body: GoogleAuthRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Authenticate via Google ID token. Creates account on first use."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Google sign-in is not configured")
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            body.credential, google_requests.Request(), settings.GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token")
+
+    google_id = idinfo["sub"]
+    email = idinfo.get("email")
+    if not email or not idinfo.get("email_verified"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email not verified by Google")
+
+    # 1. Lookup by google_id
+    user = await User.get_by_google_id(db, google_id)
+
+    if not user:
+        # 2. Lookup by email — link existing account
+        user = await User.get_by_email(db, email)
+        if user:
+            user.google_id = google_id
+            user.auth_provider = "google"
+        else:
+            # 3. Create new user
+            user = User(email=email, google_id=google_id, auth_provider="google")
+            db.add(user)
+            await db.flush()
+
+    access = _make_access_token(user)
+    refresh_tok = await _make_refresh_token(db, user, request.headers.get("user-agent"))
+    await db.commit()
+
+    logger.info(f"Google auth: user {user.email} (id={user.id})")
+    return _token_response(access, refresh_tok, user)
 
 
 @router.post("/refresh", response_model=TokenResponse)

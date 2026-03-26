@@ -4,13 +4,12 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from './theme';
 import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
-import RecordingPage from './pages/RecordingPage';
+import HomePage from './pages/HomePage';
 import NavBar from './components/NavBar';
 import { Box } from '@mui/material';
-import './styles/errorBoundaries.css';
+
 
 function App() {
   return (
@@ -34,14 +33,7 @@ function App() {
               <Routes>
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/register" element={<RegisterForm />} />
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <RecordingPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/" element={<HomePage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>

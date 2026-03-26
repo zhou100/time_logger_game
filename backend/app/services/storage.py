@@ -60,6 +60,8 @@ async def generate_presigned_put(key: str, content_type: str, expires_in: int = 
             },
             ExpiresIn=expires_in,
         )
+    if settings.S3_PUBLIC_ENDPOINT_URL:
+        url = url.replace(settings.S3_ENDPOINT_URL, settings.S3_PUBLIC_ENDPOINT_URL, 1)
     return url
 
 
@@ -92,6 +94,13 @@ async def upload_bytes(key: str, data: bytes, content_type: str) -> None:
             ContentType=content_type,
         )
     logger.debug(f"Uploaded {len(data)} bytes to {key}")
+
+
+async def delete_object(key: str) -> None:
+    """Delete a file from object storage."""
+    async with _client() as s3:
+        await s3.delete_object(Bucket=settings.S3_BUCKET, Key=key)
+    logger.debug(f"Deleted {key}")
 
 
 def make_audio_key(user_id: int, entry_id: str, suffix: str = ".webm") -> str:
