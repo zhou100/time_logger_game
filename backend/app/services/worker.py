@@ -6,12 +6,12 @@ Polls the jobs table, processes PENDING jobs through the pipeline:
   1. Download audio from object storage
   2. Transcribe via OpenAI Whisper
   3. Classify via GPT-4o-mini (multi-entry: 1 transcript → N classifications)
-  4. Update gamification stats
-  5. Notify connected WebSocket clients
+  4. Write notification row (Supabase Realtime delivers to frontend)
 
 Start with: python -m app.services.worker
 """
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -23,11 +23,11 @@ from ..db import async_session
 from ..models.entry import Entry
 from ..models.classification import EntryClassification
 from ..models.jobs import Job, JobStatus
+from ..models.notification import Notification
 from ..services import queue as queue_svc
 from ..services import storage as storage_svc
 from ..services.categorization import categorize_text
 from ..services.transcript_refiner import refine_transcript
-from ..services.gamification import process_entry_created
 from openai import AsyncOpenAI
 from ..settings import settings
 
@@ -122,10 +122,12 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
 
         # Insert one EntryClassification row per extracted activity.
         for i, item in enumerate(cat_results):
+            est_min = item.get("estimated_minutes")
             classification = EntryClassification(
                 entry_id=entry.id,
                 category=item["category"],
                 extracted_text=item.get("text"),
+                estimated_minutes=int(est_min) if est_min is not None else None,
                 display_order=i,
                 model_version="gpt-4o-mini",
             )
@@ -133,41 +135,28 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
 
         await db.flush()
 
-        # ── Step 3: Gamification ─────────────────────────────────────────────
-        stats = await process_entry_created(
-            db, entry.user_id, str(entry.id), entry.duration_seconds
-        )
-
         await queue_svc.complete_job(db, job)
         await db.commit()
 
         logger.info(
             f"Job {job.id} done: entry={entry.id} "
-            f"classifications={len(cat_results)} streak={stats.current_streak}"
+            f"classifications={len(cat_results)}"
         )
 
-        # ── Step 4: Notify WebSocket clients ─────────────────────────────────
-        # Single batch event with all N categories — frontend updates the entry card.
-        try:
-            from ..routes.v1.ws import manager
-            await manager.send_to_user(entry.user_id, {
-                "type": "entry.classified",
+        # ── Step 4: Write notification (Supabase Realtime delivers to frontend)
+        db.add(Notification(
+            user_id=entry.user_id,
+            event_type="entry.classified",
+            payload_json=json.dumps({
                 "entry_id": str(entry.id),
                 "transcript": entry.transcript,
                 "categories": [
                     {"text": r["text"], "category": r["category"]}
                     for r in cat_results
                 ],
-            })
-            await manager.send_to_user(entry.user_id, {
-                "type": "stats.updated",
-                "total_entries": stats.total_entries,
-                "current_streak": stats.current_streak,
-                "level": stats.level,
-                "xp": stats.xp,
-            })
-        except Exception as ws_exc:
-            logger.debug(f"WebSocket notify skipped: {ws_exc}")
+            }),
+        ))
+        await db.commit()
 
     except Exception as exc:
         logger.error(f"Job {job.id} failed: {exc}", exc_info=True)
@@ -182,16 +171,19 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
                 await db2.commit()
 
         try:
-            from ..routes.v1.ws import manager
             async with async_session() as db3:
                 r = await db3.execute(select(Entry).where(Entry.id == job.entry_id))
                 e = r.scalar_one_or_none()
                 if e:
-                    await manager.send_to_user(e.user_id, {
-                        "type": "entry.failed",
-                        "entry_id": str(job.entry_id),
-                        "error": str(exc),
-                    })
+                    db3.add(Notification(
+                        user_id=e.user_id,
+                        event_type="entry.failed",
+                        payload_json=json.dumps({
+                            "entry_id": str(job.entry_id),
+                            "error": str(exc),
+                        }),
+                    ))
+                    await db3.commit()
         except Exception:
             pass
 

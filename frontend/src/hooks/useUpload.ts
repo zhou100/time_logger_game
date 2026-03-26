@@ -10,7 +10,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { entriesApi } from '../services/api';
 import { ENTRIES_KEY } from './useEntries';
-import { STATS_KEY } from './useStats';
 import Logger from '../utils/logger';
 
 interface UploadOptions {

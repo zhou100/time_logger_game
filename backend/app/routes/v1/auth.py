@@ -21,7 +21,6 @@ from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
 from ...models.user import User
-from ...models.gamification import UserStats
 from ...models.refresh_token import RefreshToken
 from ...utils.auth import verify_password, get_password_hash, get_user, get_current_user
 from ...db import get_db
@@ -115,10 +114,6 @@ async def register(user_in: UserCreate, request: Request, db: AsyncSession = Dep
     db.add(user)
     await db.flush()
 
-    # Initialise stats row
-    db.add(UserStats(user_id=user.id))
-    await db.flush()
-
     access = _make_access_token(user)
     refresh = await _make_refresh_token(db, user, request.headers.get("user-agent"))
     await db.commit()
@@ -194,8 +189,6 @@ async def google_auth(body: GoogleAuthRequest, request: Request, db: AsyncSessio
             # 3. Create new user
             user = User(email=email, google_id=google_id, auth_provider="google")
             db.add(user)
-            await db.flush()
-            db.add(UserStats(user_id=user.id))
             await db.flush()
 
     access = _make_access_token(user)

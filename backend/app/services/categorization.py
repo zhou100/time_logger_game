@@ -36,35 +36,38 @@ contains 3-6 distinct items.
 - Each entry gets its own object with the specific text for that activity.
 - Do NOT invent activities. Only extract what is explicitly mentioned.
 - Reference ONLY the activities listed in the transcript.
+- Include "estimated_minutes" — your best guess at how many minutes this activity took. \
+Use null if the user didn't mention a duration and you can't reasonably infer one. \
+Only provide a number when the transcript explicitly states or strongly implies a duration.
 
 Return valid JSON array only, with this shape:
 [
-  {"text": "specific activity or note text", "category": "TODO|IDEA|THOUGHT|TIME_RECORD"},
+  {"text": "specific activity or note text", "category": "TODO|IDEA|THOUGHT|TIME_RECORD", "estimated_minutes": <integer or null>},
   ...
 ]
 
 Examples:
 
 Input: "I need to fix the login bug tomorrow."
-Output: [{"text": "Fix the login bug", "category": "TODO"}]
+Output: [{"text": "Fix the login bug", "category": "TODO", "estimated_minutes": null}]
 
 Input: "This morning I worked on the dashboard for about 2 hours. Then had three \
 back-to-back meetings that felt unproductive. Had an idea to add voice replay to \
 the audit feature. Still need to write tests for the auth module."
 Output: [
-  {"text": "Worked on the dashboard for about 2 hours", "category": "TIME_RECORD"},
-  {"text": "Three back-to-back meetings that felt unproductive", "category": "TIME_RECORD"},
-  {"text": "Add voice replay to the audit feature", "category": "IDEA"},
-  {"text": "Write tests for the auth module", "category": "TODO"}
+  {"text": "Worked on the dashboard for about 2 hours", "category": "TIME_RECORD", "estimated_minutes": 120},
+  {"text": "Three back-to-back meetings that felt unproductive", "category": "TIME_RECORD", "estimated_minutes": 90},
+  {"text": "Add voice replay to the audit feature", "category": "IDEA", "estimated_minutes": null},
+  {"text": "Write tests for the auth module", "category": "TODO", "estimated_minutes": null}
 ]
 
 Input: "Spent the whole day debugging a config issue. Finally fixed it at 5pm. \
 Realized we should document environment setup better. Also need to review the PR \
 from Sarah before standup tomorrow."
 Output: [
-  {"text": "Spent the day debugging a config issue, fixed it at 5pm", "category": "TIME_RECORD"},
-  {"text": "Document environment setup better", "category": "IDEA"},
-  {"text": "Review PR from Sarah before standup tomorrow", "category": "TODO"}
+  {"text": "Spent the day debugging a config issue, fixed it at 5pm", "category": "TIME_RECORD", "estimated_minutes": 480},
+  {"text": "Document environment setup better", "category": "IDEA", "estimated_minutes": null},
+  {"text": "Review PR from Sarah before standup tomorrow", "category": "TODO", "estimated_minutes": null}
 ]"""
 
 

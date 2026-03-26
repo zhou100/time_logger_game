@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { GoogleOAuthProvider } from '@react-oauth/google';
 import { theme } from './theme';
 import { AuthProvider } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
@@ -10,12 +9,10 @@ import { RegisterForm } from './components/auth/RegisterForm';
 import HomePage from './pages/HomePage';
 import NavBar from './components/NavBar';
 import { Box } from '@mui/material';
-import './styles/errorBoundaries.css';
 
-const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 
 function App() {
-  const content = (
+  return (
     <Router
       future={{
         v7_startTransition: true,
@@ -45,12 +42,6 @@ function App() {
       </ThemeProvider>
     </Router>
   );
-
-  // Only wrap with GoogleOAuthProvider if client ID is configured
-  if (GOOGLE_CLIENT_ID) {
-    return <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{content}</GoogleOAuthProvider>;
-  }
-  return content;
 }
 
 export default App;

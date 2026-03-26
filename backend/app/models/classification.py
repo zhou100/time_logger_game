@@ -26,6 +26,8 @@ class EntryClassification(Base):
     extracted_text = Column(Text, nullable=True)
     # 0-based insertion order; guarantees stable "primary category" = classifications[0]
     display_order = Column(Integer, nullable=False, default=0)
+    # AI-estimated duration in minutes (nullable — null means "unknown")
+    estimated_minutes = Column(Integer, nullable=True)
     confidence = Column(Float, nullable=True)
     model_version = Column(String(50), nullable=True)   # track which model produced this
     user_override = Column(Boolean, default=False)      # did user correct the AI?

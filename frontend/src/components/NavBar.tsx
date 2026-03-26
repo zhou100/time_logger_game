@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar, Button } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
-import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../contexts/AuthContext';
+import { palette } from '../theme';
 import Logger from '../utils/logger';
 
 const NavBar: React.FC = () => {
     const navigate = useNavigate();
-    const { user, logout, googleLogin } = useAuth();
+    const { user, logout, loginWithGoogle, useSupabase } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
     const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -30,41 +30,33 @@ const NavBar: React.FC = () => {
         }
     };
 
-    const handleProfile = () => {
-        handleClose();
-        Logger.info('Navigate to profile page');
-    };
-
-    const handleGoogleSuccess = async (response: any) => {
+    const handleGoogleSignIn = async () => {
         try {
-            await googleLogin(response.credential);
-            navigate('/');
+            await loginWithGoogle();
         } catch (error) {
-            Logger.error('Google login error:', error);
+            Logger.error('Google sign-in error:', error);
         }
     };
 
-    const showGoogleButton = !user && process.env.REACT_APP_GOOGLE_CLIENT_ID;
-
     return (
-        <AppBar position="static" color="transparent" elevation={1}>
+        <AppBar position="static" elevation={0} sx={{ bgcolor: palette.bg }}>
             <Toolbar>
                 <Typography
-                    variant="h6"
+                    variant="h3"
                     component={RouterLink}
                     to="/"
                     sx={{ flexGrow: 1, color: 'text.primary', textDecoration: 'none' }}
                 >
-                    Time Logger Game
+                    Time Logger
                 </Typography>
                 {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Typography
-                            variant="body1"
+                            variant="body2"
                             sx={{
                                 mr: 2,
                                 color: 'text.secondary',
-                                display: { xs: 'none', sm: 'block' }
+                                display: { xs: 'none', sm: 'block' },
                             }}
                         >
                             {user.email}
@@ -77,48 +69,39 @@ const NavBar: React.FC = () => {
                             onClick={handleMenu}
                             color="inherit"
                         >
-                            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                            <Avatar sx={{ width: 32, height: 32, bgcolor: palette.accent }}>
                                 <AccountCircle />
                             </Avatar>
                         </IconButton>
                         <Menu
                             id="menu-appbar"
                             anchorEl={anchorEl}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'right',
-                            }}
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                             keepMounted
-                            transformOrigin={{
-                                vertical: 'top',
-                                horizontal: 'right',
-                            }}
+                            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                             open={Boolean(anchorEl)}
                             onClose={handleClose}
                         >
-                            <MenuItem onClick={handleProfile}>Profile</MenuItem>
                             <MenuItem onClick={handleLogout}>Sign Out</MenuItem>
                         </Menu>
                     </Box>
                 ) : (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {showGoogleButton && (
-                            <GoogleLogin
-                                onSuccess={handleGoogleSuccess}
-                                onError={() => Logger.error('Google login failed')}
-                                size="medium"
-                                type="standard"
-                                shape="rectangular"
-                                text="signin"
-                                width="200"
-                            />
+                        {useSupabase && (
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={handleGoogleSignIn}
+                            >
+                                Sign in with Google
+                            </Button>
                         )}
                         <Button
                             component={RouterLink}
                             to="/login"
                             variant="text"
                             size="small"
-                            sx={{ textTransform: 'none' }}
+                            sx={{ color: 'text.secondary' }}
                         >
                             Sign In
                         </Button>
@@ -127,7 +110,6 @@ const NavBar: React.FC = () => {
                             to="/register"
                             variant="contained"
                             size="small"
-                            sx={{ textTransform: 'none' }}
                         >
                             Sign Up
                         </Button>

@@ -32,6 +32,7 @@ from ...models.classification import EntryClassification
 from ...models.entry import Entry
 from ...models.user import User
 from ...models.jobs import Job, JobStatus
+from ...models.audit_result import AuditResult
 from ...services import queue as queue_svc
 from ...services import storage as storage_svc
 from ...settings import settings
@@ -72,6 +73,7 @@ class SubmitResponse(BaseModel):
 class CategoryItem(BaseModel):
     text: Optional[str]
     category: str
+    estimated_minutes: Optional[int] = None
 
 
 class EntryStatusResponse(BaseModel):
@@ -106,13 +108,16 @@ class EntryUpdateRequest(BaseModel):
 
 class AuditRequest(BaseModel):
     date: str   # YYYY-MM-DD (UTC)
+    regenerate: bool = False  # force re-generation even if cached
 
 
 class AuditResponse(BaseModel):
     entries: int
     breakdown: Dict[str, float]
+    approximate: bool = False  # True if some estimated_minutes were null (filled with avg)
     audit_text: Optional[str]
     generated_at: Optional[str]
+    cached: bool = False
     message: Optional[str] = None
 
 
@@ -165,6 +170,18 @@ async def submit_entry(
     db.add(entry)
     await db.flush()
 
+    # Invalidate cached audits for today (new entry may change breakdown)
+    today_utc = datetime.now(timezone.utc).date()
+    stale_result = await db.execute(
+        select(AuditResult).where(
+            AuditResult.user_id == current_user.id,
+            AuditResult.audit_date == today_utc,
+            AuditResult.is_stale == False,
+        )
+    )
+    for ar in stale_result.scalars().all():
+        ar.is_stale = True
+
     job = await queue_svc.enqueue(db, entry_uuid, current_user.id)
     await db.commit()
 
@@ -202,7 +219,7 @@ async def get_entry_status(
         step=job.step if job else None,
         transcript=entry.transcript,
         categories=[
-            CategoryItem(text=c.extracted_text, category=c.category)
+            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
             for c in entry.classifications
         ],
     )
@@ -240,7 +257,7 @@ async def list_entries(
             created_at=e.created_at.isoformat(),
             duration_seconds=e.duration_seconds,
             categories=[
-                CategoryItem(text=c.extracted_text, category=c.category)
+                CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
                 for c in e.classifications
             ],
         )
@@ -334,7 +351,7 @@ async def update_entry(
         created_at=entry.created_at.isoformat(),
         duration_seconds=entry.duration_seconds,
         categories=[
-            CategoryItem(text=c.extracted_text, category=c.category)
+            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
             for c in entry.classifications
         ],
     )
@@ -350,9 +367,8 @@ async def generate_audit(
     Generate an AI-powered time audit for a given UTC date.
 
     - Accepts today and up to the last 7 days; rejects future dates and older dates.
-    - Breakdown denominator is EntryClassification rows, not Entry rows.
-    - Calls GPT-4o-mini with a 15-second timeout.
-    - Results are NOT persisted; re-generate on each click.
+    - Persisted: returns cached result if fresh; set regenerate=true to force re-generation.
+    - Invalidated automatically when new entries arrive for the same date.
     """
     # ── Validate date ────────────────────────────────────────────────────────
     try:
@@ -366,7 +382,170 @@ async def generate_audit(
     if target_date < today_utc - timedelta(days=7):
         raise HTTPException(status_code=400, detail="Date must be within the last 7 days.")
 
+    # ── Check cache ──────────────────────────────────────────────────────────
+    if not body.regenerate:
+        cached = await _get_cached_audit(db, current_user.id, target_date, "daily")
+        if cached is not None:
+            return cached
+
     # ── Fetch entries for the UTC day ────────────────────────────────────────
+    entries, all_classifications = await _fetch_entries_for_date(
+        db, current_user.id, target_date
+    )
+
+    if not entries:
+        return AuditResponse(
+            entries=0, breakdown={}, approximate=False,
+            audit_text=None, generated_at=None, message="Record your day first",
+        )
+
+    breakdown, approximate = _compute_breakdown(all_classifications)
+
+    # ── Generate audit text ──────────────────────────────────────────────────
+    audit_text = await _generate_audit_text(entries, all_classifications, breakdown)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # ── Persist result ───────────────────────────────────────────────────────
+    await _save_audit(
+        db, current_user.id, target_date, "daily",
+        len(entries), breakdown, audit_text,
+    )
+
+    return AuditResponse(
+        entries=len(entries),
+        breakdown=breakdown,
+        approximate=approximate,
+        audit_text=audit_text,
+        generated_at=now_iso,
+    )
+
+
+@router.post("/audit/weekly", response_model=AuditResponse)
+async def generate_weekly_audit(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate an opinionated weekly AI Coach letter.
+
+    Aggregates entries from the past 7 days, compares days, identifies patterns.
+    User-initiated only (button click). Persisted with audit_type="weekly".
+    """
+    today_utc = datetime.now(timezone.utc).date()
+
+    # Check cache
+    cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
+    if cached is not None:
+        return cached
+
+    # Fetch entries for the past 7 days
+    week_start = datetime(
+        (today_utc - timedelta(days=6)).year,
+        (today_utc - timedelta(days=6)).month,
+        (today_utc - timedelta(days=6)).day,
+        tzinfo=timezone.utc,
+    )
+    week_end = datetime(
+        today_utc.year, today_utc.month, today_utc.day, tzinfo=timezone.utc
+    ) + timedelta(days=1)
+
+    result = await db.execute(
+        select(Entry)
+        .join(Job, Job.entry_id == Entry.id)
+        .options(selectinload(Entry.classifications))
+        .where(
+            Entry.user_id == current_user.id,
+            Entry.created_at >= week_start,
+            Entry.created_at < week_end,
+            Job.status == JobStatus.DONE,
+        )
+        .order_by(Entry.created_at.asc())
+    )
+    entries = result.scalars().all()
+
+    if not entries:
+        return AuditResponse(
+            entries=0, breakdown={}, approximate=False,
+            audit_text=None, generated_at=None,
+            message="No entries recorded this week.",
+        )
+
+    all_classifications = [c for e in entries for c in e.classifications]
+    breakdown, approximate = _compute_breakdown(all_classifications)
+
+    # Build per-day summary for the coach prompt
+    day_summaries: Dict[str, List[str]] = {}
+    for e in entries:
+        day_key = e.created_at.strftime("%A %m/%d")
+        for c in e.classifications:
+            text = c.extracted_text or e.transcript or ""
+            mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
+            day_summaries.setdefault(day_key, []).append(f"  - [{c.category}]{mins} {text}")
+
+    day_text = "\n".join(
+        f"{day}:\n" + "\n".join(items)
+        for day, items in day_summaries.items()
+    )
+    breakdown_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in breakdown.items())
+
+    weekly_prompt = f"""You are an opinionated, honest AI time coach writing a weekly review letter.
+
+Based ONLY on the activities listed below, write a personal weekly review (3-4 paragraphs, under 400 words) that:
+- Compares how different days were spent — highlight the best and worst days
+- Identifies patterns (e.g. "You front-loaded creative work Mon-Tue but spent Thu-Fri in meetings")
+- Says the uncomfortable truth if the data shows it (e.g. "You spent 60% of your week in meetings despite saying deep work is your priority")
+- Ends with one specific, actionable change for next week
+
+Tone: direct, slightly provocative, like a coach who respects you enough to be honest.
+Reference ONLY the activities listed. Do not invent activities.
+
+Weekly breakdown: {breakdown_summary}
+
+Daily activities:
+{day_text}"""
+
+    try:
+        response = await asyncio.wait_for(
+            _get_openai().chat.completions.create(
+                model="gpt-5.4-nano",
+                messages=[{"role": "user", "content": weekly_prompt}],
+                temperature=0.7,
+            ),
+            timeout=20.0,
+        )
+        audit_text = response.choices[0].message.content
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Weekly review timed out. Try again.")
+    except Exception as exc:
+        logger.error(f"Weekly audit LLM call failed: {exc}", exc_info=True)
+        return AuditResponse(
+            entries=len(entries), breakdown=breakdown, approximate=approximate,
+            audit_text=None, generated_at=None, message="Weekly review generation failed",
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    await _save_audit(
+        db, current_user.id, today_utc, "weekly",
+        len(entries), breakdown, audit_text,
+    )
+
+    return AuditResponse(
+        entries=len(entries),
+        breakdown=breakdown,
+        approximate=approximate,
+        audit_text=audit_text,
+        generated_at=now_iso,
+    )
+
+
+# ── Audit helpers ─────────────────────────────────────────────────────────────
+
+async def _fetch_entries_for_date(
+    db: AsyncSession, user_id: int, target_date
+) -> tuple:
+    """Fetch processed entries for a UTC day. Returns (entries, all_classifications)."""
     day_start = datetime(target_date.year, target_date.month, target_date.day,
                          tzinfo=timezone.utc)
     day_end = day_start + timedelta(days=1)
@@ -376,7 +555,7 @@ async def generate_audit(
         .join(Job, Job.entry_id == Entry.id)
         .options(selectinload(Entry.classifications))
         .where(
-            Entry.user_id == current_user.id,
+            Entry.user_id == user_id,
             Entry.created_at >= day_start,
             Entry.created_at < day_end,
             Job.status == JobStatus.DONE,
@@ -384,36 +563,46 @@ async def generate_audit(
         .order_by(Entry.created_at.asc())
     )
     entries = result.scalars().all()
-
-    # ── Empty state ──────────────────────────────────────────────────────────
-    if not entries:
-        return AuditResponse(
-            entries=0,
-            breakdown={},
-            audit_text=None,
-            generated_at=None,
-            message="Record your day first",
-        )
-
-    # ── Breakdown (denominator = classification rows, not entry rows) ────────
     all_classifications = [c for e in entries for c in e.classifications]
-    total_classifications = len(all_classifications)
+    return entries, all_classifications
 
-    category_counts: Dict[str, int] = {}
-    for c in all_classifications:
-        category_counts[c.category] = category_counts.get(c.category, 0) + 1
 
-    breakdown = {
-        cat: round(count / total_classifications * 100, 1)
-        for cat, count in category_counts.items()
-    }
+def _compute_breakdown(
+    all_classifications: list,
+) -> tuple[Dict[str, float], bool]:
+    """Time-weighted breakdown. Returns (breakdown_dict, approximate_flag)."""
+    if not all_classifications:
+        return {}, False
 
-    # ── Build entry summary for GPT prompt ──────────────────────────────────
+    has_any = any(c.estimated_minutes is not None for c in all_classifications)
+    has_all = all(c.estimated_minutes is not None for c in all_classifications)
+
+    weights: Dict[str, float] = {}
+    if has_any:
+        non_null = [c.estimated_minutes for c in all_classifications if c.estimated_minutes is not None]
+        avg = sum(non_null) / len(non_null) if non_null else 1
+        for c in all_classifications:
+            w = float(c.estimated_minutes) if c.estimated_minutes is not None else avg
+            weights[c.category] = weights.get(c.category, 0) + w
+    else:
+        for c in all_classifications:
+            weights[c.category] = weights.get(c.category, 0) + 1
+
+    total = sum(weights.values()) or 1
+    breakdown = {cat: round(w / total * 100, 1) for cat, w in weights.items()}
+    return breakdown, not has_all
+
+
+async def _generate_audit_text(
+    entries: list, all_classifications: list, breakdown: Dict[str, float],
+) -> Optional[str]:
+    """Call GPT to generate audit text. Returns None on failure."""
     entry_lines = []
     for e in entries:
         for c in e.classifications:
             text = c.extracted_text or e.transcript or ""
-            entry_lines.append(f"- [{c.category}] {text}")
+            mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
+            entry_lines.append(f"- [{c.category}]{mins} {text}")
 
     breakdown_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in breakdown.items())
     entry_summary = "\n".join(entry_lines)
@@ -431,7 +620,6 @@ Category breakdown: {breakdown_summary}
 Activities recorded today:
 {entry_summary}"""
 
-    # ── Call GPT-4o-mini with 15-second timeout ──────────────────────────────
     try:
         response = await asyncio.wait_for(
             _get_openai().chat.completions.create(
@@ -441,28 +629,66 @@ Activities recorded today:
             ),
             timeout=15.0,
         )
-        audit_text = response.choices[0].message.content
+        return response.choices[0].message.content
     except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=504,
-            detail="Audit generation timed out. Try again.",
-        )
+        raise HTTPException(status_code=504, detail="Audit generation timed out. Try again.")
     except Exception as exc:
         logger.error(f"Audit LLM call failed: {exc}", exc_info=True)
-        return AuditResponse(
-            entries=len(entries),
-            breakdown=breakdown,
-            audit_text=None,
-            generated_at=None,
-            message="Audit generation failed",
-        )
+        return None
 
-    return AuditResponse(
-        entries=len(entries),
-        breakdown=breakdown,
-        audit_text=audit_text,
-        generated_at=datetime.now(timezone.utc).isoformat(),
+
+async def _get_cached_audit(
+    db: AsyncSession, user_id: int, audit_date, audit_type: str,
+) -> Optional[AuditResponse]:
+    """Return cached AuditResponse if fresh, else None."""
+    result = await db.execute(
+        select(AuditResult).where(
+            AuditResult.user_id == user_id,
+            AuditResult.audit_date == audit_date,
+            AuditResult.audit_type == audit_type,
+            AuditResult.is_stale == False,
+        ).order_by(AuditResult.generated_at.desc()).limit(1)
     )
+    cached = result.scalar_one_or_none()
+    if not cached or not cached.audit_text:
+        return None
+
+    breakdown = json.loads(cached.breakdown_json) if cached.breakdown_json else {}
+    return AuditResponse(
+        entries=cached.entries_count,
+        breakdown=breakdown,
+        approximate=False,
+        audit_text=cached.audit_text,
+        generated_at=cached.generated_at.isoformat() if cached.generated_at else None,
+        cached=True,
+    )
+
+
+async def _save_audit(
+    db: AsyncSession, user_id: int, audit_date, audit_type: str,
+    entries_count: int, breakdown: Dict[str, float], audit_text: Optional[str],
+) -> None:
+    """Persist an audit result, replacing any previous for the same user+date+type."""
+    # Mark old results stale
+    old = await db.execute(
+        select(AuditResult).where(
+            AuditResult.user_id == user_id,
+            AuditResult.audit_date == audit_date,
+            AuditResult.audit_type == audit_type,
+        )
+    )
+    for r in old.scalars().all():
+        r.is_stale = True
+
+    db.add(AuditResult(
+        user_id=user_id,
+        audit_date=audit_date,
+        audit_type=audit_type,
+        entries_count=entries_count,
+        breakdown_json=json.dumps(breakdown),
+        audit_text=audit_text,
+    ))
+    await db.flush()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

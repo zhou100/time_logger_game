@@ -9,7 +9,6 @@ import {
     EntryItem,
     EntryListResponse,
     CategoryItem,
-    UserStats,
     AuditResponse,
 } from '../types/api';
 import AuthService from './auth';
@@ -203,20 +202,16 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async generateAudit(date: string): Promise<AuditResponse> {
+    async generateAudit(date: string, regenerate = false): Promise<AuditResponse> {
         try {
-            const res = await api.post<AuditResponse>('/v1/entries/audit', { date });
+            const res = await api.post<AuditResponse>('/v1/entries/audit', { date, regenerate });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },
-};
 
-// ── Stats API ─────────────────────────────────────────────────────────────────
-
-export const statsApi = {
-    async get(): Promise<UserStats> {
+    async generateWeeklyAudit(): Promise<AuditResponse> {
         try {
-            const res = await api.get<UserStats>('/v1/me/stats');
+            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly');
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

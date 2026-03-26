@@ -20,8 +20,10 @@ email-validator==2.1.0.post1
 google-auth==2.28.1
 requests==2.31.0
 PyJWT==2.8.0
-# Object storage (MinIO / S3)
+# Object storage (R2 / MinIO / S3)
 aioboto3==12.3.0
+# Supabase (auth verification)
+supabase==2.3.0
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1

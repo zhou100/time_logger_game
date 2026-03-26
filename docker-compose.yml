@@ -3,6 +3,9 @@ version: '3.8'
 # All secrets are driven by env vars — set them in a .env file or shell environment.
 # Required: OPENAI_API_KEY, SECRET_KEY
 # Optional overrides: BACKEND_PORT, FRONTEND_PORT, DB_PORT, MINIO_PORT, MINIO_CONSOLE_PORT
+#
+# Production storage: Cloudflare R2 (set S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY in .env)
+# Local dev storage: MinIO (included below, S3-compatible)
 
 services:
 
@@ -64,6 +67,9 @@ services:
       S3_PUBLIC_ENDPOINT_URL: "http://localhost:9000"
       ALLOWED_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}"]'
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+      SUPABASE_JWT_SECRET: "${SUPABASE_JWT_SECRET:-}"
       ENVIRONMENT: development
       LOG_LEVEL: INFO
       DB_ECHO: "false"
@@ -112,7 +118,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+        REACT_APP_SUPABASE_URL: "${SUPABASE_URL:-}"
+        REACT_APP_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     volumes:
@@ -121,7 +128,8 @@ services:
     environment:
       NODE_ENV: development
       REACT_APP_API_URL: "http://localhost:${BACKEND_PORT:-10000}"
-      REACT_APP_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      REACT_APP_SUPABASE_URL: "${SUPABASE_URL:-}"
+      REACT_APP_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
       PORT: "3000"
     depends_on:
       backend:

@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { TextField, Button, Box, Typography, Link, Alert, Container, Divider } from '@mui/material';
-import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-
+import { palette } from '../../theme';
 
 export const RegisterForm: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -12,32 +11,35 @@ export const RegisterForm: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const { register, googleLogin } = useAuth();
+    const { register, loginWithGoogle, useSupabase } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         setSuccess(null);
-        
         if (password !== confirmPassword) {
             setError("Passwords don't match");
             return;
         }
-        
         try {
             setLoading(true);
-            console.log('Attempting to register with:', { email });
             await register({ email, password });
-            // Show success message before redirecting
             setSuccess('Registration successful! Redirecting to login...');
-            // Wait a moment to show the success message
-            setTimeout(() => {
-                navigate('/login');
-            }, 1500);
+            setTimeout(() => navigate('/login'), 1500);
         } catch (err) {
-            console.log('Registration error:', err);
             setError(err instanceof Error ? err.message : 'Registration failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleSignUp = async () => {
+        try {
+            setLoading(true);
+            await loginWithGoogle();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Google sign-up failed');
         } finally {
             setLoading(false);
         }
@@ -45,116 +47,31 @@ export const RegisterForm: React.FC = () => {
 
     return (
         <Container component="main" maxWidth="xs">
-            <Box
-                sx={{
-                    marginTop: 8,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                }}
-            >
-                <Typography component="h1" variant="h5">
-                    Register
-                </Typography>
-                <Box
-                    component="form"
-                    onSubmit={handleSubmit}
-                    sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 2,
-                        maxWidth: 400,
-                        mx: 'auto',
-                        p: 3,
-                    }}
-                >
-                    {success && (
-                        <Alert severity="success" sx={{ mb: 2 }}>
-                            {success}
-                        </Alert>
-                    )}
+            <Box sx={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Typography variant="h2" component="h1" sx={{ mb: 1 }}>Register</Typography>
+                <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 400, mx: 'auto', p: 3 }}>
+                    {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+                    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
-                        </Alert>
-                    )}
-
-                    <TextField
-                        label="Email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        fullWidth
-                        error={!!error && error.includes('email')}
-                        disabled={loading}
-                    />
-
-                    <TextField
-                        label="Password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        fullWidth
-                        error={!!error && error.includes('Password')}
-                        helperText="Password must be at least 8 characters long"
-                        disabled={loading}
-                    />
-
-                    <TextField
-                        label="Confirm Password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        fullWidth
-                        error={!!error && error.includes('match')}
-                        disabled={loading}
-                    />
-
-                    <Button
-                        type="submit"
-                        variant="contained"
-                        color="primary"
-                        fullWidth
-                        size="large"
-                        disabled={loading}
-                    >
+                    <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth disabled={loading} />
+                    <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required fullWidth helperText="Password must be at least 8 characters long" disabled={loading} />
+                    <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required fullWidth disabled={loading} />
+                    <Button type="submit" variant="contained" color="primary" fullWidth size="large" disabled={loading}>
                         {loading ? 'Registering...' : 'Register'}
                     </Button>
 
-                    {process.env.REACT_APP_GOOGLE_CLIENT_ID && (
+                    {useSupabase && (
                         <>
-                            <Divider sx={{ my: 1 }}>or</Divider>
-                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                                <GoogleLogin
-                                    onSuccess={async (response: any) => {
-                                        try {
-                                            setLoading(true);
-                                            await googleLogin(response.credential);
-                                            navigate('/');
-                                        } catch (err) {
-                                            setError(err instanceof Error ? err.message : 'Google sign-up failed');
-                                        } finally {
-                                            setLoading(false);
-                                        }
-                                    }}
-                                    onError={() => setError('Google sign-up failed')}
-                                    size="large"
-                                    width="300"
-                                    text="signup_with"
-                                />
-                            </Box>
+                            <Divider sx={{ my: 1, color: 'text.secondary' }}>or</Divider>
+                            <Button variant="outlined" fullWidth size="large" onClick={handleGoogleSignUp} disabled={loading}>
+                                Sign up with Google
+                            </Button>
                         </>
                     )}
 
-                    <Typography align="center" mt={2}>
+                    <Typography align="center" variant="body2" mt={2}>
                         Already have an account?{' '}
-                        <Link component={RouterLink} to="/login">
-                            Login here
-                        </Link>
+                        <Link component={RouterLink} to="/login" sx={{ color: palette.accent }}>Login here</Link>
                     </Typography>
                 </Box>
             </Box>

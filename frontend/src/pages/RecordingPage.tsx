@@ -7,7 +7,6 @@ import {
     CircularProgress,
     Container,
     LinearProgress,
-    Paper,
     Typography,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -16,44 +15,48 @@ import EntryCard from '../components/EntryCard';
 import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
 import { AuditResponse, EntryItem } from '../types/api';
+import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
-// Category colours consistent with the wireframe
-const CATEGORY_COLORS: Record<string, string> = {
-    TODO: '#1976d2',
-    IDEA: '#9c27b0',
-    THOUGHT: '#555555',
-    TIME_RECORD: '#f57c00',
-};
+/**
+ * Time-weighted breakdown:
+ * 1. All non-null estimated_minutes → exact percentages
+ * 2. Some null → fill nulls with average, show "~" prefix
+ * 3. All null → equal weight (1/N each), show "~" prefix
+ */
+function computeBreakdown(entries: EntryItem[]): { breakdown: Record<string, number>; approximate: boolean } {
+    const cats = entries.flatMap((e) => e.categories);
+    if (cats.length === 0) return { breakdown: {}, approximate: false };
 
-const CATEGORY_LABELS: Record<string, string> = {
-    TODO: 'TODO / Deep work',
-    IDEA: 'IDEA / Creative',
-    THOUGHT: 'THOUGHT / Reflection',
-    TIME_RECORD: 'TIME / Logged',
-};
+    const hasAny = cats.some((c) => c.estimated_minutes != null);
+    const hasAll = cats.every((c) => c.estimated_minutes != null);
 
-/** Equal-weight breakdown: count classifications per category as % of total. */
-function computeBreakdown(entries: EntryItem[]): Record<string, number> {
-    const counts: Record<string, number> = {};
-    let total = 0;
-    for (const e of entries) {
-        for (const c of e.categories) {
-            counts[c.category] = (counts[c.category] ?? 0) + 1;
-            total++;
+    const weights: Record<string, number> = {};
+    if (hasAny) {
+        const nonNull = cats.filter((c) => c.estimated_minutes != null).map((c) => c.estimated_minutes!);
+        const avg = nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
+        for (const c of cats) {
+            const w = c.estimated_minutes ?? avg;
+            weights[c.category] = (weights[c.category] ?? 0) + w;
+        }
+    } else {
+        for (const c of cats) {
+            weights[c.category] = (weights[c.category] ?? 0) + 1;
         }
     }
-    if (total === 0) return {};
-    return Object.fromEntries(
-        Object.entries(counts).map(([cat, n]) => [cat, Math.round((n / total) * 100)])
+
+    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+    const breakdown = Object.fromEntries(
+        Object.entries(weights).map(([cat, w]) => [cat, Math.round((w / total) * 100)])
     );
+    return { breakdown, approximate: !hasAll };
 }
 
 const RecordingPage: React.FC = () => {
-    useWebSocket();
+    useRealtimeNotifications();
 
     const queryClient = useQueryClient();
     const { data: entriesData } = useEntries(0, 20);
@@ -66,6 +69,11 @@ const RecordingPage: React.FC = () => {
     const [auditLoading, setAuditLoading] = useState(false);
     const [auditResult, setAuditResult] = useState<AuditResponse | null>(null);
     const [auditError, setAuditError] = useState<string | undefined>();
+
+    // Weekly coach state
+    const [weeklyLoading, setWeeklyLoading] = useState(false);
+    const [weeklyResult, setWeeklyResult] = useState<AuditResponse | null>(null);
+    const [weeklyError, setWeeklyError] = useState<string | undefined>();
 
     const { data: entryStatus } = useEntryStatus(pendingEntryId);
 
@@ -103,14 +111,13 @@ const RecordingPage: React.FC = () => {
         [upload]
     );
 
-    const handleGenerateAudit = useCallback(async () => {
+    const handleGenerateAudit = useCallback(async (regenerate = false) => {
         setAuditLoading(true);
         setAuditError(undefined);
-        setAuditResult(null);
+        if (regenerate) setAuditResult(null);
         try {
-            // Always send today's date in UTC so the backend filter is correct
             const todayUtc = new Date().toISOString().split('T')[0];
-            const result = await entriesApi.generateAudit(todayUtc);
+            const result = await entriesApi.generateAudit(todayUtc, regenerate);
             setAuditResult(result);
         } catch (err) {
             setAuditError(err instanceof Error ? err.message : 'Audit generation failed');
@@ -119,38 +126,45 @@ const RecordingPage: React.FC = () => {
         }
     }, []);
 
+    // Auto-load cached audit on mount
+    useEffect(() => {
+        if (entries.length > 0 && !auditResult && !auditLoading) {
+            handleGenerateAudit(false);
+        }
+    }, [entries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleWeeklyReview = useCallback(async () => {
+        setWeeklyLoading(true);
+        setWeeklyError(undefined);
+        try {
+            const result = await entriesApi.generateWeeklyAudit();
+            setWeeklyResult(result);
+        } catch (err) {
+            setWeeklyError(err instanceof Error ? err.message : 'Weekly review failed');
+        } finally {
+            setWeeklyLoading(false);
+        }
+    }, []);
+
     const entries = entriesData?.items ?? [];
-    const breakdown = useMemo(() => computeBreakdown(entries), [entries]);
+    const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
     const hasBreakdown = Object.keys(breakdown).length > 0;
 
     return (
         <Container maxWidth="md">
             <Box sx={{ mt: 4, mb: 8 }}>
-                <Typography
-                    variant="h3"
-                    component="h1"
-                    gutterBottom
-                    sx={{
-                        fontWeight: 'bold',
-                        background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                        backgroundClip: 'text',
-                        textFillColor: 'transparent',
-                        mb: 4,
-                        textAlign: 'center',
-                    }}
-                >
+                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 4 }}>
                     Time Logger
                 </Typography>
 
                 {/* ── Recorder ──────────────────────────────────────────────── */}
-                <Paper elevation={3} sx={{ p: 4, borderRadius: 2, mb: 3 }}>
+                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                     <RecordButton onRecordingComplete={handleRecordingComplete} />
 
                     {isProcessing && (
                         <Box sx={{ mt: 2, textAlign: 'center' }}>
                             <Chip
                                 label={stepLabel(entryStatus?.step ?? null, upload.isPending)}
-                                color="primary"
                                 size="small"
                                 variant="outlined"
                                 icon={<CircularProgress size={12} />}
@@ -171,7 +185,11 @@ const RecordingPage: React.FC = () => {
                                     key={i}
                                     label={c.category}
                                     size="small"
-                                    sx={{ borderColor: CATEGORY_COLORS[c.category] ?? '#888', color: CATEGORY_COLORS[c.category] ?? '#888' }}
+                                    sx={{
+                                        borderColor: CATEGORY_COLORS[c.category] ?? palette.textMuted,
+                                        color: CATEGORY_COLORS[c.category] ?? palette.textMuted,
+                                        bgcolor: `${CATEGORY_COLORS[c.category] ?? palette.textMuted}0F`,
+                                    }}
                                     variant="outlined"
                                 />
                             ))}
@@ -183,13 +201,13 @@ const RecordingPage: React.FC = () => {
                             "{entryStatus.transcript}"
                         </Typography>
                     )}
-                </Paper>
+                </Box>
 
                 {/* ── Two-column: entries + breakdown/audit ─────────────────── */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
 
                     {/* Left: today's entries */}
-                    <Paper elevation={1} sx={{ p: 2 }}>
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                         <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
                             Today's Entries {entries.length > 0 && `— ${entries.length}`}
                         </Typography>
@@ -203,13 +221,13 @@ const RecordingPage: React.FC = () => {
                                 <EntryCard key={entry.id} entry={entry} />
                             ))
                         )}
-                    </Paper>
+                    </Box>
 
                     {/* Right: breakdown bars + AI audit */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
                         {/* Category breakdown */}
-                        <Paper elevation={1} sx={{ p: 2 }}>
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
                                 Time Breakdown — today
                             </Typography>
@@ -227,28 +245,28 @@ const RecordingPage: React.FC = () => {
                                                 <Typography variant="caption">
                                                     {CATEGORY_LABELS[cat] ?? cat}
                                                 </Typography>
-                                                <Typography variant="caption" fontWeight="bold">{pct}%</Typography>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                                    {approximate ? '~' : ''}{pct}%
+                                                </Typography>
                                             </Box>
                                             <LinearProgress
                                                 variant="determinate"
                                                 value={pct}
                                                 sx={{
-                                                    height: 8,
-                                                    borderRadius: 4,
-                                                    backgroundColor: 'rgba(0,0,0,0.08)',
                                                     '& .MuiLinearProgress-bar': {
                                                         borderRadius: 4,
-                                                        backgroundColor: CATEGORY_COLORS[cat] ?? '#888',
+                                                        backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                                        transition: 'width 600ms ease-out',
                                                     },
                                                 }}
                                             />
                                         </Box>
                                     ))
                             )}
-                        </Paper>
+                        </Box>
 
                         {/* AI Audit */}
-                        <Paper elevation={1} sx={{ p: 2 }}>
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                                 <Typography variant="overline" color="text.secondary">
                                     AI Audit
@@ -257,10 +275,10 @@ const RecordingPage: React.FC = () => {
                                     variant="outlined"
                                     size="small"
                                     startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
-                                    onClick={handleGenerateAudit}
+                                    onClick={() => handleGenerateAudit(!!auditResult)}
                                     disabled={auditLoading || entries.length === 0}
                                 >
-                                    Generate Audit
+                                    {auditResult ? 'Regenerate' : 'Generate Audit'}
                                 </Button>
                             </Box>
 
@@ -285,27 +303,86 @@ const RecordingPage: React.FC = () => {
                             {auditResult?.audit_text && (
                                 <Box
                                     sx={{
-                                        borderLeft: '3px solid #333',
-                                        pl: 1.5,
-                                        py: 0.5,
-                                        backgroundColor: '#fafaf5',
-                                        borderRadius: '0 4px 4px 0',
+                                        borderLeft: `2px solid ${palette.accent}`,
+                                        pl: 2,
+                                        py: 1,
+                                        bgcolor: 'background.paper',
+                                        borderRadius: '0 8px 8px 0',
                                     }}
                                 >
-                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
                                         Your AI Coach says:
                                     </Typography>
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
                                         {auditResult.audit_text}
                                     </Typography>
                                     {auditResult.generated_at && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
                                             Based on {auditResult.entries} entries · {new Date(auditResult.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </Typography>
                                     )}
                                 </Box>
                             )}
-                        </Paper>
+                        </Box>
+
+                        {/* Weekly Coach Letter */}
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                                <Typography variant="overline" color="text.secondary">
+                                    Weekly Coach
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={weeklyLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                                    onClick={handleWeeklyReview}
+                                    disabled={weeklyLoading}
+                                >
+                                    {weeklyResult ? 'Regenerate' : 'Generate Weekly Review'}
+                                </Button>
+                            </Box>
+
+                            {weeklyError && (
+                                <Alert severity="error" sx={{ mb: 1 }}>{weeklyError}</Alert>
+                            )}
+
+                            {weeklyResult === null && !weeklyLoading && !weeklyError && (
+                                <Typography variant="body2" color="text.secondary">
+                                    Get an honest weekly review comparing your days and calling out patterns.
+                                </Typography>
+                            )}
+
+                            {weeklyResult?.message && !weeklyResult.audit_text && (
+                                <Typography variant="body2" color="text.secondary">
+                                    {weeklyResult.message}
+                                </Typography>
+                            )}
+
+                            {weeklyResult?.audit_text && (
+                                <Box
+                                    sx={{
+                                        borderLeft: `2px solid ${palette.info}`,
+                                        pl: 2,
+                                        py: 1,
+                                        bgcolor: palette.surface2,
+                                        borderRadius: '0 8px 8px 0',
+                                    }}
+                                >
+                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                        Your Weekly Coach says:
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                        {weeklyResult.audit_text}
+                                    </Typography>
+                                    {weeklyResult.generated_at && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                            Based on {weeklyResult.entries} entries this week
+                                            {weeklyResult.cached && ' (cached)'}
+                                        </Typography>
+                                    )}
+                                </Box>
+                            )}
+                        </Box>
 
                     </Box>
                 </Box>

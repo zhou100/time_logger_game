@@ -6,27 +6,13 @@ import {
     Container,
     LinearProgress,
     Link,
-    Paper,
     Typography,
 } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import EntryCard from '../components/EntryCard';
 import { EntryItem } from '../types/api';
-
-const CATEGORY_COLORS: Record<string, string> = {
-    TODO: '#1976d2',
-    IDEA: '#9c27b0',
-    THOUGHT: '#555555',
-    TIME_RECORD: '#f57c00',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-    TODO: 'TODO / Deep work',
-    IDEA: 'IDEA / Creative',
-    THOUGHT: 'THOUGHT / Reflection',
-    TIME_RECORD: 'TIME / Logged',
-};
+import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
 const DEMO_ENTRIES: EntryItem[] = [
     {
@@ -97,27 +83,16 @@ const LandingPage: React.FC = () => {
 
     return (
         <Container maxWidth="md">
-            <Box sx={{ mt: 6, mb: 8 }}>
+            <Box sx={{ mt: 8, mb: 8 }}>
                 {/* Hero */}
-                <Box sx={{ textAlign: 'center', mb: 6 }}>
-                    <Typography
-                        variant="h2"
-                        component="h1"
-                        sx={{
-                            fontWeight: 'bold',
-                            background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                            backgroundClip: 'text',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            mb: 2,
-                        }}
-                    >
+                <Box sx={{ mb: 6 }}>
+                    <Typography variant="h1" component="h1" sx={{ mb: 2 }}>
                         Time Logger
                     </Typography>
-                    <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
+                    <Typography variant="h3" component="p" color="text.secondary" sx={{ mb: 1 }}>
                         Track your time by voice. AI categorizes your day.
                     </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 500, mx: 'auto' }}>
+                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 540 }}>
                         Record a quick voice note, and our AI breaks it down into tasks, ideas,
                         time logs, and reflections — then coaches you on how your day is going.
                     </Typography>
@@ -127,31 +102,31 @@ const LandingPage: React.FC = () => {
                         variant="contained"
                         size="large"
                         startIcon={<MicIcon />}
-                        sx={{ borderRadius: 3, px: 4, py: 1.5, fontSize: '1rem' }}
+                        sx={{ px: 4, py: 1.5 }}
                     >
                         Get Started Free
                     </Button>
                 </Box>
 
                 {/* Demo: two-column layout mirroring the real app */}
-                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1, textAlign: 'center' }}>
+                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
                     Here's what a typical day looks like
                 </Typography>
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
                     {/* Left: demo entries */}
-                    <Paper elevation={1} sx={{ p: 2 }}>
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                         <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
                             Today's Entries — {DEMO_ENTRIES.length}
                         </Typography>
                         {DEMO_ENTRIES.map((entry) => (
                             <EntryCard key={entry.id} entry={entry} readOnly />
                         ))}
-                    </Paper>
+                    </Box>
 
                     {/* Right: breakdown + audit */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <Paper elevation={1} sx={{ p: 2 }}>
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
                                 Time Breakdown — today
                             </Typography>
@@ -163,26 +138,26 @@ const LandingPage: React.FC = () => {
                                             <Typography variant="caption">
                                                 {CATEGORY_LABELS[cat] ?? cat}
                                             </Typography>
-                                            <Typography variant="caption" fontWeight="bold">{pct}%</Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                                {pct}%
+                                            </Typography>
                                         </Box>
                                         <LinearProgress
                                             variant="determinate"
                                             value={pct}
                                             sx={{
-                                                height: 8,
-                                                borderRadius: 4,
-                                                backgroundColor: 'rgba(0,0,0,0.08)',
                                                 '& .MuiLinearProgress-bar': {
                                                     borderRadius: 4,
-                                                    backgroundColor: CATEGORY_COLORS[cat] ?? '#888',
+                                                    backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                                    transition: 'width 600ms ease-out',
                                                 },
                                             }}
                                         />
                                     </Box>
                                 ))}
-                        </Paper>
+                        </Box>
 
-                        <Paper elevation={1} sx={{ p: 2 }}>
+                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                                 <Typography variant="overline" color="text.secondary">
                                     AI Audit
@@ -198,41 +173,41 @@ const LandingPage: React.FC = () => {
                             </Box>
                             <Box
                                 sx={{
-                                    borderLeft: '3px solid #333',
-                                    pl: 1.5,
-                                    py: 0.5,
-                                    backgroundColor: '#fafaf5',
-                                    borderRadius: '0 4px 4px 0',
+                                    borderLeft: `2px solid ${palette.accent}`,
+                                    pl: 2,
+                                    py: 1,
+                                    bgcolor: 'background.paper',
+                                    borderRadius: '0 8px 8px 0',
                                 }}
                             >
-                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
                                     Your AI Coach says:
                                 </Typography>
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
                                     {DEMO_AUDIT}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                                     Based on 5 entries · sample
                                 </Typography>
                             </Box>
-                        </Paper>
+                        </Box>
                     </Box>
                 </Box>
 
                 {/* Footer CTA */}
-                <Box sx={{ textAlign: 'center', mt: 6 }}>
+                <Box sx={{ mt: 6 }}>
                     <Button
                         component={RouterLink}
                         to="/register"
                         variant="contained"
                         size="large"
-                        sx={{ borderRadius: 3, px: 4, py: 1.5, fontSize: '1rem', mr: 2 }}
+                        sx={{ px: 4, py: 1.5, mr: 2 }}
                     >
                         Sign Up Free
                     </Button>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                         Already have an account?{' '}
-                        <Link component={RouterLink} to="/login">Log in</Link>
+                        <Link component={RouterLink} to="/login" sx={{ color: palette.accent }}>Log in</Link>
                     </Typography>
                 </Box>
             </Box>

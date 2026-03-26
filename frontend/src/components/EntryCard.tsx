@@ -18,15 +18,9 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import { EntryItem, CategoryItem } from '../types/api';
+import { EntryItem } from '../types/api';
 import { useDeleteEntry, useUpdateEntry } from '../hooks/useEntries';
-
-const CATEGORY_COLORS: Record<string, string> = {
-    TODO: '#1976d2',
-    IDEA: '#9c27b0',
-    THOUGHT: '#555555',
-    TIME_RECORD: '#f57c00',
-};
+import { CATEGORY_COLORS, palette } from '../theme';
 
 const CATEGORIES = ['TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD'];
 
@@ -69,9 +63,11 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
         setConfirmDelete(false);
     };
 
+    const borderStyle = `1px solid ${palette.rule}`;
+
     if (isEditing) {
         return (
-            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: '1px dashed #eee', '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
+            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
                     <Select
                         size="small"
@@ -104,7 +100,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
 
     return (
         <>
-            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: '1px dashed #eee', '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
+            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                     {cat && (
                         <Chip
@@ -114,13 +110,14 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                                 fontSize: '0.65rem',
                                 height: 18,
                                 flexShrink: 0,
-                                borderColor: CATEGORY_COLORS[cat] ?? '#aaa',
-                                color: CATEGORY_COLORS[cat] ?? '#aaa',
+                                borderColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                color: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                bgcolor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}0F`,
                             }}
                             variant="outlined"
                         />
                     )}
-                    <Typography variant="body2" sx={{ fontSize: '0.8rem', lineHeight: 1.4, flex: 1 }}>
+                    <Typography variant="body2" sx={{ lineHeight: 1.5, flex: 1 }}>
                         {text}
                     </Typography>
                     {!readOnly && (
@@ -134,7 +131,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                         </Box>
                     )}
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
                     {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Typography>
             </Box>

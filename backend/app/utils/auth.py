@@ -60,7 +60,11 @@ async def get_current_user(
 ) -> User:
     """
     Validate a JWT and return the current user.
-    Supports both v1 tokens (sub = user_id int) and legacy tokens (sub = email).
+
+    Supports three token types (tried in order):
+    1. Supabase JWT (if SUPABASE_JWT_SECRET is configured) — sub is Supabase UUID
+    2. v1 app JWT — sub is integer user_id
+    3. Legacy app JWT — sub is email
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -71,10 +75,41 @@ async def get_current_user(
     if not token:
         raise credentials_exception
 
-    try:
-        if token.startswith("Bearer "):
-            token = token[7:]
+    if token.startswith("Bearer "):
+        token = token[7:]
 
+    # ── Try Supabase JWT first ────────────────────────────────────────────
+    if settings.SUPABASE_JWT_SECRET:
+        try:
+            payload = jwt.decode(
+                token, settings.SUPABASE_JWT_SECRET, algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+            supabase_id = payload.get("sub")
+            email = payload.get("email")
+            if supabase_id:
+                user = await User.get_by_supabase_id(db, supabase_id)
+                if not user and email:
+                    # Auto-create user on first Supabase login
+                    user = await get_user(db, email)
+                    if user:
+                        user.supabase_id = supabase_id
+                        user.auth_provider = "supabase"
+                    else:
+                        user = User(
+                            email=email,
+                            supabase_id=supabase_id,
+                            auth_provider="supabase",
+                        )
+                        db.add(user)
+                    await db.flush()
+                if user:
+                    return user
+        except JWTError:
+            pass  # Fall through to app JWT
+
+    # ── Try app JWT ──────────────────────────────────────────────────────
+    try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         sub: str = payload.get("sub")
         if not sub:

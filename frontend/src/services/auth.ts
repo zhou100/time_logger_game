@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { LoginCredentials, RegisterCredentials, AuthResponse } from '../types/auth';
 import { API_BASE_URL } from './api';
+import { getSupabase, isSupabaseConfigured } from './supabase';
 import Logger from '../utils/logger';
 
 const TOKEN_KEY = 'auth_token';
@@ -118,6 +119,15 @@ class AuthService {
     }
 
     async getValidToken(): Promise<string> {
+        // Supabase mode: get token from Supabase session
+        if (isSupabaseConfigured) {
+            const sb = getSupabase();
+            if (sb) {
+                const { data: { session } } = await sb.auth.getSession();
+                if (session?.access_token) return session.access_token;
+            }
+            throw new Error('Not authenticated');
+        }
         if (!this.accessToken) throw new Error('Not authenticated');
         if (isTokenExpired(this.accessToken)) return this.getNewToken();
         return this.accessToken;
@@ -135,6 +145,10 @@ class AuthService {
     logout() { this.clearTokens(); }
 
     isAuthenticated(): boolean {
+        if (isSupabaseConfigured) {
+            // In Supabase mode, auth state is managed by AuthContext
+            return !!this.accessToken && !isTokenExpired(this.accessToken);
+        }
         return !!this.accessToken && !isTokenExpired(this.accessToken);
     }
 

@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.models.base import Base
-from app.routes.auth import get_db
+from app.db import get_db
 from typing import AsyncGenerator
 
 # Use in-memory SQLite for testing
