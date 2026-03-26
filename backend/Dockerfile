@@ -39,5 +39,5 @@ USER appuser
 # Expose port
 EXPOSE 10000
 
-# Start development server with hot reload and run migrations
+# Run migrations and start server (branches on ENVIRONMENT in start.sh)
 CMD ["/app/scripts/start.sh"]

@@ -1,22 +1,105 @@
+# Render Blueprint — Time Logger Game
+# https://render.com/docs/blueprint-spec
+# Database: Supabase PostgreSQL (not Render-managed)
+
 services:
+  # ── Backend (FastAPI) ────────────────────────────────────────────────────────
   - type: web
-    name: voice-note-taker
+    name: time-logger-backend
     env: docker
-    region: oregon  # Choose the region closest to your users
+    region: oregon
     plan: free
-    healthCheckPath: /
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
     envVars:
-      - key: FLASK_ENV
-        value: production
-      - key: API_USERNAME
-        sync: false  # Indicates this should be set manually in Render dashboard
-      - key: API_PASSWORD
-        sync: false
+      - key: DATABASE_URL
+        sync: false  # Supabase PostgreSQL: postgresql+asyncpg://...@db.xxx.supabase.co:5432/postgres
+      - key: SECRET_KEY
+        generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "240"
+      - key: ENVIRONMENT
+        value: production
       - key: LOG_LEVEL
         value: INFO
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET
+        value: time-logger-audio
+      - key: S3_PUBLIC_ENDPOINT_URL
+        sync: false  # For R2: same as S3_ENDPOINT_URL. Used in presigned URLs sent to browser.
+      - key: S3_REGION
+        value: auto
+      - key: ALLOWED_ORIGINS
+        sync: false  # Set to frontend URL, e.g. ["https://time-logger-frontend.onrender.com"]
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
     disk:
       name: temp
       mountPath: /app/temp
       sizeGB: 1
+
+  # ── Worker (audio pipeline) ─────────────────────────────────────────────────
+  - type: worker
+    name: time-logger-worker
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python scripts/worker.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Same Supabase PostgreSQL connection string as backend
+      - key: SECRET_KEY
+        fromService:
+          name: time-logger-backend
+          type: web
+          envVarKey: SECRET_KEY
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET
+        value: time-logger-audio
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+
+  # ── Frontend (React + Nginx) ────────────────────────────────────────────────
+  - type: web
+    name: time-logger-frontend
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: REACT_APP_API_URL
+        sync: false  # Set to backend URL, e.g. https://time-logger-backend.onrender.com
+      - key: REACT_APP_GOOGLE_CLIENT_ID
+        sync: false
+      - key: REACT_APP_SUPABASE_URL
+        sync: false
+      - key: REACT_APP_SUPABASE_ANON_KEY
+        sync: false

@@ -1,42 +1,79 @@
-name: Deploy to GitHub Pages
+name: CI
 
 on:
   push:
-    branches:
-      - main  # or your default branch
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  deploy:
+  # ── Backend lint + test ─────────────────────────────────────────────────────
+  backend:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+    defaults:
+      run:
+        working-directory: backend
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: time_logger_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Set up environment variables
-        run: |
-          echo "API_USERNAME=${{ secrets.API_USERNAME }}" >> .env
-          echo "API_PASSWORD=${{ secrets.API_PASSWORD }}" >> .env
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-          echo "FLASK_ENV=production" >> .env
-          echo "FLASK_APP=app.py" >> .env
+      - name: Run tests
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/time_logger_test"
+          SECRET_KEY: test-secret-key-for-ci
+          ALGORITHM: HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES: "240"
+          OPENAI_API_KEY: dummy_key_for_testing
+          ENVIRONMENT: test
+        run: pytest --ignore=tests/e2e --ignore=tests/test_api.py -x -q
 
-      - name: Start Gunicorn
-        run: |
-          gunicorn -c gunicorn_config.py app:app &
-          sleep 5  # Give Gunicorn time to start
+  # ── Frontend lint + build ───────────────────────────────────────────────────
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
-          cname: ${{ secrets.CUSTOM_DOMAIN }}  # Optional: if you have a custom domain
+          node-version: 18
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          CI: "true"

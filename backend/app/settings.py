@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production-use-a-long-random-string"
     ALGORITHM: str = "HS256"
     # Access tokens are short-lived; refresh tokens stored in DB are long-lived.
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 240
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ── Database ──────────────────────────────────────────────────────────────
