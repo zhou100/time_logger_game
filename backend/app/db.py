@@ -2,6 +2,7 @@
 Database configuration and async session management.
 """
 import os
+import ssl as _ssl
 import logging
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -23,6 +24,15 @@ else:
     )
 
 _echo = os.getenv("DB_ECHO", "false").lower() == "true"
+_is_production = os.getenv("ENVIRONMENT") == "production"
+
+# Supabase requires SSL — create an SSL context for production
+_connect_args = {}
+if _is_production:
+    ssl_ctx = _ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = _ssl.CERT_NONE
+    _connect_args["ssl"] = ssl_ctx
 
 engine = create_async_engine(
     DATABASE_URL,
@@ -32,6 +42,7 @@ engine = create_async_engine(
     pool_size=20,
     max_overflow=20,
     pool_timeout=30,
+    connect_args=_connect_args,
 )
 
 async_session = sessionmaker(
