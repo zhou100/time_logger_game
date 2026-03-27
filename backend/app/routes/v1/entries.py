@@ -3,11 +3,11 @@
 
 Phase 1: POST /entries/presign
   → client receives a presigned PUT URL and an entry_id
-  → client uploads audio directly to MinIO (never transits the app server)
+  → client uploads audio directly to object storage (never transits the app server)
 
 Phase 2: POST /entries/{id}/submit
   → app creates the Entry row and enqueues a processing job
-  → client receives job_id for status polling / WebSocket
+  → client receives job_id for status polling / Realtime
 
 Status polling: GET /entries/{id}/status
 Listing:        GET /entries/

@@ -1,8 +1,11 @@
 """
-Object storage abstraction (MinIO / S3).
+Object storage abstraction (Cloudflare R2 / MinIO / S3).
 
 All audio files go directly to object storage — the app server never holds
 audio bytes in memory beyond the upload request.
+
+Production: Cloudflare R2 (S3-compatible, zero egress fees)
+Local dev:  MinIO via docker-compose (S3-compatible)
 """
 import logging
 from typing import Optional
@@ -31,14 +34,25 @@ def _client():
 
 
 async def ensure_bucket() -> None:
-    """Create the audio bucket if it doesn't exist. Called at startup."""
+    """
+    Verify the audio bucket exists. Called at startup.
+
+    For MinIO (local dev): auto-creates the bucket if missing.
+    For R2 (production): only verifies — R2 buckets are created in the dashboard.
+    """
+    is_r2 = "r2.cloudflarestorage.com" in settings.S3_ENDPOINT_URL
     async with _client() as s3:
         try:
             await s3.head_bucket(Bucket=settings.S3_BUCKET)
-            logger.debug(f"Bucket '{settings.S3_BUCKET}' already exists")
+            logger.debug(f"Bucket '{settings.S3_BUCKET}' exists")
         except ClientError as e:
             code = e.response["Error"]["Code"]
             if code in ("404", "NoSuchBucket"):
+                if is_r2:
+                    raise RuntimeError(
+                        f"R2 bucket '{settings.S3_BUCKET}' not found. "
+                        "Create it in the Cloudflare dashboard first."
+                    )
                 await s3.create_bucket(Bucket=settings.S3_BUCKET)
                 logger.info(f"Created bucket '{settings.S3_BUCKET}'")
             else:

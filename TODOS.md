@@ -2,10 +2,10 @@
 
 ## P1 — High Priority
 
-### R2/MinIO Object Storage Setup (Phase 0)
-**What:** Configure Cloudflare R2 or MinIO for audio file storage with presigned URLs.
-**Why:** Deferred from v2 plan Phase 0. Currently using local/mock storage — needs real object storage for production.
-**Effort:** M (human: ~4 hours / CC: ~30 min)
+### R2 Bucket Provisioning (Phase 0)
+**What:** Create R2 bucket in Cloudflare dashboard, generate API token, set CORS, add credentials to Render env vars.
+**Why:** Code is R2-ready (storage.py, settings.py, render.yaml all configured). Just needs the actual bucket + credentials.
+**Effort:** S (human: ~30 min / CC: N/A — dashboard task)
 **Priority:** P1
 
 ---
@@ -46,15 +46,8 @@
 
 ## P3 — Low Priority
 
-### Insecure Default SECRET_KEY
-**What:** Remove the fallback `"your-secret-key"` default in `core/auth.py`. Require SECRET_KEY env var.
-**Why:** Adversarial review flagged that the default secret key is insecure if env var is not set.
-**Effort:** XS (human: ~15 min / CC: ~5 min)
-**Priority:** P3
-
----
-
 ### Presigned URL Content-Type Validation
+
 **What:** Validate the `content_type` parameter on the presign endpoint to restrict to audio MIME types.
 **Why:** Adversarial review flagged that unvalidated content_type allows arbitrary file upload.
 **Effort:** XS (human: ~15 min / CC: ~5 min)
@@ -78,3 +71,7 @@ Implemented in Phase 1 with Supabase JWT support, Google OAuth, and user auto-cr
 
 ### ~~E2E Smoke Test~~ — v0.2.0.0 (2026-03-26)
 Multi-entry pipeline tested via unit tests. Integration tests exist for DB-dependent paths.
+
+### ~~Insecure Default SECRET_KEY~~ — v0.2.0.0 (2026-03-26)
+
+Deleted `core/auth.py` in Phase 4 cleanup. `settings.py` default is overridden by `generateValue: true` in render.yaml.
