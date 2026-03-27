@@ -67,13 +67,6 @@ graph TD
                 PF[Profile Manager]
             end
             
-            subgraph GameFeatures[Gamification]
-                PS[Points System]
-                LB[Leaderboards]
-                ACH[Achievements]
-                CHL[Challenges]
-            end
-            
             subgraph Analytics[Analytics & Insights]
                 TD[Time Dashboard]
                 VZ[Visualizations]
@@ -83,7 +76,6 @@ graph TD
             App --> Nav
             App --> Auth
             Auth --> CoreFeatures
-            Auth --> GameFeatures
             Auth --> Analytics
             Nav --> CoreFeatures
         end
@@ -95,7 +87,7 @@ graph TD
                 TS[Timer Slice]
                 CS[Content Slice]
                 US[User Slice]
-                GS[Game Slice]
+                ES[Entry Slice]
             end
             RS --> Slices
         end
@@ -108,7 +100,6 @@ graph TD
         end
         
         CoreFeatures --> RS
-        GameFeatures --> RS
         Analytics --> RS
         RS --> CoreFeatures
         AR --> WA
@@ -157,15 +148,7 @@ graph TD
             O[Tasks]
         end
         
-        subgraph GameTables[Game Tables]
-            PT[Points]
-            ST[Streaks]
-            BG[Badges]
-            CH[Challenges]
-        end
-        
         J -->|Contains| CoreTables
-        J -->|Contains| GameTables
     end
 
     %% API Endpoints
@@ -175,13 +158,6 @@ graph TD
             Q["/categories/category"]
             R["/tasks/action"]
             S["/users"]
-        end
-        
-        subgraph GameAPI[Game APIs]
-            GP["/points"]
-            GL["/leaderboard"]
-            GA["/achievements"]
-            GC["/challenges"]
         end
         
         subgraph AnalyticsAPI[Analytics APIs]
@@ -203,13 +179,10 @@ graph TD
     classDef backendStyle fill:#e8f5e9,stroke:#333,stroke-width:2px
     classDef dbStyle fill:#fff3e0,stroke:#333,stroke-width:2px
     classDef apiStyle fill:#f3e5f5,stroke:#333,stroke-width:2px
-    classDef gameStyle fill:#fce4ec,stroke:#333,stroke-width:2px
-    
     class Frontend frontendStyle
     class Backend,Processing backendStyle
-    class Database,CoreTables,GameTables dbStyle
-    class APIEndpoints,CoreAPI,GameAPI,AnalyticsAPI apiStyle
-    class GameFeatures,GameAPI gameStyle
+    class Database,CoreTables dbStyle
+    class APIEndpoints,CoreAPI,AnalyticsAPI apiStyle
 ```
 
 ### Data Layer
@@ -219,54 +192,49 @@ Database Schema:
 Users:
   - id (PK)
   - email (unique)
-  - username (unique)
-  - hashed_password
+  - hashed_password (nullable)
+  - is_active
+  - auth_provider ("email" | "google" | "supabase")
+  - supabase_id (unique, nullable)
 
-ChatHistory:
-  - id (PK)
+Entries:
+  - id (UUID, PK)
   - user_id (FK -> Users)
-  - audio_path
-  - transcribed_text
+  - audio_key (S3/R2 object key)
+  - transcript (text, nullable)
+  - duration_seconds (nullable)
+  - recorded_at (nullable)
   - created_at
 
-CategorizedEntries:
+EntryClassifications:
   - id (PK)
-  - chat_history_id (FK -> ChatHistory)
+  - entry_id (FK -> Entries)
+  - text (extracted content)
   - category (ENUM: TODO, IDEA, THOUGHT, TIME_RECORD)
-  - extracted_content
-  - created_at
+  - estimated_minutes (nullable)
 
-Tasks:
+Jobs:
+  - id (UUID, PK)
+  - entry_id (FK -> Entries)
+  - status (ENUM: pending, processing, done, failed)
+  - step (current processing step)
+  - error (nullable)
+
+AuditResults:
   - id (PK)
   - user_id (FK -> Users)
-  - category (ENUM: STUDY, WORKOUT, FAMILY_TIME, WORK, HOBBY, OTHER)
-  - start_time
-  - end_time
-  - duration
-  - description
+  - audit_date
+  - audit_type ("daily" | "weekly")
+  - entries_count
+  - breakdown_json
+  - audit_text
+  - generated_at
 
-Points:
+Notifications:
   - id (PK)
   - user_id (FK -> Users)
-  - points
-  - created_at
-
-Streaks:
-  - id (PK)
-  - user_id (FK -> Users)
-  - streak
-  - created_at
-
-Badges:
-  - id (PK)
-  - user_id (FK -> Users)
-  - badge
-  - created_at
-
-Challenges:
-  - id (PK)
-  - user_id (FK -> Users)
-  - challenge
+  - event_type
+  - payload_json
   - created_at
 ```
 
@@ -458,8 +426,6 @@ alembic upgrade head
 - API integrations with popular productivity tools
 
 ### Product Features
-- Gamification elements for engagement
-- Social features for accountability
 - Custom categories and workflows
 - Advanced visualization of time patterns
 - AI-powered productivity insights

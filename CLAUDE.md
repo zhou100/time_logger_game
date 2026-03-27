@@ -6,7 +6,7 @@ This file provides guidance for AI assistants (Claude and others) working on thi
 
 ## Project Overview
 
-**Time Logger Game** is a full-stack web application for voice-based time tracking with AI-powered categorization. Users record voice notes, which are transcribed via OpenAI Whisper and auto-categorized (TODO, IDEA, QUESTION, REMINDER) using GPT-4o-mini. The "game" aspect includes streaks, points, and badges.
+**Time Logger Game** is a full-stack web application for voice-based time tracking with AI-powered categorization. Users record voice notes, which are transcribed via OpenAI Whisper and auto-categorized (TODO, IDEA, THOUGHT, TIME_RECORD) using GPT-4o-mini. Features include daily/weekly AI coach audits and time-weighted category breakdowns.
 
 ---
 
