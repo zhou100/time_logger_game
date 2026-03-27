@@ -4,7 +4,7 @@ Test data fixtures for e2e tests
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
-from app.core.security import get_password_hash
+from app.utils.auth import get_password_hash
 
 @pytest.fixture
 async def seed_test_data(e2e_db: AsyncSession):

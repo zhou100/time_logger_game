@@ -15,7 +15,7 @@ from app.main import app
 from app.db import Base
 from app.models.user import User
 from app.schemas.user import UserResponse
-from app.core.security import create_access_token, get_password_hash
+from app.utils.auth import create_access_token, get_password_hash
 
 settings = get_settings()
 

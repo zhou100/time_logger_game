@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/yujunz/llm_projects/time_logger_game find . -not -path ./**)",
+      "Bash(cd /home/yujunz/llm_projects/time_logger_game find . -not -path './.git/*' -not -path './node_modules/*' -not -path './frontend/node_modules/*' -not -path './archive/*' -type f)",
+      "Bash(DB_PORT=5433 docker compose up --build -d backend worker frontend)",
+      "Skill(design-consultation)",
+      "Skill(design-consultation:*)",
+      "Skill(ship)",
+      "Skill(ship:*)"
+    ],
+    "additionalDirectories": [
+      "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans"
+    ]
+  }
+}
