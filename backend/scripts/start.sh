@@ -38,5 +38,5 @@ echo "Starting FastAPI application on port $PORT..."
 if [ "$ENVIRONMENT" = "development" ]; then
   uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --reload
 else
-  uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 2
+  uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 1
 fi

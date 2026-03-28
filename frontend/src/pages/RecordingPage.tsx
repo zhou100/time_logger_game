@@ -6,10 +6,14 @@ import {
     Chip,
     CircularProgress,
     Container,
+    IconButton,
     LinearProgress,
     Typography,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import TodayIcon from '@mui/icons-material/Today';
 import RecordButton from '../components/RecordButton';
 import EntryCard from '../components/EntryCard';
 import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
@@ -55,13 +59,31 @@ function computeBreakdown(entries: EntryItem[]): { breakdown: Record<string, num
     return { breakdown, approximate: !hasAll };
 }
 
+/** Format "2026-03-25" → "Mar 25" */
+function formatDateLabel(iso: string): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
     const todayUtc = useMemo(() => new Date().toISOString().split('T')[0], []);
-    const { data: entriesData } = useEntries(0, 20, todayUtc);
+    const [selectedDate, setSelectedDate] = useState(todayUtc);
+    const isToday = selectedDate === todayUtc;
+
+    const { data: entriesData } = useEntries(0, 20, selectedDate);
     const upload = useUpload();
+
+    const shiftDate = useCallback((days: number) => {
+        setSelectedDate((prev) => {
+            const d = new Date(prev + 'T12:00:00Z');
+            d.setUTCDate(d.getUTCDate() + days);
+            return d.toISOString().split('T')[0];
+        });
+    }, []);
 
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | undefined>();
@@ -117,26 +139,31 @@ const RecordingPage: React.FC = () => {
         setAuditError(undefined);
         if (regenerate) setAuditResult(null);
         try {
-            const todayUtc = new Date().toISOString().split('T')[0];
-            const result = await entriesApi.generateAudit(todayUtc, regenerate);
+            const result = await entriesApi.generateAudit(selectedDate, regenerate);
             setAuditResult(result);
         } catch (err) {
             setAuditError(err instanceof Error ? err.message : 'Audit generation failed');
         } finally {
             setAuditLoading(false);
         }
-    }, []);
+    }, [selectedDate]);
 
     const entries = entriesData?.items ?? [];
     const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
     const hasBreakdown = Object.keys(breakdown).length > 0;
 
-    // Auto-load cached audit on mount
+    // Reset audit when date changes
+    useEffect(() => {
+        setAuditResult(null);
+        setAuditError(undefined);
+    }, [selectedDate]);
+
+    // Auto-load cached audit when entries are available
     useEffect(() => {
         if (entries.length > 0 && !auditResult && !auditLoading) {
             handleGenerateAudit(false);
         }
-    }, [entries.length]); // eslint-disable-line
+    }, [entries.length, selectedDate]); // eslint-disable-line
 
     const handleWeeklyReview = useCallback(async () => {
         const shouldRegenerate = weeklyResult !== null;
@@ -155,12 +182,33 @@ const RecordingPage: React.FC = () => {
     return (
         <Container maxWidth="md">
             <Box sx={{ mt: 4, mb: 8 }}>
-                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 4 }}>
+                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 2 }}>
                     Time Logger
                 </Typography>
 
-                {/* ── Recorder ──────────────────────────────────────────────── */}
-                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
+                {/* ── Date Navigation ──────────────────────────────────────── */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
+                    <IconButton size="small" onClick={() => shiftDate(-1)} aria-label="Previous day">
+                        <ChevronLeftIcon />
+                    </IconButton>
+                    <Typography
+                        variant="body1"
+                        sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 120, textAlign: 'center', fontWeight: 500 }}
+                    >
+                        {isToday ? 'Today' : formatDateLabel(selectedDate)}
+                    </Typography>
+                    <IconButton size="small" onClick={() => shiftDate(1)} disabled={isToday} aria-label="Next day">
+                        <ChevronRightIcon />
+                    </IconButton>
+                    {!isToday && (
+                        <IconButton size="small" onClick={() => setSelectedDate(todayUtc)} aria-label="Go to today">
+                            <TodayIcon fontSize="small" />
+                        </IconButton>
+                    )}
+                </Box>
+
+                {/* ── Recorder (today only) ────────────────────────────────── */}
+                {isToday && <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                     <RecordButton onRecordingComplete={handleRecordingComplete} />
 
                     {isProcessing && (
@@ -203,7 +251,7 @@ const RecordingPage: React.FC = () => {
                             "{entryStatus.transcript}"
                         </Typography>
                     )}
-                </Box>
+                </Box>}
 
                 {/* ── Two-column: entries + breakdown/audit ─────────────────── */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
@@ -211,12 +259,12 @@ const RecordingPage: React.FC = () => {
                     {/* Left: today's entries */}
                     <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                         <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                            Today's Entries {entries.length > 0 && `— ${entries.length}`}
+                            {isToday ? "Today's" : formatDateLabel(selectedDate)} Entries {entries.length > 0 && `— ${entries.length}`}
                         </Typography>
 
                         {entries.length === 0 ? (
                             <Typography variant="body2" color="text.secondary">
-                                Record your day to see entries here.
+                                {isToday ? 'Record your day to see entries here.' : 'No entries recorded on this day.'}
                             </Typography>
                         ) : (
                             entries.slice(0, 10).map((entry) => (
@@ -231,7 +279,7 @@ const RecordingPage: React.FC = () => {
                         {/* Category breakdown */}
                         <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                                Time Breakdown — today
+                                Time Breakdown — {isToday ? 'today' : formatDateLabel(selectedDate)}
                             </Typography>
 
                             {!hasBreakdown ? (
@@ -278,9 +326,9 @@ const RecordingPage: React.FC = () => {
                                     size="small"
                                     startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
                                     onClick={() => handleGenerateAudit(!!auditResult)}
-                                    disabled={auditLoading || entries.length === 0}
+                                    disabled={auditLoading || entries.length === 0 || (!isToday && !!auditResult)}
                                 >
-                                    {auditResult ? 'Regenerate' : 'Generate Audit'}
+                                    {auditResult ? (isToday ? 'Regenerate' : 'Cached') : 'Generate Audit'}
                                 </Button>
                             </Box>
 

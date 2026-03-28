@@ -8,7 +8,12 @@ export function useEntries(skip = 0, limit = 20, date?: string) {
     return useQuery<EntryListResponse>({
         queryKey: [...ENTRIES_KEY, skip, limit, date],
         queryFn: () => entriesApi.list(skip, limit, date),
-        placeholderData: (prev) => prev,
+        placeholderData: (prev, prevQuery) => {
+            // Only reuse placeholder if the date hasn't changed, to avoid
+            // flashing stale entries under a new date label.
+            const prevDate = prevQuery?.queryKey[3];
+            return prevDate === date ? prev : undefined;
+        },
     });
 }
 

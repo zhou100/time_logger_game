@@ -41,15 +41,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (!sb) return;
                     const { data: { session } } = await sb.auth.getSession();
                     if (session?.user) {
-                        // Fetch real DB user id from backend (needed for realtime subscriptions)
-                        try {
-                            const { authApi } = await import('../services/api');
-                            const profile = await authApi.getCurrentUser();
-                            setUser({ id: profile.id, email: session.user.email || '' });
-                        } catch {
-                            // Fallback if backend is unreachable
-                            setUser({ id: 0, email: session.user.email || '' });
-                        }
+                        // Set user immediately from Supabase session so the UI isn't blocked
+                        // while the backend cold-starts (Render free tier can take 30-50s)
+                        setUser({ id: 0, email: session.user.email || '' });
+                        setIsLoading(false);
+                        // Fetch real DB user id in the background
+                        import('../services/api').then(({ authApi }) =>
+                            authApi.getCurrentUser()
+                                .then((profile) => setUser({ id: profile.id, email: session.user.email || '' }))
+                                .catch(() => { /* keep fallback id:0 */ })
+                        );
+                        return; // skip the finally setIsLoading(false) — already done
                     }
                 } else {
                     if (AuthService.isAuthenticated()) {

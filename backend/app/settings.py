@@ -41,7 +41,11 @@ class Settings(BaseSettings):
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_origins(cls, v):
+        import json
         if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                return json.loads(v)
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 

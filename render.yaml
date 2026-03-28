@@ -1,6 +1,8 @@
 # Render Blueprint — Time Logger Game
 # https://render.com/docs/blueprint-spec
 # Database: Supabase PostgreSQL (not Render-managed)
+# Frontend: Cloudflare Pages (not Render — see .github/workflows/deploy.yml)
+# Worker: embedded in backend via asyncio background task
 
 services:
   # ── Backend (FastAPI) ────────────────────────────────────────────────────────
@@ -40,7 +42,7 @@ services:
       - key: S3_REGION
         value: auto
       - key: ALLOWED_ORIGINS
-        sync: false  # Set to frontend URL, e.g. ["https://time-logger-frontend.onrender.com"]
+        sync: false  # Set to Cloudflare Pages URL, e.g. ["https://time-logger-game.pages.dev"]
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: SUPABASE_URL
@@ -48,54 +50,4 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_JWT_SECRET
-        sync: false
-
-  # ── Worker (audio pipeline) ─────────────────────────────────────────────────
-  - type: worker
-    name: time-logger-worker
-    env: docker
-    region: oregon
-    plan: free
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    dockerCommand: python scripts/worker.py
-    envVars:
-      - key: DATABASE_URL
-        sync: false  # Same Supabase PostgreSQL connection string as backend
-      - key: SECRET_KEY
-        fromService:
-          name: time-logger-backend
-          type: web
-          envVarKey: SECRET_KEY
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: S3_ENDPOINT_URL
-        sync: false
-      - key: S3_ACCESS_KEY
-        sync: false
-      - key: S3_SECRET_KEY
-        sync: false
-      - key: S3_BUCKET
-        value: time-logger-audio
-      - key: ENVIRONMENT
-        value: production
-      - key: LOG_LEVEL
-        value: INFO
-
-  # ── Frontend (React + Nginx) ────────────────────────────────────────────────
-  - type: web
-    name: time-logger-frontend
-    env: docker
-    region: oregon
-    plan: free
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    envVars:
-      - key: REACT_APP_API_URL
-        sync: false  # Set to backend URL, e.g. https://time-logger-backend.onrender.com
-      - key: REACT_APP_GOOGLE_CLIENT_ID
-        sync: false
-      - key: REACT_APP_SUPABASE_URL
-        sync: false
-      - key: REACT_APP_SUPABASE_ANON_KEY
         sync: false

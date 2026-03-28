@@ -2,10 +2,10 @@
 
 ## P1 — High Priority
 
-### R2 Bucket Provisioning (Phase 0)
-**What:** Create R2 bucket in Cloudflare dashboard, generate API token, set CORS, add credentials to Render env vars.
-**Why:** Code is R2-ready (storage.py, settings.py, render.yaml all configured). Just needs the actual bucket + credentials.
-**Effort:** S (human: ~30 min / CC: N/A — dashboard task)
+### Cron Ping for Backend Warm-Up
+**What:** Set up a free external cron service (e.g., cron-job.org or UptimeRobot) to hit `https://time-logger-backend.onrender.com/health` every 14 minutes.
+**Why:** Render free tier cold-starts take 30-50s. A periodic ping keeps the backend warm so users never wait.
+**Effort:** XS (human: ~10 min / CC: N/A — external service config)
 **Priority:** P1
 
 ---
@@ -75,3 +75,7 @@ Multi-entry pipeline tested via unit tests. Integration tests exist for DB-depen
 ### ~~Insecure Default SECRET_KEY~~ — v0.2.0.0 (2026-03-26)
 
 Deleted `core/auth.py` in Phase 4 cleanup. `settings.py` default is overridden by `generateValue: true` in render.yaml.
+
+### ~~R2 Bucket Provisioning~~ — v0.2.0.0 (2026-03-27)
+
+R2 bucket created in Cloudflare dashboard, CORS configured, API credentials added to Render env vars.
