@@ -71,5 +71,5 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     from app.models import Base as ModelBase  # noqa: F401 — ensures all models are registered
     async with engine.begin() as conn:
-        await conn.run_sync(ModelBase.metadata.create_all)
+        await conn.run_sync(lambda c: ModelBase.metadata.create_all(c, checkfirst=True))
     logger.info("Database initialized")
