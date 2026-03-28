@@ -1,0 +1,6 @@
+name = "time-logger-game"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./build"
+html_handling = "single-page-application"
