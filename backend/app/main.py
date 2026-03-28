@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -29,9 +30,19 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning(f"Storage bucket init skipped: {exc}")
 
+    # Start embedded worker loop as a background task
+    from .services.worker import run_worker
+    worker_task = asyncio.create_task(run_worker())
+    logger.info("Embedded worker started")
+
     yield
 
     logger.info("Shutting down")
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
 
 
