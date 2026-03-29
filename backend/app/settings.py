@@ -36,18 +36,16 @@ class Settings(BaseSettings):
     S3_REGION: str = "auto"  # R2 uses "auto"; MinIO uses "us-east-1"
 
     # ── CORS ─────────────────────────────────────────────────────────────────
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    # Accepts comma-separated string or JSON array in env vars
+    ALLOWED_ORIGINS_STR: str = "http://localhost:3000"
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_origins(cls, v):
+    @property
+    def ALLOWED_ORIGINS(self) -> List[str]:
         import json
-        if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("["):
-                return json.loads(v)
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+        v = self.ALLOWED_ORIGINS_STR.strip()
+        if v.startswith("["):
+            return json.loads(v)
+        return [o.strip() for o in v.split(",") if o.strip()]
 
     # ── Supabase ───────────────────────────────────────────────────────────────
     SUPABASE_URL: str = ""           # e.g. https://xyz.supabase.co
