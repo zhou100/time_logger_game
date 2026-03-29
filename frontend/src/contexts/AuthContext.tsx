@@ -32,7 +32,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // For JWT mode: initialize user synchronously from localStorage so the
     // very first render already has isAuthenticated=true (no flash of LandingPage).
     const [user, setUser] = useState<User | null>(() => {
-        if (!useSupabase && AuthService.isAuthenticated()) {
+        // Use getStoredToken() (not isAuthenticated()) so expired-but-refreshable tokens
+        // still restore the session on page load. isAuthenticated() returns false if the
+        // access token has expired (4h), even when a valid 30-day refresh token exists.
+        if (!useSupabase && AuthService.getStoredToken()) {
             const userId = AuthService.getUserIdFromToken();
             if (userId !== null) return { id: userId, email: '' };
         }
@@ -63,25 +66,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         return; // skip the finally setIsLoading(false) — already done
                     }
                 } else {
-                    if (AuthService.isAuthenticated()) {
+                    // getStoredToken() returns the raw token regardless of expiry.
+                    // An expired token can still be decoded for user-id, and the
+                    // Axios request interceptor (getValidToken) will auto-refresh it.
+                    if (AuthService.getStoredToken()) {
                         const userId = AuthService.getUserIdFromToken();
                         if (userId !== null) {
                             // Unblock UI immediately with token data — don't wait for backend
                             setUser({ id: userId, email: '' });
                             setIsLoading(false);
-                            // Fetch full profile in background
+                            // Fetch full profile in background (triggers token refresh if expired)
                             try {
                                 const { authApi } = await import('../services/api');
                                 const profile = await authApi.getCurrentUser();
                                 setUser({ id: profile.id, email: profile.email });
                             } catch {
-                                // If getCurrentUser fails (network error, cold start, or the
-                                // response interceptor already called clearTokens on 401),
-                                // only log out if tokens are actually gone now.
-                                if (!AuthService.isAuthenticated()) {
+                                // Only log out if tokens were actually cleared (e.g. 401 on refresh).
+                                // getStoredToken() returns null only after clearTokens() is called,
+                                // not when the token is merely expired or the network is down.
+                                if (!AuthService.getStoredToken()) {
                                     setUser(null);
                                 }
-                                // Otherwise (transient network error): keep user logged in.
+                                // Otherwise (expired token, cold start, transient error): keep session.
                             }
                             return; // setIsLoading already called above
                         }
