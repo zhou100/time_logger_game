@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up — initialising database and storage")
-    await init_db()
+    if settings.ENVIRONMENT != "test":
+        await init_db()
 
     # Ensure the storage bucket exists (no-op if already present)
     try:
