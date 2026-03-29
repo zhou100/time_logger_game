@@ -29,15 +29,35 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const useSupabase = isSupabaseConfigured;
 
-    // For JWT mode: initialize user synchronously from localStorage so the
-    // very first render already has isAuthenticated=true (no flash of LandingPage).
+    // Synchronously restore user from localStorage so the very first render
+    // already has isAuthenticated=true — no blank page, no LandingPage flash.
     const [user, setUser] = useState<User | null>(() => {
-        // Use getStoredToken() (not isAuthenticated()) so expired-but-refreshable tokens
-        // still restore the session on page load. isAuthenticated() returns false if the
-        // access token has expired (4h), even when a valid 30-day refresh token exists.
-        if (!useSupabase && AuthService.getStoredToken()) {
-            const userId = AuthService.getUserIdFromToken();
-            if (userId !== null) return { id: userId, email: '' };
+        if (useSupabase) {
+            // Supabase stores the session in localStorage under sb-<ref>-auth-token.
+            // Read it synchronously so we don't need a loading guard in HomePage.
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key?.startsWith('sb-') && key.endsWith('-auth-token')) {
+                        const raw = localStorage.getItem(key);
+                        if (raw) {
+                            const session = JSON.parse(raw);
+                            if (session?.user?.email) {
+                                return { id: 0, email: session.user.email };
+                            }
+                        }
+                        break;
+                    }
+                }
+            } catch { /* fall through to null */ }
+        } else {
+            // JWT mode: getStoredToken() returns the token regardless of expiry.
+            // An expired access token can still be decoded for user-id; the Axios
+            // request interceptor will auto-refresh it via the 30-day refresh token.
+            if (AuthService.getStoredToken()) {
+                const userId = AuthService.getUserIdFromToken();
+                if (userId !== null) return { id: userId, email: '' };
+            }
         }
         return null;
     });
