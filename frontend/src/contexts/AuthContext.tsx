@@ -55,18 +55,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 } else {
                     if (AuthService.isAuthenticated()) {
-                        const token = await AuthService.getValidToken();
                         const userId = AuthService.getUserIdFromToken();
                         if (userId !== null) {
-                            const { authApi } = await import('../services/api');
-                            const profile = await authApi.getCurrentUser();
-                            setUser({ id: profile.id, email: profile.email });
+                            // Unblock UI immediately with token data — don't wait for backend
+                            setUser({ id: userId, email: '' });
+                            setIsLoading(false);
+                            // Fetch full profile in background
+                            try {
+                                const { authApi } = await import('../services/api');
+                                const profile = await authApi.getCurrentUser();
+                                setUser({ id: profile.id, email: profile.email });
+                            } catch (profileErr: unknown) {
+                                // Only clear tokens if backend says they're invalid (401/403)
+                                // Network errors / cold-start timeouts must NOT log the user out
+                                const status = (profileErr as { response?: { status?: number } })?.response?.status;
+                                if (status === 401 || status === 403) {
+                                    AuthService.clearTokens();
+                                    setUser(null);
+                                }
+                                // Otherwise keep user logged in with token-derived data
+                            }
+                            return; // setIsLoading already called above
                         }
                     }
                 }
             } catch (err) {
                 Logger.error('Auth rehydration failed:', err);
-                if (!useSupabase) AuthService.clearTokens();
                 setUser(null);
             } finally {
                 setIsLoading(false);
