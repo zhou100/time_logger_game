@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     Box,
     Chip,
@@ -16,11 +16,15 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import { useQuery } from '@tanstack/react-query';
 import { EntryItem } from '../types/api';
-import { useDeleteEntry, useUpdateEntry } from '../hooks/useEntries';
+import { useDeleteEntry, useMoveEntry, useUpdateEntry } from '../hooks/useEntries';
 import { CATEGORY_COLORS, palette } from '../theme';
+import DatePickerPopover from './DatePickerPopover';
+import { entriesApi } from '../services/api';
 
 const CATEGORIES = ['TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD'];
 
@@ -34,9 +38,24 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [editText, setEditText] = useState('');
     const [editCategory, setEditCategory] = useState('');
+    const moveRef = useRef<HTMLButtonElement>(null);
+    const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
 
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
+    const moveEntry = useMoveEntry();
+
+    const { data: activeDatesRaw = [] } = useQuery({
+        queryKey: ['active-dates'],
+        queryFn: () => entriesApi.getActiveDates(),
+        staleTime: 5 * 60_000,
+    });
+    const activeDates = new Set(activeDatesRaw);
+
+    const today = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
 
     const categories = entry.categories;
     const hasCats = categories.length > 0;
@@ -144,12 +163,32 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                         {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Typography>
                     {!readOnly && (
-                        <IconButton size="small" onClick={() => setConfirmDelete(true)} sx={{ p: 0.25 }}>
-                            <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                        </IconButton>
+                        <Box sx={{ display: 'flex', gap: 0.25 }}>
+                            <IconButton
+                                ref={moveRef}
+                                size="small"
+                                onClick={() => setMoveAnchor(moveRef.current)}
+                                sx={{ p: 0.25 }}
+                                disabled={moveEntry.isPending}
+                            >
+                                <DriveFileMoveIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => setConfirmDelete(true)} sx={{ p: 0.25 }}>
+                                <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                            </IconButton>
+                        </Box>
                     )}
                 </Box>
             </Box>
+
+            <DatePickerPopover
+                anchorEl={moveAnchor}
+                onClose={() => setMoveAnchor(null)}
+                selectedDate={entry.created_at.split('T')[0]}
+                activeDates={activeDates}
+                maxDate={today}
+                onSelect={(date) => moveEntry.mutate({ entryId: entry.id, date })}
+            />
 
             <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)} maxWidth="xs">
                 <DialogTitle>Delete entry?</DialogTitle>

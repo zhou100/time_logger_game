@@ -195,7 +195,7 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async updateEntry(entryId: string, data: { transcript?: string; categories?: CategoryItem[] }): Promise<EntryItem> {
+    async updateEntry(entryId: string, data: { transcript?: string; categories?: CategoryItem[]; date?: string }): Promise<EntryItem> {
         try {
             const res = await api.patch<EntryItem>(`/v1/entries/${entryId}`, data);
             return res.data;

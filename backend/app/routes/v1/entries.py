@@ -121,6 +121,7 @@ class EntryListResponse(BaseModel):
 class EntryUpdateRequest(BaseModel):
     transcript: Optional[str] = None
     categories: Optional[List[CategoryItem]] = None
+    date: Optional[str] = None  # YYYY-MM-DD — moves entry to this day
 
 
 class AuditRequest(BaseModel):
@@ -365,6 +366,16 @@ async def update_entry(
     entry = result.scalar_one_or_none()
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+
+    if body.date is not None:
+        try:
+            target_dt = datetime.strptime(body.date, "%Y-%m-%d").replace(
+                hour=12, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+        entry.created_at = target_dt
+        entry.recorded_at = target_dt
 
     if body.transcript is not None:
         entry.transcript = body.transcript

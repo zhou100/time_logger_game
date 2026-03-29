@@ -42,8 +42,20 @@ export function useDeleteEntry() {
 export function useUpdateEntry() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ entryId, data }: { entryId: string; data: { transcript?: string; categories?: CategoryItem[] } }) =>
+        mutationFn: ({ entryId, data }: { entryId: string; data: { transcript?: string; categories?: CategoryItem[]; date?: string } }) =>
             entriesApi.updateEntry(entryId, data),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ENTRIES_KEY }); },
+    });
+}
+
+export function useMoveEntry() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ entryId, date }: { entryId: string; date: string }) =>
+            entriesApi.updateEntry(entryId, { date }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ENTRIES_KEY });
+            qc.invalidateQueries({ queryKey: ['active-dates'] });
+        },
     });
 }
