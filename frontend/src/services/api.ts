@@ -215,6 +215,13 @@ export const entriesApi = {
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },
+
+    async getActiveDates(): Promise<string[]> {
+        try {
+            const res = await api.get<string[]>('/v1/entries/active-dates');
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
 };
 
 export default api;

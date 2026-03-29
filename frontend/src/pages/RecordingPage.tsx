@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Box,
@@ -13,11 +13,12 @@ import {
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import TodayIcon from '@mui/icons-material/Today';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import RecordButton from '../components/RecordButton';
 import EntryCard from '../components/EntryCard';
+import DatePickerPopover from '../components/DatePickerPopover';
 import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
 import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
@@ -66,22 +67,39 @@ function formatDateLabel(iso: string): string {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** Local-timezone today as YYYY-MM-DD */
+function localToday(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
-    const todayUtc = useMemo(() => new Date().toISOString().split('T')[0], []);
-    const [selectedDate, setSelectedDate] = useState(todayUtc);
-    const isToday = selectedDate === todayUtc;
+    const today = useMemo(localToday, []);
+    const [selectedDate, setSelectedDate] = useState(today);
+    const isToday = selectedDate === today;
+
+    // Calendar popover state
+    const calBtnRef = useRef<HTMLButtonElement>(null);
+    const [calAnchor, setCalAnchor] = useState<HTMLElement | null>(null);
+
+    const { data: activeDatesRaw = [] } = useQuery({
+        queryKey: ['active-dates'],
+        queryFn: () => entriesApi.getActiveDates(),
+        staleTime: 5 * 60_000,
+    });
+    const activeDates = useMemo(() => new Set(activeDatesRaw), [activeDatesRaw]);
 
     const { data: entriesData } = useEntries(0, 20, selectedDate);
     const upload = useUpload();
 
     const shiftDate = useCallback((days: number) => {
         setSelectedDate((prev) => {
-            const d = new Date(prev + 'T12:00:00Z');
-            d.setUTCDate(d.getUTCDate() + days);
-            return d.toISOString().split('T')[0];
+            const d = new Date(prev + 'T12:00:00');
+            d.setDate(d.getDate() + days);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         });
     }, []);
 
@@ -191,21 +209,43 @@ const RecordingPage: React.FC = () => {
                     <IconButton size="small" onClick={() => shiftDate(-1)} aria-label="Previous day">
                         <ChevronLeftIcon />
                     </IconButton>
-                    <Typography
-                        variant="body1"
-                        sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 120, textAlign: 'center', fontWeight: 500 }}
-                    >
-                        {isToday ? 'Today' : formatDateLabel(selectedDate)}
-                    </Typography>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography
+                            variant="body1"
+                            sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 100, textAlign: 'center', fontWeight: 500 }}
+                        >
+                            {isToday ? 'Today' : formatDateLabel(selectedDate)}
+                        </Typography>
+                        <IconButton
+                            ref={calBtnRef}
+                            size="small"
+                            onClick={() => setCalAnchor(calBtnRef.current)}
+                            aria-label="Open calendar"
+                        >
+                            <CalendarMonthIcon fontSize="small" />
+                        </IconButton>
+                    </Box>
+
                     <IconButton size="small" onClick={() => shiftDate(1)} disabled={isToday} aria-label="Next day">
                         <ChevronRightIcon />
                     </IconButton>
                     {!isToday && (
-                        <IconButton size="small" onClick={() => setSelectedDate(todayUtc)} aria-label="Go to today">
-                            <TodayIcon fontSize="small" />
+                        <IconButton size="small" onClick={() => setSelectedDate(today)} aria-label="Go to today"
+                            sx={{ color: palette.accent }}>
+                            <Typography variant="caption" fontWeight={700}>Today</Typography>
                         </IconButton>
                     )}
                 </Box>
+
+                <DatePickerPopover
+                    anchorEl={calAnchor}
+                    onClose={() => setCalAnchor(null)}
+                    selectedDate={selectedDate}
+                    activeDates={activeDates}
+                    maxDate={today}
+                    onSelect={setSelectedDate}
+                />
 
                 {/* ── Recorder (today only) ────────────────────────────────── */}
                 {isToday && <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>

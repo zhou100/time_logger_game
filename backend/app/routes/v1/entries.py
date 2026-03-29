@@ -242,6 +242,22 @@ async def get_entry_status(
     )
 
 
+@router.get("/active-dates", response_model=List[str])
+async def get_active_dates(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return sorted list of YYYY-MM-DD dates (UTC) on which the user has entries."""
+    result = await db.execute(
+        select(func.date(Entry.created_at).label("day"))
+        .join(Job, Job.entry_id == Entry.id)
+        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED)
+        .group_by(func.date(Entry.created_at))
+        .order_by(func.date(Entry.created_at).desc())
+    )
+    return [str(row.day) for row in result.all()]
+
+
 @router.get("/", response_model=EntryListResponse)
 async def list_entries(
     skip: int = Query(0, ge=0),
