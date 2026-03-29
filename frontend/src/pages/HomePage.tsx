@@ -5,8 +5,8 @@ import LandingPage from './LandingPage';
 
 const HomePage: React.FC = () => {
     const { isAuthenticated, isLoading, useSupabase } = useAuth();
-    // For Supabase, we must wait for async session fetch before knowing auth state.
-    // For JWT, isAuthenticated is synchronous from localStorage — render immediately.
+    // For Supabase, block render until async session resolves (avoids LandingPage flash).
+    // For JWT, user is initialized synchronously from localStorage — render immediately.
     if (isLoading && useSupabase) return null;
     return isAuthenticated ? <RecordingPage /> : <LandingPage />;
 };

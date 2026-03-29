@@ -27,10 +27,19 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const useSupabase = isSupabaseConfigured;
+
+    // For JWT mode: initialize user synchronously from localStorage so the
+    // very first render already has isAuthenticated=true (no flash of LandingPage).
+    const [user, setUser] = useState<User | null>(() => {
+        if (!useSupabase && AuthService.isAuthenticated()) {
+            const userId = AuthService.getUserIdFromToken();
+            if (userId !== null) return { id: userId, email: '' };
+        }
+        return null;
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [registrationSuccess, setRegistrationSuccess] = useState<string | null>(null);
-    const useSupabase = isSupabaseConfigured;
 
     // Re-hydrate user on mount
     useEffect(() => {
@@ -65,15 +74,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                                 const { authApi } = await import('../services/api');
                                 const profile = await authApi.getCurrentUser();
                                 setUser({ id: profile.id, email: profile.email });
-                            } catch (profileErr: unknown) {
-                                // Only clear tokens if backend says they're invalid (401/403)
-                                // Network errors / cold-start timeouts must NOT log the user out
-                                const status = (profileErr as { response?: { status?: number } })?.response?.status;
-                                if (status === 401 || status === 403) {
-                                    AuthService.clearTokens();
+                            } catch {
+                                // If getCurrentUser fails (network error, cold start, or the
+                                // response interceptor already called clearTokens on 401),
+                                // only log out if tokens are actually gone now.
+                                if (!AuthService.isAuthenticated()) {
                                     setUser(null);
                                 }
-                                // Otherwise keep user logged in with token-derived data
+                                // Otherwise (transient network error): keep user logged in.
                             }
                             return; // setIsLoading already called above
                         }
@@ -191,8 +199,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [useSupabase, logout]);
 
-    // For Supabase: determine isAuthenticated from user state
-    const isAuthenticated = useSupabase ? !!user : AuthService.isAuthenticated();
+    // isAuthenticated is always derived from user state (React-controlled).
+    // Never read AuthService.isAuthenticated() here — its mutable token fields
+    // can be cleared by the response interceptor mid-session without triggering
+    // a React re-render, causing stale isAuthenticated=false flips.
+    const isAuthenticated = !!user;
 
     return (
         <AuthContext.Provider value={{
