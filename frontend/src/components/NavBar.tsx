@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar, Button } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import Logger from '../utils/logger';
 
 const NavBar: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, logout, loginWithGoogle, useSupabase } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -45,10 +46,38 @@ const NavBar: React.FC = () => {
                     variant="h3"
                     component={RouterLink}
                     to="/"
-                    sx={{ flexGrow: 1, color: 'text.primary', textDecoration: 'none' }}
+                    sx={{ color: 'text.primary', textDecoration: 'none', mr: 4 }}
                 >
                     Time Logger
                 </Typography>
+                {user && (
+                    <Box sx={{ display: 'flex', gap: 3, flexGrow: 1 }}>
+                        {[{ label: 'Log', path: '/' }, { label: 'Reflect', path: '/reflect' }].map(({ label, path }) => {
+                            const isActive = location.pathname === path;
+                            return (
+                                <Typography
+                                    key={path}
+                                    component={RouterLink}
+                                    to={path}
+                                    variant="body1"
+                                    sx={{
+                                        textDecoration: 'none',
+                                        fontWeight: 500,
+                                        color: isActive ? palette.accent : palette.textMuted,
+                                        borderBottom: isActive ? `2px solid ${palette.accent}` : '2px solid transparent',
+                                        pb: 0.5,
+                                        transition: 'color 150ms ease-out, border-color 150ms ease-out',
+                                        '&:hover': {
+                                            color: isActive ? palette.accent : palette.accentHover,
+                                        },
+                                    }}
+                                >
+                                    {label}
+                                </Typography>
+                            );
+                        })}
+                    </Box>
+                )}
                 {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Typography

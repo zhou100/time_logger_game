@@ -34,6 +34,7 @@ function App() {
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/register" element={<RegisterForm />} />
                 <Route path="/" element={<HomePage />} />
+                <Route path="/reflect" element={<HomePage page="reflect" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>

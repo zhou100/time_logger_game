@@ -1,11 +1,17 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import RecordingPage from './RecordingPage';
+import ReflectPage from './ReflectPage';
 import LandingPage from './LandingPage';
 
-const HomePage: React.FC = () => {
+interface HomePageProps {
+    page?: 'log' | 'reflect';
+}
+
+const HomePage: React.FC<HomePageProps> = ({ page = 'log' }) => {
     const { isAuthenticated } = useAuth();
-    return isAuthenticated ? <RecordingPage /> : <LandingPage />;
+    if (!isAuthenticated) return <LandingPage />;
+    return page === 'reflect' ? <ReflectPage /> : <RecordingPage />;
 };
 
 export default HomePage;
