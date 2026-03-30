@@ -10,7 +10,7 @@ services:
     name: time-logger-backend
     env: docker
     region: oregon
-    plan: free
+    plan: starter
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health

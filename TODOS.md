@@ -2,14 +2,6 @@
 
 ## P1 — High Priority
 
-### Cron Ping for Backend Warm-Up
-**What:** Set up a free external cron service (e.g., cron-job.org or UptimeRobot) to hit `https://time-logger-backend.onrender.com/health` every 14 minutes.
-**Why:** Render free tier cold-starts take 30-50s. A periodic ping keeps the backend warm so users never wait.
-**Effort:** XS (human: ~10 min / CC: N/A — external service config)
-**Priority:** P1
-
----
-
 ### Supabase RLS Policies for Notifications
 **What:** Add Row Level Security policies so users only see their own notifications via Realtime.
 **Why:** Realtime subscriptions filter client-side by user_id, but without RLS any user could subscribe to all notifications.
@@ -19,14 +11,6 @@
 ---
 
 ## P2 — Medium Priority
-
-### Render Warm-Up Checklist
-**What:** Hit `/health` endpoint 5 minutes before demo.
-**Why:** Render.com free tier cold-starts can add 10-30s on first request.
-**Effort:** S (human: 5 min / CC: 5 min — operational, not code)
-**Priority:** P2
-
----
 
 ### Notifications Table Cleanup
 **What:** Add TTL or archival for the notifications table to prevent unbounded growth.

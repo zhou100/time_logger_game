@@ -10,7 +10,8 @@
       "Skill(ship:*)"
     ],
     "additionalDirectories": [
-      "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans"
+      "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans",
+      "/home/yujunz/.claude/projects/-home-yujunz-llm_projects-time-logger-game/memory"
     ]
   }
 }
