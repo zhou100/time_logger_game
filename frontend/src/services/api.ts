@@ -10,6 +10,7 @@ import {
     EntryListResponse,
     CategoryItem,
     AuditResponse,
+    WeeklyAuditHistoryItem,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -212,6 +213,13 @@ export const entriesApi = {
     async generateWeeklyAudit(regenerate = false): Promise<AuditResponse> {
         try {
             const res = await api.post<AuditResponse>('/v1/entries/audit/weekly', { regenerate });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async getWeeklyAuditHistory(limit = 10): Promise<WeeklyAuditHistoryItem[]> {
+        try {
+            const res = await api.get<WeeklyAuditHistoryItem[]>(`/v1/entries/audit/weekly/history?limit=${limit}`);
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

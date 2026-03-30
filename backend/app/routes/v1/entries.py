@@ -603,6 +603,53 @@ Daily activities:
     )
 
 
+class WeeklyAuditHistoryItem(BaseModel):
+    audit_date: str
+    entries: int
+    breakdown: Dict[str, float]
+    audit_text: Optional[str]
+    generated_at: Optional[str]
+    week_label: str  # e.g. "Week of Mar 23, 2026"
+
+
+@router.get("/audit/weekly/history", response_model=List[WeeklyAuditHistoryItem])
+async def get_weekly_audit_history(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return past weekly audit results for the current user, newest first."""
+    result = await db.execute(
+        select(AuditResult)
+        .where(
+            AuditResult.user_id == current_user.id,
+            AuditResult.audit_type == "weekly",
+            AuditResult.is_stale.is_(False),
+            AuditResult.audit_text.isnot(None),
+        )
+        .order_by(AuditResult.audit_date.desc())
+        .limit(limit)
+    )
+    audits = result.scalars().all()
+
+    items = []
+    for a in audits:
+        # Week ran from (audit_date - 6 days) through audit_date
+        week_start = a.audit_date - timedelta(days=6)
+        week_label = f"Week of {week_start.strftime('%b %d, %Y')}"
+        breakdown = json.loads(a.breakdown_json) if a.breakdown_json else {}
+        items.append(WeeklyAuditHistoryItem(
+            audit_date=a.audit_date.isoformat(),
+            entries=a.entries_count,
+            breakdown=breakdown,
+            audit_text=a.audit_text,
+            generated_at=a.generated_at.isoformat() if a.generated_at else None,
+            week_label=week_label,
+        ))
+
+    return items
+
+
 # ── Audit helpers ─────────────────────────────────────────────────────────────
 
 async def _fetch_entries_for_date(

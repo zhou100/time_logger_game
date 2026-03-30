@@ -84,6 +84,15 @@ export interface AuditResponse {
     message?: string;
 }
 
+export interface WeeklyAuditHistoryItem {
+    audit_date: string;
+    entries: number;
+    breakdown: Record<string, number>;
+    audit_text: string | null;
+    generated_at: string | null;
+    week_label: string;
+}
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 export interface ApiError {

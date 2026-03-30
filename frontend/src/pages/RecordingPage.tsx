@@ -6,10 +6,13 @@ import {
     Chip,
     CircularProgress,
     Container,
+    Divider,
+    Drawer,
     IconButton,
     LinearProgress,
     Typography,
 } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -22,7 +25,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
 import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
-import { AuditResponse, EntryItem } from '../types/api';
+import { AuditResponse, EntryItem, WeeklyAuditHistoryItem } from '../types/api';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
@@ -111,6 +114,13 @@ const RecordingPage: React.FC = () => {
     const [auditResult, setAuditResult] = useState<AuditResponse | null>(null);
     const [auditError, setAuditError] = useState<string | undefined>();
 
+    // Reflect drawer state
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [weeklyLoading, setWeeklyLoading] = useState(false);
+    const [weeklyResult, setWeeklyResult] = useState<AuditResponse | null>(null);
+    const [weeklyError, setWeeklyError] = useState<string | undefined>();
+    const [weeklyHistory, setWeeklyHistory] = useState<WeeklyAuditHistoryItem[]>([]);
+
     const { data: entryStatus } = useEntryStatus(pendingEntryId);
 
     // When status polling detects completion, refresh the entries list
@@ -161,6 +171,30 @@ const RecordingPage: React.FC = () => {
         }
     }, [selectedDate]);
 
+    const handleWeeklyReview = useCallback(async () => {
+        const shouldRegenerate = weeklyResult !== null;
+        setWeeklyLoading(true);
+        setWeeklyError(undefined);
+        try {
+            const result = await entriesApi.generateWeeklyAudit(shouldRegenerate);
+            setWeeklyResult(result);
+            // Refresh history after generating
+            const history = await entriesApi.getWeeklyAuditHistory();
+            setWeeklyHistory(history);
+        } catch (err) {
+            setWeeklyError(err instanceof Error ? err.message : 'Weekly review failed');
+        } finally {
+            setWeeklyLoading(false);
+        }
+    }, [weeklyResult]);
+
+    // Load history when drawer opens
+    useEffect(() => {
+        if (drawerOpen && weeklyHistory.length === 0) {
+            entriesApi.getWeeklyAuditHistory().then(setWeeklyHistory).catch(() => {});
+        }
+    }, [drawerOpen]); // eslint-disable-line
+
     const entries = entriesData?.items ?? [];
     const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
     const hasBreakdown = Object.keys(breakdown).length > 0;
@@ -181,9 +215,21 @@ const RecordingPage: React.FC = () => {
     return (
         <Container maxWidth="md">
             <Box sx={{ mt: 4, mb: 8 }}>
-                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 2 }}>
+                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 1 }}>
                     Time Logger
                 </Typography>
+
+                <Box sx={{ mb: 2 }}>
+                    <Button
+                        variant="text"
+                        size="small"
+                        startIcon={<AutoAwesomeIcon fontSize="small" />}
+                        onClick={() => setDrawerOpen(true)}
+                        sx={{ color: palette.info, textTransform: 'none', fontWeight: 500 }}
+                    >
+                        Weekly Reflect
+                    </Button>
+                </Box>
 
                 {/* ── Date Navigation ──────────────────────────────────────── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
@@ -400,6 +446,114 @@ const RecordingPage: React.FC = () => {
                 </Box>
 
             </Box>
+
+            {/* ── Reflect Drawer ────────────────────────────────────────── */}
+            <Drawer
+                anchor="right"
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                PaperProps={{
+                    sx: {
+                        width: { xs: '100%', sm: 400 },
+                        bgcolor: palette.bg,
+                        p: 3,
+                    },
+                }}
+            >
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h2" component="h2">
+                        Reflect
+                    </Typography>
+                    <IconButton onClick={() => setDrawerOpen(false)} aria-label="Close">
+                        <CloseIcon />
+                    </IconButton>
+                </Box>
+
+                {/* Generate this week */}
+                <Box sx={{ p: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                        <Typography variant="overline" color="text.secondary">
+                            This Week
+                        </Typography>
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={weeklyLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                            onClick={handleWeeklyReview}
+                            disabled={weeklyLoading}
+                        >
+                            {weeklyResult ? 'Regenerate' : 'Generate'}
+                        </Button>
+                    </Box>
+
+                    {weeklyError && (
+                        <Alert severity="error" sx={{ mb: 1 }}>{weeklyError}</Alert>
+                    )}
+
+                    {weeklyResult === null && !weeklyLoading && !weeklyError && (
+                        <Typography variant="body2" color="text.secondary">
+                            Get an honest weekly review comparing your days and calling out patterns.
+                        </Typography>
+                    )}
+
+                    {weeklyResult?.message && !weeklyResult.audit_text && (
+                        <Typography variant="body2" color="text.secondary">
+                            {weeklyResult.message}
+                        </Typography>
+                    )}
+
+                    {weeklyResult?.audit_text && (
+                        <Box
+                            sx={{
+                                borderLeft: `2px solid ${palette.info}`,
+                                pl: 2,
+                                py: 1,
+                                bgcolor: palette.surface2,
+                                borderRadius: '0 8px 8px 0',
+                            }}
+                        >
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                {weeklyResult.audit_text}
+                            </Typography>
+                            {weeklyResult.generated_at && (
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                    {weeklyResult.entries} entries
+                                    {weeklyResult.cached && ' · cached'}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
+                </Box>
+
+                {/* Past weekly reviews */}
+                {weeklyHistory.length > 0 && (
+                    <>
+                        <Divider sx={{ my: 2 }} />
+                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+                            Past Reviews
+                        </Typography>
+                        {weeklyHistory.map((item) => (
+                            <Box
+                                key={item.audit_date}
+                                sx={{
+                                    p: 2,
+                                    mb: 1.5,
+                                    borderRadius: '8px',
+                                    border: `1px solid ${palette.rule}`,
+                                    bgcolor: 'background.paper',
+                                }}
+                            >
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                                    {item.week_label} · {item.entries} entries
+                                </Typography>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'text.primary' }}>
+                                    {item.audit_text}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </>
+                )}
+            </Drawer>
         </Container>
     );
 };
