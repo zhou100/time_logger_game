@@ -70,7 +70,7 @@ class SubmitResponse(BaseModel):
     job_id: str
 
 
-VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY"}
 
 
 class CategoryItem(BaseModel):

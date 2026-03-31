@@ -224,7 +224,7 @@ alembic current
 - **Dependency injection**: Use `Depends(get_current_user)` to protect endpoints. See `utils/auth.py`.
 - **Pydantic v2**: Models use `model_config = ConfigDict(from_attributes=True)` instead of `class Config`.
 - **JWT tokens**: Access tokens expire in 240 minutes; refresh tokens in 30 days. See `settings.py`.
-- **Category types**: The `ContentCategory` enum values are `TODO`, `IDEA`, `QUESTION`, `REMINDER`.
+- **Category types**: The category values are `EARNING`, `LEARNING`, `RELAXING`, `FAMILY` (Naval's framework + family).
 - **Error handling**: Raise `HTTPException` with appropriate status codes. 401 for auth errors, 404 for not found, 422 for validation.
 - **Logging**: Use `logging.getLogger(__name__)` — config is in `backend/app/config/logging_config.py`.
 

@@ -21,17 +21,17 @@ const serif = '"DM Serif Display", "Noto Serif SC", serif';
 const sans = '"DM Sans", "Noto Sans SC", sans-serif';
 
 export const CATEGORY_COLORS: Record<string, string> = {
-    TODO: '#B6492D',
-    IDEA: '#8A5A44',
-    THOUGHT: '#6F6258',
-    TIME_RECORD: '#3E5A63',
+    EARNING: '#B6492D',
+    LEARNING: '#3E5A63',
+    RELAXING: '#5E6B4A',
+    FAMILY: '#8A5A44',
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
-    TODO: 'TODO / Deep work',
-    IDEA: 'IDEA / Creative',
-    THOUGHT: 'THOUGHT / Reflection',
-    TIME_RECORD: 'TIME / Logged',
+    EARNING: 'Earning',
+    LEARNING: 'Learning',
+    RELAXING: 'Relaxing',
+    FAMILY: 'Family',
 };
 
 export const theme = createTheme({

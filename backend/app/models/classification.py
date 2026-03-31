@@ -20,7 +20,7 @@ class EntryClassification(Base):
         index=True,
         # unique=True removed — one entry now produces N classifications
     )
-    # TODO | IDEA | THOUGHT | TIME_RECORD
+    # EARNING | LEARNING | RELAXING | FAMILY
     category = Column(String(20), nullable=False)
     # The specific extracted activity text for this classification
     extracted_text = Column(Text, nullable=True)
