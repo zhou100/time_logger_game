@@ -8,7 +8,10 @@
       "Skill(design-consultation:*)",
       "Skill(ship)",
       "Skill(ship:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "additionalDirectories": [
       "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans",
