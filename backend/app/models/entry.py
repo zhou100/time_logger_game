@@ -3,7 +3,7 @@ Entry model — replaces the old Audio model.
 Stores the core content unit: a recorded audio clip + its transcript.
 """
 import uuid
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text, func, Index
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Date, Text, func, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -17,6 +17,7 @@ class Entry(Base):
     raw_audio_key = Column(String, nullable=True)       # object storage key (MinIO/S3)
     transcript = Column(Text, nullable=True)            # filled by worker after Whisper
     recorded_at = Column(DateTime(timezone=True), nullable=True)   # client-reported time
+    local_date = Column(Date, nullable=True)                       # client's local YYYY-MM-DD
     duration_seconds = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

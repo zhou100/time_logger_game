@@ -62,6 +62,7 @@ class PresignResponse(BaseModel):
 class SubmitRequest(BaseModel):
     audio_key: str                          # must match the key from presign
     recorded_at: Optional[datetime] = None  # client-side timestamp
+    local_date: Optional[str] = None        # client's local YYYY-MM-DD
     duration_seconds: Optional[int] = None
 
 
@@ -178,11 +179,22 @@ async def submit_entry(
     if not body.audio_key.startswith(expected_prefix):
         raise HTTPException(status_code=400, detail="audio_key does not match user")
 
+    # Parse local_date from client, fall back to UTC date
+    local_date_val = None
+    if body.local_date:
+        try:
+            local_date_val = datetime.strptime(body.local_date, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    if local_date_val is None:
+        local_date_val = datetime.now(timezone.utc).date()
+
     entry = Entry(
         id=entry_uuid,
         user_id=current_user.id,
         raw_audio_key=body.audio_key,
         recorded_at=body.recorded_at,
+        local_date=local_date_val,
         duration_seconds=body.duration_seconds,
     )
     db.add(entry)
@@ -251,11 +263,11 @@ async def get_active_dates(
     """Return sorted list of YYYY-MM-DD dates on which the user has entries.
     Uses recorded_at (client-reported local time) so dates match the user's timezone."""
     result = await db.execute(
-        select(func.date(Entry.recorded_at).label("day"))
+        select(Entry.local_date.label("day"))
         .join(Job, Job.entry_id == Entry.id)
-        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED, Entry.recorded_at.isnot(None))
-        .group_by(func.date(Entry.recorded_at))
-        .order_by(func.date(Entry.recorded_at).desc())
+        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED, Entry.local_date.isnot(None))
+        .group_by(Entry.local_date)
+        .order_by(Entry.local_date.desc())
     )
     return [str(row.day) for row in result.all()]
 
@@ -278,7 +290,7 @@ async def list_entries(
             filter_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-        base_filters.extend([func.date(Entry.recorded_at) == filter_date])
+        base_filters.extend([Entry.local_date == filter_date])
 
     total_result = await db.execute(
         select(func.count(Entry.id)).join(Job, Job.entry_id == Entry.id).where(*base_filters)
@@ -376,6 +388,7 @@ async def update_entry(
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
         entry.created_at = target_dt
         entry.recorded_at = target_dt
+        entry.local_date = target_dt.date()
 
     if body.transcript is not None:
         entry.transcript = body.transcript
@@ -511,8 +524,8 @@ async def generate_weekly_audit(
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == current_user.id,
-            func.date(Entry.recorded_at) >= week_start_date,
-            func.date(Entry.recorded_at) <= today_utc,
+            Entry.local_date >= week_start_date,
+            Entry.local_date <= today_utc,
             Job.status == JobStatus.DONE,
         )
         .order_by(Entry.recorded_at.asc())
@@ -654,7 +667,7 @@ async def _fetch_entries_for_date(
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == user_id,
-            func.date(Entry.recorded_at) == target_date,
+            Entry.local_date == target_date,
             Job.status == JobStatus.DONE,
         )
         .order_by(Entry.recorded_at.asc())
