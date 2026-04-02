@@ -93,16 +93,31 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
                 transcript_response = await _get_openai().audio.transcriptions.create(
                     file=f,
                     model="gpt-4o-mini-transcribe",
-                    prompt=(
-                        "今天上午开了一个 team meeting，讨论了 sprint planning。"
-                        "下午做了三个小时 deep work，写了一些 unit tests。"
-                        "晚上花了两个小时 review PR 和 deployment。"
-                    ),
                 )
             raw_transcript = transcript_response.text
             logger.info(f"Raw transcript ({len(raw_transcript)} chars): {raw_transcript[:120]}...")
         finally:
             os.unlink(tmp_path)
+
+        # ── Handle empty/silent audio ────────────────────────────────────────
+        if not raw_transcript or not raw_transcript.strip():
+            logger.info(f"Job {job.id}: empty transcript, skipping refinement and classification")
+            entry.transcript = ""
+            await db.flush()
+            await queue_svc.complete_job(db, job)
+            await db.commit()
+
+            db.add(Notification(
+                user_id=entry.user_id,
+                event_type="entry.classified",
+                payload_json=json.dumps({
+                    "entry_id": str(entry.id),
+                    "transcript": "",
+                    "categories": [],
+                }),
+            ))
+            await db.commit()
+            return
 
         # ── Step 1b: Refine transcript (LLM post-processing) ─────────────────
         await queue_svc.mark_step(db, job, "refining")
@@ -116,8 +131,6 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
         await queue_svc.mark_step(db, job, "classifying")
         await db.commit()
 
-        # categorize_text raises ValueError for empty transcript,
-        # returns list of {text, category} dicts otherwise.
         cat_results = await categorize_text(entry.transcript)
 
         # Insert one EntryClassification row per extracted activity.

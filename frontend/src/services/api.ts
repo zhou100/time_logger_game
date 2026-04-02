@@ -162,13 +162,14 @@ export const entriesApi = {
     async submit(
         entryId: string,
         audioKey: string,
-        opts?: { recordedAt?: string; durationSeconds?: number }
+        opts?: { recordedAt?: string; durationSeconds?: number; localDate?: string }
     ): Promise<SubmitResponse> {
         try {
             const res = await api.post<SubmitResponse>(`/v1/entries/${entryId}/submit`, {
                 audio_key: audioKey,
                 recorded_at: opts?.recordedAt,
                 duration_seconds: opts?.durationSeconds,
+                local_date: opts?.localDate,
             });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }

@@ -15,6 +15,7 @@ import Logger from '../utils/logger';
 interface UploadOptions {
     recordedAt?: string;
     durationSeconds?: number;
+    localDate?: string;
 }
 
 export function useUpload() {
@@ -40,7 +41,10 @@ export function useUpload() {
 
             // Phase 3: submit for processing
             Logger.info(`Submitting entry ${entry_id} for processing`);
-            const { job_id } = await entriesApi.submit(entry_id, audio_key, options);
+            const { job_id } = await entriesApi.submit(entry_id, audio_key, {
+                ...options,
+                localDate: options?.localDate,
+            });
 
             Logger.info(`Entry ${entry_id} queued as job ${job_id}`);
             return { entry_id, job_id };
