@@ -21,14 +21,14 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-SYSTEM_PROMPT = """You are a time-logging assistant. Extract ALL distinct activities \
-from the transcript and classify each into one of four life categories.
+SYSTEM_PROMPT = """You are a time-logging assistant. Extract ALL distinct activities, \
+tasks, ideas, and notes from the transcript and return them as a JSON array.
 
 Categories:
-- EARNING: work, meetings, deep work, admin, side projects, client calls, commute to work
-- LEARNING: reading, courses, podcasts, research, studying, practice, skill-building
-- RELAXING: exercise, hobbies, rest, entertainment, social outings, games, walks
-- FAMILY: time with kids, partner, parents, family meals, family errands, caregiving
+- TODO: a task or action item that needs to be done
+- IDEA: a creative thought, suggestion, or concept
+- THOUGHT: a general observation, reflection, or note
+- TIME_RECORD: time tracking — what the user worked on and for how long
 
 IMPORTANT rules:
 - Extract MULTIPLE entries from a single transcript. A 90-second monologue typically \
@@ -42,29 +42,32 @@ Only provide a number when the transcript explicitly states or strongly implies 
 
 Return valid JSON array only, with this shape:
 [
-  {"text": "specific activity or note text", "category": "EARNING|LEARNING|RELAXING|FAMILY", "estimated_minutes": <integer or null>},
+  {"text": "specific activity or note text", "category": "TODO|IDEA|THOUGHT|TIME_RECORD", "estimated_minutes": <integer or null>},
   ...
 ]
 
 Examples:
 
-Input: "Had a 1-on-1 with my manager this morning."
-Output: [{"text": "1-on-1 with manager", "category": "EARNING", "estimated_minutes": 30}]
+Input: "I need to fix the login bug tomorrow."
+Output: [{"text": "Fix the login bug", "category": "TODO", "estimated_minutes": null}]
 
-Input: "This morning I worked on the dashboard for about 2 hours. Then read a chapter \
-of that design book over lunch. Picked up the kids from school and took them to the park."
+Input: "This morning I worked on the dashboard for about 2 hours. Then had three \
+back-to-back meetings that felt unproductive. Had an idea to add voice replay to \
+the audit feature. Still need to write tests for the auth module."
 Output: [
-  {"text": "Worked on the dashboard for about 2 hours", "category": "EARNING", "estimated_minutes": 120},
-  {"text": "Read a chapter of a design book over lunch", "category": "LEARNING", "estimated_minutes": 30},
-  {"text": "Picked up the kids from school and took them to the park", "category": "FAMILY", "estimated_minutes": 60}
+  {"text": "Worked on the dashboard for about 2 hours", "category": "TIME_RECORD", "estimated_minutes": 120},
+  {"text": "Three back-to-back meetings that felt unproductive", "category": "TIME_RECORD", "estimated_minutes": 90},
+  {"text": "Add voice replay to the audit feature", "category": "IDEA", "estimated_minutes": null},
+  {"text": "Write tests for the auth module", "category": "TODO", "estimated_minutes": null}
 ]
 
-Input: "Spent the whole day debugging a config issue. Hit the gym after work for an hour. \
-Then watched a documentary about AI with my partner."
+Input: "Spent the whole day debugging a config issue. Finally fixed it at 5pm. \
+Realized we should document environment setup better. Also need to review the PR \
+from Sarah before standup tomorrow."
 Output: [
-  {"text": "Spent the day debugging a config issue", "category": "EARNING", "estimated_minutes": 480},
-  {"text": "Gym session after work", "category": "RELAXING", "estimated_minutes": 60},
-  {"text": "Watched a documentary about AI with partner", "category": "FAMILY", "estimated_minutes": 90}
+  {"text": "Spent the day debugging a config issue, fixed it at 5pm", "category": "TIME_RECORD", "estimated_minutes": 480},
+  {"text": "Document environment setup better", "category": "IDEA", "estimated_minutes": null},
+  {"text": "Review PR from Sarah before standup tomorrow", "category": "TODO", "estimated_minutes": null}
 ]"""
 
 
@@ -76,8 +79,8 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
 
     Fallback behaviour:
     - Empty transcript → raises ValueError("No speech detected")
-    - Empty array from LLM → returns [{"text": full_transcript, "category": "EARNING"}]
-    - Malformed/non-JSON response → returns [{"text": full_transcript, "category": "EARNING"}]
+    - Empty array from LLM → returns [{"text": full_transcript, "category": "THOUGHT"}]
+    - Malformed/non-JSON response → returns [{"text": full_transcript, "category": "THOUGHT"}]
     """
     stripped = text.strip() if text else ""
     if not stripped:
@@ -99,7 +102,7 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
         if not isinstance(results, list) or not results:
             raise ValueError("LLM returned empty or non-list result")
 
-        _VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY"}
+        _VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
         valid = [
             r for r in results
             if isinstance(r, dict) and r.get("text") and r.get("category") in _VALID_CATEGORIES
@@ -115,9 +118,9 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
 
     except (json.JSONDecodeError, ValueError, KeyError) as exc:
         logger.warning(
-            f"Categorization parse/validation failed ({exc}); falling back to EARNING"
+            f"Categorization parse/validation failed ({exc}); falling back to THOUGHT"
         )
-        return [{"text": stripped, "category": "EARNING"}]
+        return [{"text": stripped, "category": "THOUGHT"}]
     except Exception as exc:
         logger.error(f"Categorization API call failed: {exc}")
-        return [{"text": stripped, "category": "EARNING"}]
+        return [{"text": stripped, "category": "THOUGHT"}]

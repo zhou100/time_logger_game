@@ -143,11 +143,9 @@ const RecordingPage: React.FC = () => {
             setPendingEntryId(null);
             try {
                 Logger.info('Starting two-phase upload');
-                const now = new Date();
-                const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 const { entry_id } = await upload.mutateAsync({
                     blob,
-                    options: { recordedAt: now.toISOString(), localDate },
+                    options: { recordedAt: new Date().toISOString() },
                 });
                 setPendingEntryId(entry_id);
                 Logger.info(`Entry ${entry_id} submitted for processing`);

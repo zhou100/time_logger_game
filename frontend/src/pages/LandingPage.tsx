@@ -17,51 +17,51 @@ import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 const DEMO_ENTRIES: EntryItem[] = [
     {
         id: 'demo-1',
-        transcript: 'Worked on the dashboard redesign for about 2 hours this morning',
+        transcript: 'Fix the login bug before standup tomorrow',
         recorded_at: null,
         created_at: new Date(Date.now() - 3600000).toISOString(),
         duration_seconds: 8,
-        categories: [{ text: 'Worked on the dashboard redesign for about 2 hours', category: 'EARNING', estimated_minutes: 120 }],
+        categories: [{ text: 'Fix the login bug before standup tomorrow', category: 'TODO' }],
     },
     {
         id: 'demo-2',
-        transcript: 'Read a chapter of Designing Data-Intensive Applications over lunch',
+        transcript: 'Spent 2 hours on the dashboard redesign',
         recorded_at: null,
         created_at: new Date(Date.now() - 7200000).toISOString(),
         duration_seconds: 12,
-        categories: [{ text: 'Read a chapter of Designing Data-Intensive Applications over lunch', category: 'LEARNING', estimated_minutes: 30 }],
+        categories: [{ text: 'Spent 2 hours on the dashboard redesign', category: 'TIME_RECORD' }],
     },
     {
         id: 'demo-3',
-        transcript: 'Picked up the kids from school and went to the park',
+        transcript: 'Add voice replay to the audit feature',
         recorded_at: null,
         created_at: new Date(Date.now() - 10800000).toISOString(),
         duration_seconds: 5,
-        categories: [{ text: 'Picked up the kids from school and went to the park', category: 'FAMILY', estimated_minutes: 90 }],
+        categories: [{ text: 'Add voice replay to the audit feature', category: 'IDEA' }],
     },
     {
         id: 'demo-4',
-        transcript: 'Hit the gym for an hour after work',
+        transcript: 'The new sprint structure is working better',
         recorded_at: null,
         created_at: new Date(Date.now() - 14400000).toISOString(),
         duration_seconds: 10,
-        categories: [{ text: 'Gym session after work', category: 'RELAXING', estimated_minutes: 60 }],
+        categories: [{ text: 'The new sprint structure is working better', category: 'THOUGHT' }],
     },
     {
         id: 'demo-5',
-        transcript: 'Had back-to-back meetings with the product team',
+        transcript: 'Review PRs from the team before end of day',
         recorded_at: null,
         created_at: new Date(Date.now() - 18000000).toISOString(),
         duration_seconds: 6,
-        categories: [{ text: 'Back-to-back meetings with the product team', category: 'EARNING', estimated_minutes: 90 }],
+        categories: [{ text: 'Review PRs from the team before end of day', category: 'TODO' }],
     },
 ];
 
-const DEMO_AUDIT = `Your day leans heavily toward Earning (about 55%), with a solid 2-hour deep work block on the dashboard. That's your most productive stretch. The back-to-back meetings ate another 90 minutes, though, and you didn't mention what came out of them.
+const DEMO_AUDIT = `Your day shows a healthy mix of deep work and planning. About 40% of your logged time went to actionable tasks (login bug fix, PR reviews), which signals good prioritization. The 2-hour dashboard block stands out as your longest focused session — protect that kind of deep work.
 
-Good balance on the personal side: family time with the kids, a gym session, and some learning over lunch. You're hitting all four quadrants, which most people don't manage.
+One thing to watch: you have two TODOs that are deadline-sensitive (standup tomorrow, end of day). Consider batching quick tasks earlier so they don't compete with creative thinking later.
 
-Actionable insight: Try recording a voice note right after those meetings to capture what actually came out of them. If the answer is "nothing," that's useful data too.`;
+Actionable insight: Try recording a quick voice note right after each meeting to capture TODOs while they're fresh — you'll spend less time reconstructing action items later.`;
 
 function computeBreakdown(entries: EntryItem[]): Record<string, number> {
     const counts: Record<string, number> = {};

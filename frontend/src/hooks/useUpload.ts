@@ -14,7 +14,6 @@ import Logger from '../utils/logger';
 
 interface UploadOptions {
     recordedAt?: string;
-    localDate?: string;
     durationSeconds?: number;
 }
 

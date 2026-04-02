@@ -62,7 +62,6 @@ class PresignResponse(BaseModel):
 class SubmitRequest(BaseModel):
     audio_key: str                          # must match the key from presign
     recorded_at: Optional[datetime] = None  # client-side timestamp
-    local_date: Optional[str] = None        # client's local YYYY-MM-DD
     duration_seconds: Optional[int] = None
 
 
@@ -71,7 +70,7 @@ class SubmitResponse(BaseModel):
     job_id: str
 
 
-VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY"}
+VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
 
 
 class CategoryItem(BaseModel):
@@ -179,22 +178,11 @@ async def submit_entry(
     if not body.audio_key.startswith(expected_prefix):
         raise HTTPException(status_code=400, detail="audio_key does not match user")
 
-    # Parse local_date from client, fall back to UTC date
-    local_date_val = None
-    if body.local_date:
-        try:
-            local_date_val = datetime.strptime(body.local_date, "%Y-%m-%d").date()
-        except ValueError:
-            pass
-    if local_date_val is None:
-        local_date_val = datetime.now(timezone.utc).date()
-
     entry = Entry(
         id=entry_uuid,
         user_id=current_user.id,
         raw_audio_key=body.audio_key,
         recorded_at=body.recorded_at,
-        local_date=local_date_val,
         duration_seconds=body.duration_seconds,
     )
     db.add(entry)
@@ -260,14 +248,13 @@ async def get_active_dates(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return sorted list of YYYY-MM-DD dates on which the user has entries.
-    Uses recorded_at (client-reported local time) so dates match the user's timezone."""
+    """Return sorted list of YYYY-MM-DD dates (UTC) on which the user has entries."""
     result = await db.execute(
-        select(Entry.local_date.label("day"))
+        select(func.date(Entry.created_at).label("day"))
         .join(Job, Job.entry_id == Entry.id)
-        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED, Entry.local_date.isnot(None))
-        .group_by(Entry.local_date)
-        .order_by(Entry.local_date.desc())
+        .where(Entry.user_id == current_user.id, Job.status != JobStatus.FAILED)
+        .group_by(func.date(Entry.created_at))
+        .order_by(func.date(Entry.created_at).desc())
     )
     return [str(row.day) for row in result.all()]
 
@@ -276,21 +263,22 @@ async def get_active_dates(
 async def list_entries(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD, user's local date)"),
+    date: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD, UTC)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Paginated list of the user's entries, newest first. Optionally filter by date.
-    Uses recorded_at (client-reported local time) so dates match the user's timezone."""
+    """Paginated list of the user's entries, newest first. Optionally filter by date."""
     base_filters = [Entry.user_id == current_user.id, Job.status != JobStatus.FAILED]
 
-    # Optional date filter — uses recorded_at (user's local time, not server UTC)
+    # Optional date filter
     if date:
         try:
-            filter_date = datetime.strptime(date, "%Y-%m-%d").date()
+            filter_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-        base_filters.extend([Entry.local_date == filter_date])
+        day_start = filter_date
+        day_end = filter_date + timedelta(days=1)
+        base_filters.extend([Entry.created_at >= day_start, Entry.created_at < day_end])
 
     total_result = await db.execute(
         select(func.count(Entry.id)).join(Job, Job.entry_id == Entry.id).where(*base_filters)
@@ -388,7 +376,6 @@ async def update_entry(
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
         entry.created_at = target_dt
         entry.recorded_at = target_dt
-        entry.local_date = target_dt.date()
 
     if body.transcript is not None:
         entry.transcript = body.transcript
@@ -515,8 +502,16 @@ async def generate_weekly_audit(
         if cached is not None:
             return cached
 
-    # Fetch entries for the past 7 days using recorded_at (user's local time)
-    week_start_date = today_utc - timedelta(days=6)
+    # Fetch entries for the past 7 days
+    week_start = datetime(
+        (today_utc - timedelta(days=6)).year,
+        (today_utc - timedelta(days=6)).month,
+        (today_utc - timedelta(days=6)).day,
+        tzinfo=timezone.utc,
+    )
+    week_end = datetime(
+        today_utc.year, today_utc.month, today_utc.day, tzinfo=timezone.utc
+    ) + timedelta(days=1)
 
     result = await db.execute(
         select(Entry)
@@ -524,11 +519,11 @@ async def generate_weekly_audit(
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == current_user.id,
-            Entry.local_date >= week_start_date,
-            Entry.local_date <= today_utc,
+            Entry.created_at >= week_start,
+            Entry.created_at < week_end,
             Job.status == JobStatus.DONE,
         )
-        .order_by(Entry.recorded_at.asc())
+        .order_by(Entry.created_at.asc())
     )
     entries = result.scalars().all()
 
@@ -545,7 +540,7 @@ async def generate_weekly_audit(
     # Build per-day summary for the coach prompt
     day_summaries: Dict[str, List[str]] = {}
     for e in entries:
-        day_key = (e.recorded_at or e.created_at).strftime("%A %m/%d")
+        day_key = e.created_at.strftime("%A %m/%d")
         for c in e.classifications:
             text = c.extracted_text or e.transcript or ""
             mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
@@ -660,17 +655,22 @@ async def get_weekly_audit_history(
 async def _fetch_entries_for_date(
     db: AsyncSession, user_id: int, target_date
 ) -> tuple:
-    """Fetch processed entries for a given date using recorded_at (user's local time)."""
+    """Fetch processed entries for a UTC day. Returns (entries, all_classifications)."""
+    day_start = datetime(target_date.year, target_date.month, target_date.day,
+                         tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+
     result = await db.execute(
         select(Entry)
         .join(Job, Job.entry_id == Entry.id)
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == user_id,
-            Entry.local_date == target_date,
+            Entry.created_at >= day_start,
+            Entry.created_at < day_end,
             Job.status == JobStatus.DONE,
         )
-        .order_by(Entry.recorded_at.asc())
+        .order_by(Entry.created_at.asc())
     )
     entries = result.scalars().all()
     all_classifications = [c for e in entries for c in e.classifications]

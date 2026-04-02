@@ -26,7 +26,7 @@ import { CATEGORY_COLORS, palette } from '../theme';
 import DatePickerPopover from './DatePickerPopover';
 import { entriesApi } from '../services/api';
 
-const CATEGORIES = ['EARNING', 'LEARNING', 'RELAXING', 'FAMILY'];
+const CATEGORIES = ['TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD'];
 
 interface EntryCardProps {
     entry: EntryItem;
@@ -63,7 +63,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const handleEditStart = (index: number) => {
         const cat = categories[index];
         setEditText(cat?.text ?? entry.transcript ?? '');
-        setEditCategory(cat?.category ?? 'EARNING');
+        setEditCategory(cat?.category ?? 'THOUGHT');
         setEditingIndex(index);
     };
 

@@ -210,7 +210,7 @@ EntryClassifications:
   - id (PK)
   - entry_id (FK -> Entries)
   - text (extracted content)
-  - category (ENUM: EARNING, LEARNING, RELAXING, FAMILY)
+  - category (ENUM: TODO, IDEA, THOUGHT, TIME_RECORD)
   - estimated_minutes (nullable)
 
 Jobs:

@@ -1,6 +1,6 @@
 """add local_date to entries
 
-Revision ID: g6h7i8j9k0l1
+Revision ID: a1b2c3d4e5f6
 Revises: f5a6b7c8d9e0
 Create Date: 2026-04-01 23:00:00.000000
 """
@@ -8,7 +8,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "g6h7i8j9k0l1"
+revision: str = "a1b2c3d4e5f6"
 down_revision: Union[str, None] = "f5a6b7c8d9e0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
