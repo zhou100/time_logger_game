@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from openai import AsyncOpenAI
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -261,16 +261,16 @@ async def get_active_dates(
     current_user: User = Depends(get_current_user),
 ):
     """Return sorted list of YYYY-MM-DD dates on which the user has entries."""
+    effective_date = func.coalesce(Entry.local_date, func.date(Entry.created_at))
     result = await db.execute(
-        select(Entry.local_date)
+        select(effective_date.label("d"))
         .join(Job, Job.entry_id == Entry.id)
         .where(
             Entry.user_id == current_user.id,
             Job.status != JobStatus.FAILED,
-            Entry.local_date.isnot(None),
         )
-        .group_by(Entry.local_date)
-        .order_by(Entry.local_date.desc())
+        .group_by(effective_date)
+        .order_by(effective_date.desc())
     )
     return [str(row[0]) for row in result.all()]
 
@@ -292,7 +292,7 @@ async def list_entries(
             filter_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-        base_filters.append(Entry.local_date == filter_date)
+        base_filters.append(_date_match(filter_date))
 
     total_result = await db.execute(
         select(func.count(Entry.id)).join(Job, Job.entry_id == Entry.id).where(*base_filters)
@@ -525,8 +525,8 @@ async def generate_weekly_audit(
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == current_user.id,
-            Entry.local_date >= week_start_date,
-            Entry.local_date <= today_utc,
+            func.coalesce(Entry.local_date, func.date(Entry.created_at)) >= week_start_date,
+            func.coalesce(Entry.local_date, func.date(Entry.created_at)) <= today_utc,
             Job.status == JobStatus.DONE,
         )
         .order_by(Entry.created_at.asc())
@@ -669,7 +669,7 @@ async def _fetch_entries_for_date(
         .options(selectinload(Entry.classifications))
         .where(
             Entry.user_id == user_id,
-            Entry.local_date == target_date,
+            _date_match(target_date),
             Job.status == JobStatus.DONE,
         )
         .order_by(Entry.created_at.asc())
@@ -805,6 +805,15 @@ async def _save_audit(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _date_match(target_date):
+    """Match entries by local_date, falling back to DATE(created_at) for old rows with NULL local_date."""
+    return or_(
+        Entry.local_date == target_date,
+        and_(Entry.local_date.is_(None), func.date(Entry.created_at) == target_date),
+    )
+
 
 def _content_type_to_suffix(content_type: str) -> str:
     mapping = {
