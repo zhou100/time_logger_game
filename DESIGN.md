@@ -51,10 +51,14 @@
 - **Category colors:**
   | Category | Hex | Usage |
   |----------|-----|-------|
-  | TODO | `#B6492D` | Deep work, actionable tasks |
-  | IDEA | `#8A5A44` | Creative, brainstorming |
-  | THOUGHT | `#6F6258` | Reflection, observation |
-  | TIME_RECORD | `#3E5A63` | Logged time, tracking |
+  | EARNING | `#3E5A63` | Work, meetings, deep work |
+  | LEARNING | `#5E6B4A` | Reading, courses, practice |
+  | RELAXING | `#7B6B8A` | Exercise, rest, hobbies |
+  | FAMILY | `#9C6B2F` | Family time, caregiving |
+  | TODO | `#B6492D` | Action items, tasks |
+  | IDEA | `#8A5A44` | Creative thoughts |
+  | THOUGHT | `#6F6258` | Reflections, observations |
+  | TIME_RECORD | `#3E5A63` | Legacy (same as EARNING) |
 - **Semantic colors:**
   | Role | Hex | Name |
   |------|-----|------|

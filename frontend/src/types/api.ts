@@ -21,6 +21,10 @@ export interface TokenResponse {
 // ── Categories ────────────────────────────────────────────────────────────────
 
 export enum Category {
+    EARNING = 'EARNING',
+    LEARNING = 'LEARNING',
+    RELAXING = 'RELAXING',
+    FAMILY = 'FAMILY',
     TODO = 'TODO',
     IDEA = 'IDEA',
     THOUGHT = 'THOUGHT',
@@ -69,6 +73,8 @@ export interface EntryListResponse {
     total: number;
     skip: number;
     limit: number;
+    activity_breakdown?: Record<string, number> | null;
+    capture_counts?: Record<string, number> | null;
 }
 
 

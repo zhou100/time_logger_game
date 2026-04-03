@@ -40,8 +40,8 @@ async def test_single_entry_todo():
 async def test_multi_entry_extraction():
     """Long transcript produces multiple entries with correct categories."""
     items = [
-        {"text": "Worked on dashboard for 2 hours", "category": "TIME_RECORD"},
-        {"text": "Three back-to-back meetings", "category": "TIME_RECORD"},
+        {"text": "Worked on dashboard for 2 hours", "category": "EARNING"},
+        {"text": "Three back-to-back meetings", "category": "EARNING"},
         {"text": "Add voice replay to audit", "category": "IDEA"},
         {"text": "Write tests for auth module", "category": "TODO"},
     ]
@@ -58,19 +58,23 @@ async def test_multi_entry_extraction():
 
     assert len(result) == 4
     categories = [r["category"] for r in result]
-    assert "TIME_RECORD" in categories
+    assert "EARNING" in categories
     assert "IDEA" in categories
     assert "TODO" in categories
 
 
 @pytest.mark.asyncio
 async def test_all_valid_categories_accepted():
-    """All four valid categories are returned as-is."""
+    """All valid categories are returned as-is."""
     items = [
-        {"text": "A", "category": "TODO"},
-        {"text": "B", "category": "IDEA"},
-        {"text": "C", "category": "THOUGHT"},
-        {"text": "D", "category": "TIME_RECORD"},
+        {"text": "A", "category": "EARNING"},
+        {"text": "B", "category": "LEARNING"},
+        {"text": "C", "category": "RELAXING"},
+        {"text": "D", "category": "FAMILY"},
+        {"text": "E", "category": "TODO"},
+        {"text": "F", "category": "IDEA"},
+        {"text": "G", "category": "THOUGHT"},
+        {"text": "H", "category": "TIME_RECORD"},
     ]
     mock_create = AsyncMock(return_value=_mock_openai_response(json.dumps(items)))
 
@@ -78,8 +82,11 @@ async def test_all_valid_categories_accepted():
         mock_client.return_value.chat.completions.create = mock_create
         result = await categorize_text("Some transcript text covering many topics.")
 
-    assert len(result) == 4
-    assert {r["category"] for r in result} == {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+    assert len(result) == 8
+    assert {r["category"] for r in result} == {
+        "EARNING", "LEARNING", "RELAXING", "FAMILY",
+        "TODO", "IDEA", "THOUGHT", "TIME_RECORD",
+    }
 
 
 # ── Fallback: empty / malformed LLM response ─────────────────────────────────

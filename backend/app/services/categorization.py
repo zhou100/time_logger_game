@@ -24,11 +24,25 @@ def _get_client() -> AsyncOpenAI:
 SYSTEM_PROMPT = """You are a time-logging assistant. Extract ALL distinct activities, \
 tasks, ideas, and notes from the transcript and return them as a JSON array.
 
-Categories:
+Categories — two dimensions:
+
+Activity categories (how the user spent time):
+- EARNING: work, meetings, deep work, side projects, clients, commute to work
+- LEARNING: reading, courses, research, practice, skill-building
+- RELAXING: exercise, rest, hobbies, entertainment, social outings, naps
+- FAMILY: family time, caregiving, family errands, partner time
+
+Capture categories (follow-up items):
 - TODO: a task or action item that needs to be done
 - IDEA: a creative thought, suggestion, or concept
 - THOUGHT: a general observation, reflection, or note
-- TIME_RECORD: time tracking — what the user worked on and for how long
+
+Disambiguation rules:
+- Work lunch / business dinner = EARNING (primary intent is work)
+- Gym / exercise = RELAXING (even if it feels productive)
+- Reading for a work project = EARNING; reading for personal growth = LEARNING
+- Commute to work = EARNING; running family errands = FAMILY
+- When an activity serves multiple categories, classify by primary intent.
 
 IMPORTANT rules:
 - Extract MULTIPLE entries from a single transcript. A 90-second monologue typically \
@@ -42,7 +56,7 @@ Only provide a number when the transcript explicitly states or strongly implies 
 
 Return valid JSON array only, with this shape:
 [
-  {"text": "specific activity or note text", "category": "TODO|IDEA|THOUGHT|TIME_RECORD", "estimated_minutes": <integer or null>},
+  {"text": "specific activity or note text", "category": "EARNING|LEARNING|RELAXING|FAMILY|TODO|IDEA|THOUGHT", "estimated_minutes": <integer or null>},
   ...
 ]
 
@@ -55,19 +69,18 @@ Input: "This morning I worked on the dashboard for about 2 hours. Then had three
 back-to-back meetings that felt unproductive. Had an idea to add voice replay to \
 the audit feature. Still need to write tests for the auth module."
 Output: [
-  {"text": "Worked on the dashboard for about 2 hours", "category": "TIME_RECORD", "estimated_minutes": 120},
-  {"text": "Three back-to-back meetings that felt unproductive", "category": "TIME_RECORD", "estimated_minutes": 90},
+  {"text": "Worked on the dashboard for about 2 hours", "category": "EARNING", "estimated_minutes": 120},
+  {"text": "Three back-to-back meetings that felt unproductive", "category": "EARNING", "estimated_minutes": 90},
   {"text": "Add voice replay to the audit feature", "category": "IDEA", "estimated_minutes": null},
   {"text": "Write tests for the auth module", "category": "TODO", "estimated_minutes": null}
 ]
 
-Input: "Spent the whole day debugging a config issue. Finally fixed it at 5pm. \
-Realized we should document environment setup better. Also need to review the PR \
-from Sarah before standup tomorrow."
+Input: "Spent an hour reading about distributed systems. Then picked up the kids from \
+school and helped with homework. Realized we should document environment setup better."
 Output: [
-  {"text": "Spent the day debugging a config issue, fixed it at 5pm", "category": "TIME_RECORD", "estimated_minutes": 480},
-  {"text": "Document environment setup better", "category": "IDEA", "estimated_minutes": null},
-  {"text": "Review PR from Sarah before standup tomorrow", "category": "TODO", "estimated_minutes": null}
+  {"text": "Reading about distributed systems for an hour", "category": "LEARNING", "estimated_minutes": 60},
+  {"text": "Picked up kids from school and helped with homework", "category": "FAMILY", "estimated_minutes": 90},
+  {"text": "Document environment setup better", "category": "IDEA", "estimated_minutes": null}
 ]"""
 
 
@@ -102,7 +115,7 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
         if not isinstance(results, list) or not results:
             raise ValueError("LLM returned empty or non-list result")
 
-        _VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+        _VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
         valid = [
             r for r in results
             if isinstance(r, dict) and r.get("text") and r.get("category") in _VALID_CATEGORIES

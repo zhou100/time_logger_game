@@ -71,7 +71,11 @@ class SubmitResponse(BaseModel):
     job_id: str
 
 
-VALID_CATEGORIES = {"TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+
+# Activity categories count toward time breakdown; capture categories are follow-up items
+ACTIVITY_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TIME_RECORD"}
+CAPTURE_CATEGORIES = {"TODO", "IDEA", "THOUGHT"}
 
 
 class CategoryItem(BaseModel):
@@ -117,6 +121,8 @@ class EntryListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+    activity_breakdown: Optional[Dict[str, float]] = None
+    capture_counts: Optional[Dict[str, int]] = None
 
 
 class EntryUpdateRequest(BaseModel):
@@ -325,7 +331,29 @@ async def list_entries(
         for e in entries
     ]
 
-    return EntryListResponse(items=items, total=total, skip=skip, limit=limit)
+    # Compute server-side breakdown when date filter is present (avoids pagination truncation)
+    activity_breakdown = None
+    capture_counts = None
+    if date and entries:
+        # Fetch ALL classifications for this user+date (not paginated)
+        all_cls_result = await db.execute(
+            select(EntryClassification)
+            .join(Entry, EntryClassification.entry_id == Entry.id)
+            .join(Job, Job.entry_id == Entry.id)
+            .where(
+                Entry.user_id == current_user.id,
+                _date_match(filter_date),
+                Job.status != JobStatus.FAILED,
+            )
+        )
+        all_classifications = all_cls_result.scalars().all()
+        activity_breakdown, _ = _compute_activity_breakdown(all_classifications)
+        capture_counts = _compute_capture_counts(all_classifications)
+
+    return EntryListResponse(
+        items=items, total=total, skip=skip, limit=limit,
+        activity_breakdown=activity_breakdown, capture_counts=capture_counts,
+    )
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -407,6 +435,7 @@ async def update_entry(
                     entry_id=entry.id,
                     category=cat_item.category,
                     extracted_text=cat_item.text,
+                    estimated_minutes=cat_item.estimated_minutes,
                     display_order=i,
                     user_override=True,
                 )
@@ -556,7 +585,10 @@ async def generate_weekly_audit(
         f"{day}:\n" + "\n".join(items)
         for day, items in day_summaries.items()
     )
-    breakdown_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in breakdown.items())
+    activity_breakdown, _ = _compute_activity_breakdown(all_classifications)
+    capture_counts = _compute_capture_counts(all_classifications)
+    activity_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in activity_breakdown.items()) or "No activity entries"
+    capture_summary = ", ".join(f"{count} {cat}{'s' if count > 1 else ''}" for cat, count in capture_counts.items()) or "None"
 
     weekly_prompt = f"""You are an opinionated, honest AI time coach writing a weekly review letter.
 
@@ -566,11 +598,19 @@ Based ONLY on the activities listed below, write a personal weekly review (3-4 p
 - Says the uncomfortable truth if the data shows it (e.g. "You spent 60% of your week in meetings despite saying deep work is your priority")
 - Ends with one specific, actionable change for next week
 
+Frame your analysis using Naval's time framework:
+- EARNING = making money (work, meetings, clients)
+- LEARNING = building knowledge (reading, courses, practice)
+- RELAXING = recharging (exercise, rest, hobbies)
+- FAMILY = relationships (partner, kids, parents)
+Point out the balance or imbalance across the week. If one category dominates or is missing, call it out.
+
 Tone: direct, slightly provocative, like a coach who respects you enough to be honest.
 IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
 Reference ONLY the activities listed. Do not invent activities.
 
-Weekly breakdown: {breakdown_summary}
+Weekly activity breakdown: {activity_summary}
+Weekly follow-up items: {capture_summary}
 
 Daily activities:
 {day_text}"""
@@ -682,7 +722,7 @@ async def _fetch_entries_for_date(
 def _compute_breakdown(
     all_classifications: list,
 ) -> tuple[Dict[str, float], bool]:
-    """Time-weighted breakdown. Returns (breakdown_dict, approximate_flag)."""
+    """Time-weighted breakdown (all categories). Returns (breakdown_dict, approximate_flag)."""
     if not all_classifications:
         return {}, False
 
@@ -705,6 +745,25 @@ def _compute_breakdown(
     return breakdown, not has_all
 
 
+def _compute_activity_breakdown(
+    all_classifications: list,
+) -> tuple[Dict[str, float], bool]:
+    """Time-weighted breakdown of activity categories only (EARNING/LEARNING/RELAXING/FAMILY/TIME_RECORD)."""
+    activity_cls = [c for c in all_classifications if c.category in ACTIVITY_CATEGORIES]
+    return _compute_breakdown(activity_cls)
+
+
+def _compute_capture_counts(
+    all_classifications: list,
+) -> Dict[str, int]:
+    """Simple counts of capture categories (TODO/IDEA/THOUGHT)."""
+    counts: Dict[str, int] = {}
+    for c in all_classifications:
+        if c.category in CAPTURE_CATEGORIES:
+            counts[c.category] = counts.get(c.category, 0) + 1
+    return counts
+
+
 async def _generate_audit_text(
     entries: list, all_classifications: list, breakdown: Dict[str, float],
 ) -> Optional[str]:
@@ -716,7 +775,11 @@ async def _generate_audit_text(
             mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
             entry_lines.append(f"- [{c.category}]{mins} {text}")
 
-    breakdown_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in breakdown.items())
+    activity_breakdown, _ = _compute_activity_breakdown(all_classifications)
+    capture_counts = _compute_capture_counts(all_classifications)
+
+    activity_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in activity_breakdown.items()) or "No activity entries"
+    capture_summary = ", ".join(f"{count} {cat}{'s' if count > 1 else ''}" for cat, count in capture_counts.items()) or "None"
     entry_summary = "\n".join(entry_lines)
 
     audit_prompt = f"""You are an honest, direct AI time coach. Based ONLY on the \
@@ -725,10 +788,18 @@ activities listed below, write a short audit (2-3 paragraphs, under 300 words) t
 - Calls out what the numbers reveal (e.g. blocked time, admin overhead, shallow work)
 - Gives one specific, actionable insight
 
+Frame your analysis using Naval's time framework:
+- EARNING = making money (work, meetings, clients)
+- LEARNING = building knowledge (reading, courses, practice)
+- RELAXING = recharging (exercise, rest, hobbies)
+- FAMILY = relationships (partner, kids, parents)
+Point out the balance or imbalance. If one category dominates or is missing, call it out.
+
 IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
 Reference ONLY the activities listed. Do not invent activities not mentioned.
 
-Category breakdown: {breakdown_summary}
+Activity breakdown: {activity_summary}
+Follow-up items: {capture_summary}
 
 Activities recorded today:
 {entry_summary}"""

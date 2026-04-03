@@ -46,7 +46,7 @@ def _make_entry(user_id: int = 1, n_classifications: int = 1,
     categories: list of category strings, e.g. ["TODO", "IDEA"]
     """
     if categories is None:
-        categories = ["TIME_RECORD"] * n_classifications
+        categories = ["EARNING"] * n_classifications
     e = MagicMock()
     e.id = uuid.uuid4()
     e.user_id = user_id
@@ -92,7 +92,7 @@ def _override_auth(app_instance, user_id: int = 1):
 @pytest.mark.asyncio
 async def test_audit_happy_path(app):
     """Happy path: entries found → breakdown + audit_text returned."""
-    entries = [_make_entry(categories=["TODO", "TIME_RECORD", "IDEA"])]
+    entries = [_make_entry(categories=["TODO", "EARNING", "IDEA"])]
     db = _mock_db_with_entries(entries)
     _override_auth(app)
 
@@ -115,7 +115,7 @@ async def test_audit_happy_path(app):
     data = resp.json()
     assert data["entries"] == 1
     assert "TODO" in data["breakdown"]
-    assert "TIME_RECORD" in data["breakdown"]
+    assert "EARNING" in data["breakdown"]
     assert "IDEA" in data["breakdown"]
     assert data["audit_text"] == audit_text
     assert data["generated_at"] is not None

@@ -29,39 +29,8 @@ import { AuditResponse, EntryItem, WeeklyAuditHistoryItem } from '../types/api';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
-/**
- * Time-weighted breakdown:
- * 1. All non-null estimated_minutes → exact percentages
- * 2. Some null → fill nulls with average, show "~" prefix
- * 3. All null → equal weight (1/N each), show "~" prefix
- */
-function computeBreakdown(entries: EntryItem[]): { breakdown: Record<string, number>; approximate: boolean } {
-    const cats = entries.flatMap((e) => e.categories);
-    if (cats.length === 0) return { breakdown: {}, approximate: false };
-
-    const hasAny = cats.some((c) => c.estimated_minutes != null);
-    const hasAll = cats.every((c) => c.estimated_minutes != null);
-
-    const weights: Record<string, number> = {};
-    if (hasAny) {
-        const nonNull = cats.filter((c) => c.estimated_minutes != null).map((c) => c.estimated_minutes!);
-        const avg = nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
-        for (const c of cats) {
-            const w = c.estimated_minutes ?? avg;
-            weights[c.category] = (weights[c.category] ?? 0) + w;
-        }
-    } else {
-        for (const c of cats) {
-            weights[c.category] = (weights[c.category] ?? 0) + 1;
-        }
-    }
-
-    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
-    const breakdown = Object.fromEntries(
-        Object.entries(weights).map(([cat, w]) => [cat, Math.round((w / total) * 100)])
-    );
-    return { breakdown, approximate: !hasAll };
-}
+const ACTIVITY_CATEGORIES = new Set(['EARNING', 'LEARNING', 'RELAXING', 'FAMILY', 'TIME_RECORD']);
+const CAPTURE_CATEGORIES = new Set(['TODO', 'IDEA', 'THOUGHT']);
 
 /** Format "2026-03-25" → "Mar 25" */
 function formatDateLabel(iso: string): string {
@@ -196,8 +165,10 @@ const RecordingPage: React.FC = () => {
     }, [drawerOpen]); // eslint-disable-line
 
     const entries = entriesData?.items ?? [];
-    const { breakdown, approximate } = useMemo(() => computeBreakdown(entries), [entries]);
-    const hasBreakdown = Object.keys(breakdown).length > 0;
+    const activityBreakdown = entriesData?.activity_breakdown ?? {};
+    const captureCounts = entriesData?.capture_counts ?? {};
+    const hasActivityBreakdown = Object.keys(activityBreakdown).length > 0;
+    const hasCaptureCounts = Object.keys(captureCounts).length > 0;
 
     // Reset audit when date changes
     useEffect(() => {
@@ -343,18 +314,18 @@ const RecordingPage: React.FC = () => {
                     {/* Right: breakdown bars + AI audit */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
-                        {/* Category breakdown */}
+                        {/* Activity breakdown */}
                         <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                                Time Breakdown — {isToday ? 'today' : formatDateLabel(selectedDate)}
+                                How you spent time — {isToday ? 'today' : formatDateLabel(selectedDate)}
                             </Typography>
 
-                            {!hasBreakdown ? (
+                            {!hasActivityBreakdown ? (
                                 <Typography variant="body2" color="text.secondary">
-                                    Breakdown will appear once entries are classified.
+                                    No time entries yet.
                                 </Typography>
                             ) : (
-                                Object.entries(breakdown)
+                                Object.entries(activityBreakdown)
                                     .sort(([, a], [, b]) => b - a)
                                     .map(([cat, pct]) => (
                                         <Box key={cat} sx={{ mb: 1 }}>
@@ -363,7 +334,7 @@ const RecordingPage: React.FC = () => {
                                                     {CATEGORY_LABELS[cat] ?? cat}
                                                 </Typography>
                                                 <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                                    {approximate ? '~' : ''}{pct}%
+                                                    {pct}%
                                                 </Typography>
                                             </Box>
                                             <LinearProgress
@@ -379,6 +350,19 @@ const RecordingPage: React.FC = () => {
                                             />
                                         </Box>
                                     ))
+                            )}
+
+                            {hasCaptureCounts && (
+                                <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${palette.rule}` }}>
+                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                        What came up
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {Object.entries(captureCounts)
+                                            .map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`)
+                                            .join(' · ')}
+                                    </Typography>
+                                </Box>
                             )}
                         </Box>
 

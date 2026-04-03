@@ -21,6 +21,10 @@ const serif = '"DM Serif Display", "Noto Serif SC", serif';
 const sans = '"DM Sans", "Noto Sans SC", sans-serif';
 
 export const CATEGORY_COLORS: Record<string, string> = {
+    EARNING: '#3E5A63',
+    LEARNING: '#5E6B4A',
+    RELAXING: '#7B6B8A',
+    FAMILY: '#9C6B2F',
     TODO: '#B6492D',
     IDEA: '#8A5A44',
     THOUGHT: '#6F6258',
@@ -28,10 +32,14 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
-    TODO: 'TODO / Deep work',
-    IDEA: 'IDEA / Creative',
-    THOUGHT: 'THOUGHT / Reflection',
-    TIME_RECORD: 'TIME / Logged',
+    EARNING: 'Earning',
+    LEARNING: 'Learning',
+    RELAXING: 'Relaxing',
+    FAMILY: 'Family',
+    TODO: 'TODO',
+    IDEA: 'Idea',
+    THOUGHT: 'Thought',
+    TIME_RECORD: 'Time (legacy)',
 };
 
 export const theme = createTheme({

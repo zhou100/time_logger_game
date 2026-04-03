@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
     Box,
@@ -17,69 +17,59 @@ import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 const DEMO_ENTRIES: EntryItem[] = [
     {
         id: 'demo-1',
-        transcript: 'Fix the login bug before standup tomorrow',
+        transcript: 'Spent 2 hours on the dashboard redesign this morning',
         recorded_at: null,
         created_at: new Date(Date.now() - 3600000).toISOString(),
-        duration_seconds: 8,
-        categories: [{ text: 'Fix the login bug before standup tomorrow', category: 'TODO' }],
+        duration_seconds: 12,
+        categories: [{ text: 'Spent 2 hours on the dashboard redesign', category: 'EARNING', estimated_minutes: 120 }],
     },
     {
         id: 'demo-2',
-        transcript: 'Spent 2 hours on the dashboard redesign',
+        transcript: 'Read a chapter on system design patterns during lunch',
         recorded_at: null,
         created_at: new Date(Date.now() - 7200000).toISOString(),
-        duration_seconds: 12,
-        categories: [{ text: 'Spent 2 hours on the dashboard redesign', category: 'TIME_RECORD' }],
+        duration_seconds: 8,
+        categories: [{ text: 'Read a chapter on system design patterns', category: 'LEARNING', estimated_minutes: 30 }],
     },
     {
         id: 'demo-3',
-        transcript: 'Add voice replay to the audit feature',
+        transcript: 'Went for a 30 minute run after work',
         recorded_at: null,
         created_at: new Date(Date.now() - 10800000).toISOString(),
         duration_seconds: 5,
-        categories: [{ text: 'Add voice replay to the audit feature', category: 'IDEA' }],
+        categories: [{ text: 'Went for a 30 minute run', category: 'RELAXING', estimated_minutes: 30 }],
     },
     {
         id: 'demo-4',
-        transcript: 'The new sprint structure is working better',
+        transcript: 'Fix the login bug before standup tomorrow. Also had an idea to add voice replay to the audit feature.',
         recorded_at: null,
         created_at: new Date(Date.now() - 14400000).toISOString(),
         duration_seconds: 10,
-        categories: [{ text: 'The new sprint structure is working better', category: 'THOUGHT' }],
+        categories: [
+            { text: 'Fix the login bug before standup tomorrow', category: 'TODO' },
+            { text: 'Add voice replay to the audit feature', category: 'IDEA' },
+        ],
     },
     {
         id: 'demo-5',
-        transcript: 'Review PRs from the team before end of day',
+        transcript: 'Picked up the kids from school and helped with homework',
         recorded_at: null,
         created_at: new Date(Date.now() - 18000000).toISOString(),
         duration_seconds: 6,
-        categories: [{ text: 'Review PRs from the team before end of day', category: 'TODO' }],
+        categories: [{ text: 'Picked up kids and helped with homework', category: 'FAMILY', estimated_minutes: 90 }],
     },
 ];
 
-const DEMO_AUDIT = `Your day shows a healthy mix of deep work and planning. About 40% of your logged time went to actionable tasks (login bug fix, PR reviews), which signals good prioritization. The 2-hour dashboard block stands out as your longest focused session — protect that kind of deep work.
+const DEMO_AUDIT = `Your day is heavily weighted toward Earning (44%) — the 2-hour dashboard block is solid deep work. But you're missing balance: Learning got a quick lunch read (11%) and Relaxing was just a run (11%). Family time (33%) is healthy with the school pickup.
 
-One thing to watch: you have two TODOs that are deadline-sensitive (standup tomorrow, end of day). Consider batching quick tasks earlier so they don't compete with creative thinking later.
+The uncomfortable truth: you have two follow-up items (a TODO and an IDEA) that came up mid-day but no time blocked to act on them. TODOs that linger become stress.
 
-Actionable insight: Try recording a quick voice note right after each meeting to capture TODOs while they're fresh — you'll spend less time reconstructing action items later.`;
+Actionable insight: Block 30 minutes tomorrow morning for that login bug fix — it's deadline-sensitive (standup) and will free your mind for deeper work the rest of the day.`;
 
-function computeBreakdown(entries: EntryItem[]): Record<string, number> {
-    const counts: Record<string, number> = {};
-    let total = 0;
-    for (const e of entries) {
-        for (const c of e.categories) {
-            counts[c.category] = (counts[c.category] ?? 0) + 1;
-            total++;
-        }
-    }
-    if (total === 0) return {};
-    return Object.fromEntries(
-        Object.entries(counts).map(([cat, n]) => [cat, Math.round((n / total) * 100)])
-    );
-}
+const DEMO_ACTIVITY_BREAKDOWN: Record<string, number> = { EARNING: 44, FAMILY: 33, LEARNING: 11, RELAXING: 11 };
+const DEMO_CAPTURE_COUNTS: Record<string, number> = { TODO: 1, IDEA: 1 };
 
 const LandingPage: React.FC = () => {
-    const breakdown = useMemo(() => computeBreakdown(DEMO_ENTRIES), []);
 
     return (
         <Container maxWidth="md">
@@ -128,9 +118,9 @@ const LandingPage: React.FC = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
                             <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                                Time Breakdown — today
+                                How you spent time — today
                             </Typography>
-                            {Object.entries(breakdown)
+                            {Object.entries(DEMO_ACTIVITY_BREAKDOWN)
                                 .sort(([, a], [, b]) => b - a)
                                 .map(([cat, pct]) => (
                                     <Box key={cat} sx={{ mb: 1 }}>
@@ -155,6 +145,16 @@ const LandingPage: React.FC = () => {
                                         />
                                     </Box>
                                 ))}
+                            <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${palette.rule}` }}>
+                                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                    What came up
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {Object.entries(DEMO_CAPTURE_COUNTS)
+                                        .map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}`)
+                                        .join(' · ')}
+                                </Typography>
+                            </Box>
                         </Box>
 
                         <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>

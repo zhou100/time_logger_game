@@ -26,7 +26,7 @@ import { CATEGORY_COLORS, palette } from '../theme';
 import DatePickerPopover from './DatePickerPopover';
 import { entriesApi } from '../services/api';
 
-const CATEGORIES = ['TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD'];
+const CATEGORIES = ['EARNING', 'LEARNING', 'RELAXING', 'FAMILY', 'TODO', 'IDEA', 'THOUGHT', 'TIME_RECORD'];
 
 interface EntryCardProps {
     entry: EntryItem;

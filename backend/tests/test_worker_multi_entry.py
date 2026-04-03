@@ -91,7 +91,7 @@ async def _run_process_job(db, job, cat_results):
 async def test_three_item_result_inserts_three_rows():
     """3-item categorization result → 3 EntryClassification rows added to db."""
     cat_results = [
-        {"text": "Worked on dashboard", "category": "TIME_RECORD"},
+        {"text": "Worked on dashboard", "category": "EARNING"},
         {"text": "Add voice replay idea", "category": "IDEA"},
         {"text": "Write auth tests", "category": "TODO"},
     ]
