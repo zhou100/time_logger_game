@@ -567,6 +567,7 @@ Based ONLY on the activities listed below, write a personal weekly review (3-4 p
 - Ends with one specific, actionable change for next week
 
 Tone: direct, slightly provocative, like a coach who respects you enough to be honest.
+IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
 Reference ONLY the activities listed. Do not invent activities.
 
 Weekly breakdown: {breakdown_summary}
@@ -724,6 +725,7 @@ activities listed below, write a short audit (2-3 paragraphs, under 300 words) t
 - Calls out what the numbers reveal (e.g. blocked time, admin overhead, shallow work)
 - Gives one specific, actionable insight
 
+IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
 Reference ONLY the activities listed. Do not invent activities not mentioned.
 
 Category breakdown: {breakdown_summary}
