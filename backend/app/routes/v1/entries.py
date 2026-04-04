@@ -442,6 +442,18 @@ async def update_entry(
                 )
             )
 
+    # Invalidate cached audits for this date (categories may have changed)
+    audit_date = entry.local_date or entry.created_at.date()
+    stale_result = await db.execute(
+        select(AuditResult).where(
+            AuditResult.user_id == current_user.id,
+            AuditResult.audit_date == audit_date,
+            AuditResult.is_stale.is_(False),
+        )
+    )
+    for ar in stale_result.scalars().all():
+        ar.is_stale = True
+
     await db.commit()
     await db.refresh(entry, ["classifications"])
 
@@ -518,6 +530,18 @@ async def reclassify_entry(
                 model_version="gpt-5.4-nano",
             )
         )
+
+    # Invalidate cached audits for this date (categories may have changed)
+    audit_date = entry.local_date or entry.created_at.date()
+    stale_result = await db.execute(
+        select(AuditResult).where(
+            AuditResult.user_id == current_user.id,
+            AuditResult.audit_date == audit_date,
+            AuditResult.is_stale.is_(False),
+        )
+    )
+    for ar in stale_result.scalars().all():
+        ar.is_stale = True
 
     await db.commit()
     await db.refresh(entry, ["classifications"])

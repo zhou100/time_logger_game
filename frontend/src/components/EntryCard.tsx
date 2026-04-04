@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
+    Alert,
     Box,
     Chip,
     Dialog,
@@ -10,6 +11,7 @@ import {
     IconButton,
     MenuItem,
     Select,
+    Snackbar,
     TextField,
     Typography,
     Button,
@@ -41,6 +43,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const [editCategory, setEditCategory] = useState('');
     const moveRef = useRef<HTMLButtonElement>(null);
     const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
+    const [reclassifyError, setReclassifyError] = useState(false);
 
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
@@ -168,7 +171,9 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                         <Box sx={{ display: 'flex', gap: 0.25 }}>
                             <IconButton
                                 size="small"
-                                onClick={() => reclassifyEntry.mutate(entry.id)}
+                                onClick={() => reclassifyEntry.mutate(entry.id, {
+                                    onError: () => setReclassifyError(true),
+                                })}
                                 sx={{ p: 0.25 }}
                                 disabled={reclassifyEntry.isPending}
                                 title="Re-classify with AI"
@@ -219,6 +224,12 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <Snackbar open={reclassifyError} autoHideDuration={4000} onClose={() => setReclassifyError(false)}>
+                <Alert severity="error" onClose={() => setReclassifyError(false)} variant="filled" sx={{ width: '100%' }}>
+                    Re-classify failed — please try again
+                </Alert>
+            </Snackbar>
         </>
     );
 };
