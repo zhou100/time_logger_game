@@ -36,6 +36,7 @@ from ...models.audit_result import AuditResult
 from ...services import queue as queue_svc
 from ...services import storage as storage_svc
 from ...settings import settings
+from ...services.categorization import categorize_text
 from ...utils.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -440,6 +441,75 @@ async def update_entry(
                     user_override=True,
                 )
             )
+
+    await db.commit()
+    await db.refresh(entry, ["classifications"])
+
+    return EntryItem(
+        id=str(entry.id),
+        transcript=entry.transcript,
+        recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
+        created_at=entry.created_at.isoformat(),
+        duration_seconds=entry.duration_seconds,
+        categories=[
+            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
+            for c in entry.classifications
+        ],
+    )
+
+
+@router.post("/{entry_id}/reclassify", response_model=EntryItem)
+async def reclassify_entry(
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-run AI categorization on an entry's transcript."""
+    try:
+        entry_uuid = uuid.UUID(entry_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid entry_id")
+
+    result = await db.execute(
+        select(Entry)
+        .options(selectinload(Entry.classifications))
+        .where(Entry.id == entry_uuid, Entry.user_id == current_user.id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    transcript = entry.transcript
+    if not transcript or not transcript.strip():
+        raise HTTPException(status_code=400, detail="Entry has no transcript to classify")
+
+    # Run AI categorization
+    cat_results = await categorize_text(transcript)
+
+    # Remove existing classifications
+    for c in list(entry.classifications):
+        await db.delete(c)
+    await db.flush()
+
+    # Insert new ones
+    for i, item in enumerate(cat_results):
+        est_min = item.get("estimated_minutes")
+        try:
+            est_min_val = int(est_min) if est_min is not None else None
+            if est_min_val is not None and not (0 <= est_min_val <= 1440):
+                est_min_val = None
+        except (ValueError, TypeError):
+            est_min_val = None
+        entry.classifications.append(
+            EntryClassification(
+                entry_id=entry.id,
+                category=item["category"],
+                extracted_text=item.get("text"),
+                estimated_minutes=est_min_val,
+                display_order=i,
+                model_version="gpt-5.4-nano",
+            )
+        )
 
     await db.commit()
     await db.refresh(entry, ["classifications"])

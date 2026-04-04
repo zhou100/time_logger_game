@@ -204,6 +204,13 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
+    async reclassifyEntry(entryId: string): Promise<EntryItem> {
+        try {
+            const res = await api.post<EntryItem>(`/v1/entries/${entryId}/reclassify`);
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
     async generateAudit(date: string, regenerate = false): Promise<AuditResponse> {
         try {
             const res = await api.post<AuditResponse>('/v1/entries/audit', { date, regenerate });

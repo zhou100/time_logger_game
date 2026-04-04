@@ -48,6 +48,14 @@ export function useUpdateEntry() {
     });
 }
 
+export function useReclassifyEntry() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (entryId: string) => entriesApi.reclassifyEntry(entryId),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ENTRIES_KEY }); },
+    });
+}
+
 export function useMoveEntry() {
     const qc = useQueryClient();
     return useMutation({

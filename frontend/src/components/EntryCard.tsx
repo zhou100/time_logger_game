@@ -17,11 +17,12 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
 import { EntryItem } from '../types/api';
-import { useDeleteEntry, useMoveEntry, useUpdateEntry } from '../hooks/useEntries';
+import { useDeleteEntry, useMoveEntry, useReclassifyEntry, useUpdateEntry } from '../hooks/useEntries';
 import { CATEGORY_COLORS, palette } from '../theme';
 import DatePickerPopover from './DatePickerPopover';
 import { entriesApi } from '../services/api';
@@ -43,6 +44,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
 
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
+    const reclassifyEntry = useReclassifyEntry();
     const moveEntry = useMoveEntry();
 
     const { data: activeDatesRaw = [] } = useQuery({
@@ -164,6 +166,19 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                     </Typography>
                     {!readOnly && (
                         <Box sx={{ display: 'flex', gap: 0.25 }}>
+                            <IconButton
+                                size="small"
+                                onClick={() => reclassifyEntry.mutate(entry.id)}
+                                sx={{ p: 0.25 }}
+                                disabled={reclassifyEntry.isPending}
+                                title="Re-classify with AI"
+                            >
+                                <AutorenewIcon sx={{
+                                    fontSize: 14,
+                                    color: 'text.secondary',
+                                    ...(reclassifyEntry.isPending && { animation: 'spin 1s linear infinite', '@keyframes spin': { '100%': { transform: 'rotate(360deg)' } } }),
+                                }} />
+                            </IconButton>
                             <IconButton
                                 ref={moveRef}
                                 size="small"
