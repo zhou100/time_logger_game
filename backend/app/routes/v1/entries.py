@@ -479,12 +479,20 @@ async def reclassify_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    transcript = entry.transcript
-    if not transcript or not transcript.strip():
-        raise HTTPException(status_code=400, detail="Entry has no transcript to classify")
+    # Use edited classification texts if available, fall back to original transcript
+    if entry.classifications:
+        text_to_classify = ". ".join(
+            c.extracted_text for c in sorted(entry.classifications, key=lambda c: c.display_order)
+            if c.extracted_text
+        )
+    else:
+        text_to_classify = entry.transcript
+
+    if not text_to_classify or not text_to_classify.strip():
+        raise HTTPException(status_code=400, detail="Entry has no text to classify")
 
     # Run AI categorization
-    cat_results = await categorize_text(transcript)
+    cat_results = await categorize_text(text_to_classify)
 
     # Remove existing classifications
     for c in list(entry.classifications):
