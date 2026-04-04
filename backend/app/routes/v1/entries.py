@@ -544,7 +544,7 @@ async def generate_audit(
     """
     Generate an AI-powered time audit for a given UTC date.
 
-    - Accepts today and up to the last 7 days; rejects future dates and older dates.
+    - Accepts any past date; rejects future dates.
     - Persisted: returns cached result if fresh; set regenerate=true to force re-generation.
     - Invalidated automatically when new entries arrive for the same date.
     """
@@ -557,8 +557,6 @@ async def generate_audit(
     today_utc = datetime.now(timezone.utc).date()
     if target_date > today_utc:
         raise HTTPException(status_code=400, detail="Date cannot be in the future.")
-    if target_date < today_utc - timedelta(days=7):
-        raise HTTPException(status_code=400, detail="Date must be within the last 7 days.")
 
     # ── Check cache ──────────────────────────────────────────────────────────
     if not body.regenerate:
