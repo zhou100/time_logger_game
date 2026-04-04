@@ -114,7 +114,7 @@ const RecordingPage: React.FC = () => {
                 Logger.info('Starting two-phase upload');
                 const { entry_id } = await upload.mutateAsync({
                     blob,
-                    options: { recordedAt: new Date().toISOString(), localDate: localToday() },
+                    options: { recordedAt: new Date().toISOString(), localDate: selectedDate },
                 });
                 setPendingEntryId(entry_id);
                 Logger.info(`Entry ${entry_id} submitted for processing`);
@@ -245,8 +245,8 @@ const RecordingPage: React.FC = () => {
                     onSelect={setSelectedDate}
                 />
 
-                {/* ── Recorder (today only) ────────────────────────────────── */}
-                {isToday && <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
+                {/* ── Recorder ─────────────────────────────────────────────── */}
+                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                     <RecordButton onRecordingComplete={handleRecordingComplete} />
 
                     {isProcessing && (
@@ -289,7 +289,7 @@ const RecordingPage: React.FC = () => {
                             "{entryStatus.transcript}"
                         </Typography>
                     )}
-                </Box>}
+                </Box>
 
                 {/* ── Two-column: entries + breakdown/audit ─────────────────── */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
