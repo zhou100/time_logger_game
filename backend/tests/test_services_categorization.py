@@ -65,7 +65,7 @@ async def test_multi_entry_extraction():
 
 @pytest.mark.asyncio
 async def test_all_valid_categories_accepted():
-    """All valid categories are returned as-is."""
+    """All valid categories are returned; TIME_RECORD is remapped to EARNING."""
     items = [
         {"text": "A", "category": "EARNING"},
         {"text": "B", "category": "LEARNING"},
@@ -83,10 +83,12 @@ async def test_all_valid_categories_accepted():
         result = await categorize_text("Some transcript text covering many topics.")
 
     assert len(result) == 8
+    # TIME_RECORD remapped to EARNING
     assert {r["category"] for r in result} == {
         "EARNING", "LEARNING", "RELAXING", "FAMILY",
-        "TODO", "IDEA", "THOUGHT", "TIME_RECORD",
+        "TODO", "IDEA", "THOUGHT",
     }
+    assert result[7]["category"] == "EARNING"  # was TIME_RECORD
 
 
 # ── Fallback: empty / malformed LLM response ─────────────────────────────────

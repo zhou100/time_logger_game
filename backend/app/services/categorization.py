@@ -120,6 +120,10 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
             r for r in results
             if isinstance(r, dict) and r.get("text") and r.get("category") in _VALID_CATEGORIES
         ]
+        # Remap legacy TIME_RECORD → EARNING (LLM may hallucinate it)
+        for r in valid:
+            if r["category"] == "TIME_RECORD":
+                r["category"] = "EARNING"
         if not valid:
             raise ValueError("No valid entries in LLM result")
 

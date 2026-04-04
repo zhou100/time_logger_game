@@ -316,44 +316,41 @@ const RecordingPage: React.FC = () => {
 
                         {/* Activity breakdown */}
                         <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                            <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                                How you spent time — {isToday ? 'today' : formatDateLabel(selectedDate)}
-                            </Typography>
-
-                            {!hasActivityBreakdown ? (
-                                <Typography variant="body2" color="text.secondary">
-                                    No time entries yet.
-                                </Typography>
-                            ) : (
-                                Object.entries(activityBreakdown)
-                                    .sort(([, a], [, b]) => b - a)
-                                    .map(([cat, pct]) => (
-                                        <Box key={cat} sx={{ mb: 1 }}>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                <Typography variant="caption">
-                                                    {CATEGORY_LABELS[cat] ?? cat}
-                                                </Typography>
-                                                <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                                    {pct}%
-                                                </Typography>
+                            {hasActivityBreakdown && (
+                                <>
+                                    <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
+                                        How you spent time — {isToday ? 'today' : formatDateLabel(selectedDate)}
+                                    </Typography>
+                                    {Object.entries(activityBreakdown)
+                                        .sort(([, a], [, b]) => b - a)
+                                        .map(([cat, pct]) => (
+                                            <Box key={cat} sx={{ mb: 1 }}>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                    <Typography variant="caption">
+                                                        {CATEGORY_LABELS[cat] ?? cat}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                                        {pct}%
+                                                    </Typography>
+                                                </Box>
+                                                <LinearProgress
+                                                    variant="determinate"
+                                                    value={pct}
+                                                    sx={{
+                                                        '& .MuiLinearProgress-bar': {
+                                                            borderRadius: 4,
+                                                            backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                                            transition: 'width 600ms ease-out',
+                                                        },
+                                                    }}
+                                                />
                                             </Box>
-                                            <LinearProgress
-                                                variant="determinate"
-                                                value={pct}
-                                                sx={{
-                                                    '& .MuiLinearProgress-bar': {
-                                                        borderRadius: 4,
-                                                        backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
-                                                        transition: 'width 600ms ease-out',
-                                                    },
-                                                }}
-                                            />
-                                        </Box>
-                                    ))
+                                        ))}
+                                </>
                             )}
 
                             {hasCaptureCounts && (
-                                <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${palette.rule}` }}>
+                                <Box sx={hasActivityBreakdown ? { mt: 2, pt: 1.5, borderTop: `1px solid ${palette.rule}` } : {}}>
                                     <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
                                         What came up
                                     </Typography>
@@ -363,6 +360,12 @@ const RecordingPage: React.FC = () => {
                                             .join(' · ')}
                                     </Typography>
                                 </Box>
+                            )}
+
+                            {!hasActivityBreakdown && !hasCaptureCounts && (
+                                <Typography variant="body2" color="text.secondary">
+                                    No time entries yet.
+                                </Typography>
                             )}
                         </Box>
 
