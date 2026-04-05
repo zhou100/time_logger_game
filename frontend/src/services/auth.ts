@@ -11,13 +11,11 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 const authAxios = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    withCredentials: true,
 });
 
 const formAxios = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    withCredentials: true,
 });
 
 function decodeToken(token: string): Record<string, unknown> | null {

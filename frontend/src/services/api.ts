@@ -23,7 +23,6 @@ const api: AxiosInstance = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     timeout: 30_000,
     headers: { 'Content-Type': 'application/json' },
-    withCredentials: true,
 });
 
 // Public endpoints that don't need an auth header
