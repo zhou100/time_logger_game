@@ -35,7 +35,7 @@ def _client():
 
 async def ensure_bucket() -> None:
     """
-    Verify the audio bucket exists. Called at startup.
+    Verify the audio bucket exists and has CORS configured. Called at startup.
 
     For MinIO (local dev): auto-creates the bucket if missing.
     For R2 (production): only verifies — R2 buckets are created in the dashboard.
@@ -57,6 +57,25 @@ async def ensure_bucket() -> None:
                 logger.info(f"Created bucket '{settings.S3_BUCKET}'")
             else:
                 raise
+
+        # Ensure CORS is configured so browsers can PUT audio directly
+        try:
+            await s3.put_bucket_cors(
+                Bucket=settings.S3_BUCKET,
+                CORSConfiguration={
+                    "CORSRules": [
+                        {
+                            "AllowedOrigins": ["*"],
+                            "AllowedMethods": ["PUT", "GET"],
+                            "AllowedHeaders": ["*"],
+                            "MaxAgeSeconds": 3600,
+                        }
+                    ]
+                },
+            )
+            logger.info(f"CORS configured for bucket '{settings.S3_BUCKET}'")
+        except ClientError as e:
+            logger.warning(f"Could not set CORS on bucket: {e}")
 
 
 async def generate_presigned_put(key: str, content_type: str, expires_in: int = 3600) -> str:

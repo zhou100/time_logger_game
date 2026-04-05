@@ -150,9 +150,20 @@ export const entriesApi = {
      * this goes straight to MinIO/S3, not through the app server).
      */
     async uploadToStorage(uploadUrl: string, blob: Blob): Promise<void> {
-        await axios.put(uploadUrl, blob, {
-            headers: { 'Content-Type': blob.type || 'audio/webm' },
-        });
+        try {
+            await axios.put(uploadUrl, blob, {
+                headers: { 'Content-Type': blob.type || 'audio/webm' },
+                timeout: 60_000,
+            });
+        } catch (err) {
+            if (axios.isAxiosError(err) && !err.response) {
+                // Network error (CORS block, timeout, or unreachable)
+                throw new Error(
+                    'Upload failed — could not reach storage. Please refresh the page and try again.'
+                );
+            }
+            throw err;
+        }
     },
 
     /**
