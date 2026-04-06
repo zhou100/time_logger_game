@@ -31,6 +31,10 @@ class EntryClassification(Base):
     confidence = Column(Float, nullable=True)
     model_version = Column(String(50), nullable=True)   # track which model produced this
     user_override = Column(Boolean, default=False)      # did user correct the AI?
+    # Capture Inbox lifecycle: open (default), done, dismissed
+    status = Column(String(20), nullable=False, server_default="open")
+    # User-refined text that overrides extracted_text for display (null = use extracted_text)
+    edited_text = Column(Text, nullable=True)
     classified_at = Column(DateTime(timezone=True), server_default=func.now())
 
     entry = relationship("Entry", back_populates="classifications")

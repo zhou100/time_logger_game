@@ -11,6 +11,9 @@ import {
     CategoryItem,
     AuditResponse,
     WeeklyAuditHistoryItem,
+    Capture,
+    CaptureCategory,
+    CaptureStatus,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -245,6 +248,32 @@ export const entriesApi = {
     async getActiveDates(): Promise<string[]> {
         try {
             const res = await api.get<string[]>('/v1/entries/active-dates');
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+};
+
+// ── Captures API (Capture Inbox) ──────────────────────────────────────────────
+
+export const capturesApi = {
+    async list(opts?: { category?: CaptureCategory; status?: CaptureStatus | 'all' }): Promise<Capture[]> {
+        try {
+            const res = await api.get<Capture[]>('/v1/captures/', {
+                params: {
+                    ...(opts?.category ? { category: opts.category } : {}),
+                    ...(opts?.status ? { status: opts.status } : {}),
+                },
+            });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async patch(
+        captureId: string,
+        data: { status?: CaptureStatus; edited_text?: string }
+    ): Promise<Capture> {
+        try {
+            const res = await api.patch<Capture>(`/v1/captures/${captureId}`, data);
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

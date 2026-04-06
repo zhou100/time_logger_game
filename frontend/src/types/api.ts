@@ -99,6 +99,22 @@ export interface WeeklyAuditHistoryItem {
     week_label: string;
 }
 
+// ── Captures (Capture Inbox) ──────────────────────────────────────────────────
+
+export type CaptureStatus = 'open' | 'done' | 'dismissed';
+export type CaptureCategory = 'TODO' | 'IDEA' | 'THOUGHT';
+
+export interface Capture {
+    id: string;
+    entry_id: string;
+    category: CaptureCategory;
+    display_text: string | null;
+    status: CaptureStatus;
+    edited: boolean;
+    source_date: string | null;
+    classified_at: string | null;
+}
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 export interface ApiError {

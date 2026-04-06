@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
 import HomePage from './pages/HomePage';
+import CaptureInboxPage from './pages/CaptureInboxPage';
 import NavBar from './components/NavBar';
 import { Box } from '@mui/material';
 
@@ -34,6 +35,7 @@ function App() {
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/register" element={<RegisterForm />} />
                 <Route path="/" element={<HomePage />} />
+                <Route path="/captures" element={<CaptureInboxPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>

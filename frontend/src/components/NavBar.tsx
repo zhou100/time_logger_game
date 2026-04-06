@@ -51,6 +51,14 @@ const NavBar: React.FC = () => {
                 </Typography>
                 {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Button
+                            component={RouterLink}
+                            to="/captures"
+                            size="small"
+                            sx={{ color: 'text.secondary', mr: 1 }}
+                        >
+                            Inbox
+                        </Button>
                         <Typography
                             variant="body2"
                             sx={{
