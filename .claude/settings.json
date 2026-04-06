@@ -11,7 +11,10 @@
       "Bash(npx tsc:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Skill(plan-eng-review)",
+      "Skill(plan-eng-review:*)",
+      "Bash(curl -s http://localhost:3000/static/js/main.f371815b.js)"
     ],
     "additionalDirectories": [
       "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans",
