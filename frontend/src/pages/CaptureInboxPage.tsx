@@ -34,6 +34,7 @@ const CaptureInboxPage: React.FC = () => {
             capturesApi.patch(id, data),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['captures'] });
+            qc.invalidateQueries({ queryKey: ['capture-counts'] });
             qc.invalidateQueries({ queryKey: ['entries'] });
             setEditingId(null);
         },
