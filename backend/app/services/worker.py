@@ -92,7 +92,7 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
             with open(tmp_path, "rb") as f:
                 transcript_response = await _get_openai().audio.transcriptions.create(
                     file=f,
-                    model="gpt-4o-mini-transcribe",
+                    model="whisper-1",
                 )
             raw_transcript = transcript_response.text
             logger.info(f"Raw transcript ({len(raw_transcript)} chars): {raw_transcript[:120]}...")
