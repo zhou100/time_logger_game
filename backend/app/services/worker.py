@@ -101,21 +101,8 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
 
         # ── Handle empty/silent audio ────────────────────────────────────────
         if not raw_transcript or not raw_transcript.strip():
-            logger.info(f"Job {job.id}: empty transcript, skipping refinement and classification")
-            entry.transcript = ""
-            await db.flush()
-            await queue_svc.complete_job(db, job)
-            await db.commit()
-
-            db.add(Notification(
-                user_id=entry.user_id,
-                event_type="entry.classified",
-                payload_json=json.dumps({
-                    "entry_id": str(entry.id),
-                    "transcript": "",
-                    "categories": [],
-                }),
-            ))
+            logger.warning(f"Job {job.id}: transcription returned empty — failing job so it stays out of the entry list")
+            await queue_svc.fail_job(db, job, "Transcription returned empty (silent audio or model error)")
             await db.commit()
             return
 
