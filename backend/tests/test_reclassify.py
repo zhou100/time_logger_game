@@ -29,8 +29,11 @@ def app():
 
 def _make_classification(category: str, text: str = "did something", order: int = 0):
     c = MagicMock()
+    c.id = uuid.uuid4()
     c.category = category
     c.extracted_text = text
+    c.edited_text = None
+    c.display_text = text
     c.display_order = order
     c.estimated_minutes = 30
     return c

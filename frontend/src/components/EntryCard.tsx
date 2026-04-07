@@ -39,6 +39,8 @@ interface EntryCardProps {
 const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [confirmLastLineDelete, setConfirmLastLineDelete] = useState(false);
+    const [confirmReclassify, setConfirmReclassify] = useState(false);
     const [editText, setEditText] = useState('');
     const [editCategory, setEditCategory] = useState('');
     const moveRef = useRef<HTMLButtonElement>(null);
@@ -77,8 +79,8 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
         // Preserve all classifications — only update the one being edited
         const updatedCategories = categories.map((c, i) =>
             i === editingIndex
-                ? { text: editText, category: editCategory, estimated_minutes: c.estimated_minutes }
-                : { text: c.text, category: c.category, estimated_minutes: c.estimated_minutes }
+                ? { id: c.id, text: editText, category: editCategory, estimated_minutes: c.estimated_minutes }
+                : { id: c.id, text: c.text, category: c.category, estimated_minutes: c.estimated_minutes }
         );
         updateEntry.mutate({
             entryId: entry.id,
@@ -90,6 +92,18 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     const handleDelete = () => {
         deleteEntry.mutate(entry.id);
         setConfirmDelete(false);
+    };
+
+    const handleDeleteLine = (index: number) => {
+        if (categories.length <= 1) {
+            // Last line — would delete the whole audio recording. Confirm first.
+            setConfirmLastLineDelete(true);
+            return;
+        }
+        const remaining = categories
+            .filter((_, i) => i !== index)
+            .map((c) => ({ id: c.id, text: c.text, category: c.category, estimated_minutes: c.estimated_minutes }));
+        updateEntry.mutate({ entryId: entry.id, data: { categories: remaining } });
     };
 
     const borderStyle = `1px solid ${palette.rule}`;
@@ -152,9 +166,14 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                                 {catItem.text ?? entry.transcript ?? 'Processing…'}
                             </Typography>
                             {!readOnly && (
-                                <IconButton size="small" onClick={() => handleEditStart(i)} sx={{ p: 0.25, flexShrink: 0 }}>
-                                    <EditIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                                </IconButton>
+                                <>
+                                    <IconButton size="small" onClick={() => handleEditStart(i)} sx={{ p: 0.25, flexShrink: 0 }}>
+                                        <EditIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                                    </IconButton>
+                                    <IconButton size="small" onClick={() => handleDeleteLine(i)} sx={{ p: 0.25, flexShrink: 0 }} title="Delete this line">
+                                        <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                                    </IconButton>
+                                </>
                             )}
                         </Box>
                     );
@@ -171,9 +190,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                         <Box sx={{ display: 'flex', gap: 0.25 }}>
                             <IconButton
                                 size="small"
-                                onClick={() => reclassifyEntry.mutate(entry.id, {
-                                    onError: () => setReclassifyError(true),
-                                })}
+                                onClick={() => setConfirmReclassify(true)}
                                 sx={{ p: 0.25 }}
                                 disabled={reclassifyEntry.isPending}
                                 title="Re-classify with AI"
@@ -221,6 +238,49 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                     <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
                     <Button onClick={handleDelete} color="error" variant="contained" disabled={deleteEntry.isPending}>
                         Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={confirmLastLineDelete} onClose={() => setConfirmLastLineDelete(false)} maxWidth="xs">
+                <DialogTitle>Delete last line?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        This is the only line left, so deleting it will remove the entire entry and its audio recording.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmLastLineDelete(false)}>Cancel</Button>
+                    <Button
+                        onClick={() => { setConfirmLastLineDelete(false); deleteEntry.mutate(entry.id); }}
+                        color="error"
+                        variant="contained"
+                        disabled={deleteEntry.isPending}
+                    >
+                        Delete entry
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={confirmReclassify} onClose={() => setConfirmReclassify(false)} maxWidth="xs">
+                <DialogTitle>Re-classify with AI?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        This will replace all categories on this entry with fresh AI output. Any inbox status (done/dismissed) on these items will be reset.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setConfirmReclassify(false)}>Cancel</Button>
+                    <Button
+                        onClick={() => {
+                            setConfirmReclassify(false);
+                            reclassifyEntry.mutate(entry.id, { onError: () => setReclassifyError(true) });
+                        }}
+                        color="primary"
+                        variant="contained"
+                        disabled={reclassifyEntry.isPending}
+                    >
+                        Re-classify
                     </Button>
                 </DialogActions>
             </Dialog>

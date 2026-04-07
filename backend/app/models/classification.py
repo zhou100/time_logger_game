@@ -38,3 +38,8 @@ class EntryClassification(Base):
     classified_at = Column(DateTime(timezone=True), server_default=func.now())
 
     entry = relationship("Entry", back_populates="classifications")
+
+    @property
+    def display_text(self):
+        """Edited text takes precedence over the original extracted text."""
+        return self.edited_text if self.edited_text else self.extracted_text

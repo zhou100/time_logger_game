@@ -45,6 +45,7 @@ export interface SubmitResponse {
 }
 
 export interface CategoryItem {
+    id?: string;
     text: string | null;
     category: string;
     estimated_minutes?: number | null;

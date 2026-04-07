@@ -80,6 +80,7 @@ CAPTURE_CATEGORIES = {"TODO", "IDEA", "THOUGHT"}
 
 
 class CategoryItem(BaseModel):
+    id: Optional[str] = None
     text: Optional[str]
     category: str
     estimated_minutes: Optional[int] = None
@@ -256,7 +257,7 @@ async def get_entry_status(
         step=job.step if job else None,
         transcript=entry.transcript,
         categories=[
-            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
+            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
             for c in entry.classifications
         ],
     )
@@ -325,7 +326,7 @@ async def list_entries(
             created_at=e.created_at.isoformat(),
             duration_seconds=e.duration_seconds,
             categories=[
-                CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
+                CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
                 for c in e.classifications
             ],
         )
@@ -424,23 +425,42 @@ async def update_entry(
         entry.transcript = body.transcript
 
     if body.categories is not None:
-        # Remove existing classifications
-        for c in list(entry.classifications):
-            await db.delete(c)
-        await db.flush()
+        # Merge by stable classification id to preserve capture inbox state
+        # (status, id) across reorders, deletes, and inserts. Items without an
+        # id are treated as new inserts; existing rows whose ids are absent
+        # from the incoming list are deleted.
+        existing_by_id = {str(c.id): c for c in entry.classifications}
+        seen_ids: set[str] = set()
 
-        # Insert new ones
         for i, cat_item in enumerate(body.categories):
-            entry.classifications.append(
-                EntryClassification(
-                    entry_id=entry.id,
-                    category=cat_item.category,
-                    extracted_text=cat_item.text,
-                    estimated_minutes=cat_item.estimated_minutes,
-                    display_order=i,
-                    user_override=True,
+            existing = existing_by_id.get(cat_item.id) if cat_item.id else None
+            if existing is not None:
+                seen_ids.add(cat_item.id)
+                existing.category = cat_item.category
+                existing.extracted_text = cat_item.text
+                # New text becomes canonical — drop any prior inbox edit.
+                existing.edited_text = None
+                existing.estimated_minutes = cat_item.estimated_minutes
+                existing.display_order = i
+                existing.user_override = True
+            else:
+                # No id, or id refers to a row on a different entry — insert fresh.
+                entry.classifications.append(
+                    EntryClassification(
+                        entry_id=entry.id,
+                        category=cat_item.category,
+                        extracted_text=cat_item.text,
+                        estimated_minutes=cat_item.estimated_minutes,
+                        display_order=i,
+                        user_override=True,
+                    )
                 )
-            )
+
+        # Delete any existing rows the client did not echo back.
+        for cid, c in existing_by_id.items():
+            if cid not in seen_ids:
+                await db.delete(c)
+        await db.flush()
 
     # Invalidate cached audits for this date (categories may have changed)
     audit_date = entry.local_date or entry.created_at.date()
@@ -464,7 +484,7 @@ async def update_entry(
         created_at=entry.created_at.isoformat(),
         duration_seconds=entry.duration_seconds,
         categories=[
-            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
+            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
             for c in entry.classifications
         ],
     )
@@ -494,8 +514,8 @@ async def reclassify_entry(
     # Use edited classification texts if available, fall back to original transcript
     if entry.classifications:
         text_to_classify = ". ".join(
-            c.extracted_text for c in sorted(entry.classifications, key=lambda c: c.display_order)
-            if c.extracted_text
+            c.display_text for c in sorted(entry.classifications, key=lambda c: c.display_order)
+            if c.display_text
         )
     else:
         text_to_classify = entry.transcript
@@ -553,7 +573,7 @@ async def reclassify_entry(
         created_at=entry.created_at.isoformat(),
         duration_seconds=entry.duration_seconds,
         categories=[
-            CategoryItem(text=c.extracted_text, category=c.category, estimated_minutes=c.estimated_minutes)
+            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
             for c in entry.classifications
         ],
     )
@@ -677,7 +697,7 @@ async def generate_weekly_audit(
     for e in entries:
         day_key = e.local_date.strftime("%A %m/%d") if e.local_date else e.created_at.strftime("%A %m/%d")
         for c in e.classifications:
-            text = c.extracted_text or e.transcript or ""
+            text = c.display_text or e.transcript or ""
             mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
             day_summaries.setdefault(day_key, []).append(f"  - [{c.category}]{mins} {text}")
 
@@ -871,7 +891,7 @@ async def _generate_audit_text(
     entry_lines = []
     for e in entries:
         for c in e.classifications:
-            text = c.extracted_text or e.transcript or ""
+            text = c.display_text or e.transcript or ""
             mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
             entry_lines.append(f"- [{c.category}]{mins} {text}")
 
