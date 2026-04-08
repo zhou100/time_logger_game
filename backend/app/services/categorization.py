@@ -1,5 +1,5 @@
 """
-Text categorization using GPT-4o-mini.
+Text categorization using GPT.
 Returns a list of {text, category} dicts — one entry can produce multiple classifications
 from a single transcript (multi-entry extraction).
 """
@@ -34,8 +34,8 @@ Activity categories (how the user spent time):
 
 Capture categories (follow-up items):
 - TODO: a task or action item that needs to be done
-- IDEA: a creative thought, suggestion, or concept
-- THOUGHT: a general observation, reflection, or note
+- EXPERIMENT: a change to try, hypothesis to test, possible improvement, or future direction
+- REFLECTION: an observation, feeling, reaction, lesson, or pattern the user noticed
 
 Disambiguation rules:
 - Work lunch / business dinner = EARNING (primary intent is work)
@@ -43,6 +43,14 @@ Disambiguation rules:
 - Reading for a work project = EARNING; reading for personal growth = LEARNING
 - Commute to work = EARNING; running family errands = FAMILY
 - When an activity serves multiple categories, classify by primary intent.
+- If the user suggests a future change ("maybe we should", "what if", "it might help to"),
+  classify as EXPERIMENT.
+- If the user is mainly describing what happened, how it felt, or what they learned,
+  classify as REFLECTION.
+- If something could be both EXPERIMENT and REFLECTION, prefer EXPERIMENT when it suggests
+  a future change.
+- If something could be both TODO and EXPERIMENT, prefer TODO when it is specific and
+  actionable now.
 
 IMPORTANT rules:
 - Extract MULTIPLE entries from a single transcript. A 90-second monologue typically \
@@ -56,7 +64,7 @@ Only provide a number when the transcript explicitly states or strongly implies 
 
 Return valid JSON array only, with this shape:
 [
-  {"text": "specific activity or note text", "category": "EARNING|LEARNING|RELAXING|FAMILY|TODO|IDEA|THOUGHT", "estimated_minutes": <integer or null>},
+  {"text": "specific activity or note text", "category": "EARNING|LEARNING|RELAXING|FAMILY|TODO|EXPERIMENT|REFLECTION", "estimated_minutes": <integer or null>},
   ...
 ]
 
@@ -71,7 +79,7 @@ the audit feature. Still need to write tests for the auth module."
 Output: [
   {"text": "Worked on the dashboard for about 2 hours", "category": "EARNING", "estimated_minutes": 120},
   {"text": "Three back-to-back meetings that felt unproductive", "category": "EARNING", "estimated_minutes": 90},
-  {"text": "Add voice replay to the audit feature", "category": "IDEA", "estimated_minutes": null},
+  {"text": "Add voice replay to the audit feature", "category": "EXPERIMENT", "estimated_minutes": null},
   {"text": "Write tests for the auth module", "category": "TODO", "estimated_minutes": null}
 ]
 
@@ -80,20 +88,27 @@ school and helped with homework. Realized we should document environment setup b
 Output: [
   {"text": "Reading about distributed systems for an hour", "category": "LEARNING", "estimated_minutes": 60},
   {"text": "Picked up kids from school and helped with homework", "category": "FAMILY", "estimated_minutes": 90},
-  {"text": "Document environment setup better", "category": "IDEA", "estimated_minutes": null}
+  {"text": "Document environment setup better", "category": "EXPERIMENT", "estimated_minutes": null}
+]
+
+Input: "The afternoon felt scattered and reactive. It might help to start recordings \
+right after meetings."
+Output: [
+  {"text": "The afternoon felt scattered and reactive", "category": "REFLECTION", "estimated_minutes": null},
+  {"text": "Start recordings right after meetings", "category": "EXPERIMENT", "estimated_minutes": null}
 ]"""
 
 
 async def categorize_text(text: str) -> List[Dict[str, Any]]:
     """
-    Extract and classify all activities from transcript text using GPT-4o-mini.
+    Extract and classify all activities from transcript text using GPT.
 
     Returns a list of dicts: [{"text": str, "category": str}, ...]
 
     Fallback behaviour:
     - Empty transcript → raises ValueError("No speech detected")
-    - Empty array from LLM → returns [{"text": full_transcript, "category": "THOUGHT"}]
-    - Malformed/non-JSON response → returns [{"text": full_transcript, "category": "THOUGHT"}]
+    - Empty array from LLM → returns [{"text": full_transcript, "category": "REFLECTION"}]
+    - Malformed/non-JSON response → returns [{"text": full_transcript, "category": "REFLECTION"}]
     """
     stripped = text.strip() if text else ""
     if not stripped:
@@ -115,7 +130,7 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
         if not isinstance(results, list) or not results:
             raise ValueError("LLM returned empty or non-list result")
 
-        _VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+        _VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "EXPERIMENT", "REFLECTION", "TIME_RECORD"}
         valid = [
             r for r in results
             if isinstance(r, dict) and r.get("text") and r.get("category") in _VALID_CATEGORIES
@@ -135,9 +150,9 @@ async def categorize_text(text: str) -> List[Dict[str, Any]]:
 
     except (json.JSONDecodeError, ValueError, KeyError) as exc:
         logger.warning(
-            f"Categorization parse/validation failed ({exc}); falling back to THOUGHT"
+            f"Categorization parse/validation failed ({exc}); falling back to REFLECTION"
         )
-        return [{"text": stripped, "category": "THOUGHT"}]
+        return [{"text": stripped, "category": "REFLECTION"}]
     except Exception as exc:
         logger.error(f"Categorization API call failed: {exc}")
-        return [{"text": stripped, "category": "THOUGHT"}]
+        return [{"text": stripped, "category": "REFLECTION"}]

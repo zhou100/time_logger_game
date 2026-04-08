@@ -41,13 +41,13 @@ const DEMO_ENTRIES: EntryItem[] = [
     },
     {
         id: 'demo-4',
-        transcript: 'Fix the login bug before standup tomorrow. Also had an idea to add voice replay to the audit feature.',
+        transcript: 'Fix the login bug before standup tomorrow. Also had an experiment to try: add voice replay to the audit feature.',
         recorded_at: null,
         created_at: new Date(Date.now() - 14400000).toISOString(),
         duration_seconds: 10,
         categories: [
             { text: 'Fix the login bug before standup tomorrow', category: 'TODO' },
-            { text: 'Add voice replay to the audit feature', category: 'IDEA' },
+            { text: 'Add voice replay to the audit feature', category: 'EXPERIMENT' },
         ],
     },
     {
@@ -62,12 +62,12 @@ const DEMO_ENTRIES: EntryItem[] = [
 
 const DEMO_AUDIT = `Your day is heavily weighted toward Earning (44%) — the 2-hour dashboard block is solid deep work. But you're missing balance: Learning got a quick lunch read (11%) and Relaxing was just a run (11%). Family time (33%) is healthy with the school pickup.
 
-The uncomfortable truth: you have two follow-up items (a TODO and an IDEA) that came up mid-day but no time blocked to act on them. TODOs that linger become stress.
+The uncomfortable truth: you have two follow-up items (a TODO and an EXPERIMENT) that came up mid-day but no time blocked to act on them. TODOs that linger become stress.
 
 Actionable insight: Block 30 minutes tomorrow morning for that login bug fix — it's deadline-sensitive (standup) and will free your mind for deeper work the rest of the day.`;
 
 const DEMO_ACTIVITY_BREAKDOWN: Record<string, number> = { EARNING: 44, FAMILY: 33, LEARNING: 11, RELAXING: 11 };
-const DEMO_CAPTURE_COUNTS: Record<string, number> = { TODO: 1, IDEA: 1 };
+const DEMO_CAPTURE_COUNTS: Record<string, number> = { TODO: 1, EXPERIMENT: 1 };
 
 const LandingPage: React.FC = () => {
 
@@ -83,7 +83,7 @@ const LandingPage: React.FC = () => {
                         Track your time by voice. AI categorizes your day.
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 540 }}>
-                        Record a quick voice note, and our AI breaks it down into tasks, ideas,
+                        Record a quick voice note, and our AI breaks it down into tasks, experiments,
                         time logs, and reflections — then coaches you on how your day is going.
                     </Typography>
                     <Button

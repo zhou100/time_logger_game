@@ -1,7 +1,7 @@
 """
 /api/v1/captures — Capture Inbox endpoints.
 
-Cross-day triage for voice-extracted TODO/IDEA/THOUGHT items. Captures live
+Cross-day triage for voice-extracted TODO/EXPERIMENT/REFLECTION items. Captures live
 on `entry_classifications`; ownership flows through `entries.user_id`. Every
 query joins entries and filters on the current user — there is no user_id
 column on classifications directly.
@@ -25,7 +25,8 @@ from ...utils.auth import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/captures", tags=["captures"])
 
-CAPTURE_CATEGORIES = {"TODO", "IDEA", "THOUGHT"}
+CAPTURE_CATEGORIES = {"TODO", "EXPERIMENT", "REFLECTION"}
+LEGACY_CAPTURE_CATEGORY_MAP = {"IDEA": "EXPERIMENT", "THOUGHT": "REFLECTION"}
 VALID_STATUSES = {"open", "done", "dismissed"}
 
 
@@ -53,7 +54,7 @@ def _to_item(c: EntryClassification, entry: Entry) -> CaptureItem:
     return CaptureItem(
         id=str(c.id),
         entry_id=str(c.entry_id),
-        category=c.category,
+        category=LEGACY_CAPTURE_CATEGORY_MAP.get(c.category, c.category),
         display_text=c.edited_text if c.edited_text else c.extracted_text,
         status=c.status,
         edited=c.edited_text is not None,
@@ -66,7 +67,7 @@ def _to_item(c: EntryClassification, entry: Entry) -> CaptureItem:
 
 @router.get("/", response_model=List[CaptureItem])
 async def list_captures(
-    category: Optional[str] = Query(None, description="TODO | IDEA | THOUGHT"),
+    category: Optional[str] = Query(None, description="TODO | EXPERIMENT | REFLECTION"),
     status: Optional[str] = Query("open", description="open | done | dismissed | all"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -74,7 +75,7 @@ async def list_captures(
     """
     List the current user's captures. Scoped by user via entries join.
 
-    - category: optional filter; must be one of TODO/IDEA/THOUGHT. If omitted, returns all three.
+    - category: optional filter; must be one of TODO/EXPERIMENT/REFLECTION. If omitted, returns all three.
     - status:   open (default) | done | dismissed | all
     """
     if category is not None and category not in CAPTURE_CATEGORIES:
@@ -87,9 +88,16 @@ async def list_captures(
     )
 
     if category:
-        stmt = stmt.where(EntryClassification.category == category)
+        legacy_filter_values = [category]
+        if category == "EXPERIMENT":
+            legacy_filter_values.append("IDEA")
+        elif category == "REFLECTION":
+            legacy_filter_values.append("THOUGHT")
+        stmt = stmt.where(EntryClassification.category.in_(legacy_filter_values))
     else:
-        stmt = stmt.where(EntryClassification.category.in_(CAPTURE_CATEGORIES))
+        stmt = stmt.where(
+            EntryClassification.category.in_(CAPTURE_CATEGORIES | set(LEGACY_CAPTURE_CATEGORY_MAP.keys()))
+        )
 
     if status and status != "all":
         if status not in VALID_STATUSES:

@@ -26,8 +26,8 @@ export const CATEGORY_COLORS: Record<string, string> = {
     RELAXING: '#7B6B8A',
     FAMILY: '#9C6B2F',
     TODO: '#B6492D',
-    IDEA: '#8A5A44',
-    THOUGHT: '#6F6258',
+    EXPERIMENT: '#8A5A44',
+    REFLECTION: '#6F6258',
     TIME_RECORD: '#3E5A63',
 };
 
@@ -37,8 +37,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
     RELAXING: 'Relaxing',
     FAMILY: 'Family',
     TODO: 'TODO',
-    IDEA: 'Idea',
-    THOUGHT: 'Thought',
+    EXPERIMENT: 'Experiment',
+    REFLECTION: 'Reflection',
     TIME_RECORD: 'Time (legacy)',
 };
 

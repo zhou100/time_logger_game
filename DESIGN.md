@@ -56,8 +56,8 @@
   | RELAXING | `#7B6B8A` | Exercise, rest, hobbies |
   | FAMILY | `#9C6B2F` | Family time, caregiving |
   | TODO | `#B6492D` | Action items, tasks |
-  | IDEA | `#8A5A44` | Creative thoughts |
-  | THOUGHT | `#6F6258` | Reflections, observations |
+  | EXPERIMENT | `#8A5A44` | Changes to try |
+  | REFLECTION | `#6F6258` | Reflections, observations |
   | TIME_RECORD | `#3E5A63` | Legacy (same as EARNING) |
 - **Semantic colors:**
   | Role | Hex | Name |

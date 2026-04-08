@@ -61,8 +61,8 @@ async def service(mock_openai):
 class TestCategoryTypeEnum:
     def test_category_type_enum(self):
         assert CategoryType.TODO.value == "TODO"
-        assert CategoryType.IDEA.value == "IDEA"
-        assert CategoryType.THOUGHT.value == "THOUGHT"
+        assert CategoryType.EXPERIMENT.value == "EXPERIMENT"
+        assert CategoryType.REFLECTION.value == "REFLECTION"
         assert CategoryType.TIME_RECORD.value == "TIME_RECORD"
 
 class TestServiceInitialization:
@@ -159,7 +159,7 @@ class TestTextCategorization:
     async def test_multiple_categories_response(self, service, mock_openai, create_mock_response):
         content = [
             {"category": "TODO", "extracted_content": "buy groceries tomorrow and call mom"},
-            {"category": "IDEA", "extracted_content": "idea for a new project"}
+            {"category": "EXPERIMENT", "extracted_content": "experiment for a new project"}
         ]
         mock_response = create_mock_response(content)
         service.client.chat.completions.create.return_value = mock_response
@@ -174,10 +174,10 @@ class TestTextCategorization:
         assert "buy groceries" in todo_category["extracted_content"].lower()
         assert "call mom" in todo_category["extracted_content"].lower()
         
-        idea_category = next((cat for cat in categories if cat["category"] == "IDEA"), None)
-        assert idea_category is not None
-        assert "idea" in idea_category["extracted_content"].lower()
-        assert "project" in idea_category["extracted_content"].lower()
+        experiment_category = next((cat for cat in categories if cat["category"] == "EXPERIMENT"), None)
+        assert experiment_category is not None
+        assert "experiment" in experiment_category["extracted_content"].lower()
+        assert "project" in experiment_category["extracted_content"].lower()
 
 class TestPromptFormatting:
     def test_system_prompt_format(self, service):
@@ -216,9 +216,9 @@ class TestGPTConfiguration:
 class TestTranscribedAudioExamples:
     @pytest.mark.parametrize("example", [
         {"text": "I need to buy groceries tomorrow and also remember to call mom", "expected_category": "TODO"},
-        {"text": "I had a great idea for a new app that helps people track their daily tasks", "expected_category": "IDEA"},
+        {"text": "I had a great experiment to try for a new app that helps people track their daily tasks", "expected_category": "EXPERIMENT"},
         {"text": "I spent 2 hours working on the project documentation today", "expected_category": "TIME_RECORD"},
-        {"text": "I've been thinking about how technology affects our daily lives", "expected_category": "THOUGHT"}
+        {"text": "I've been reflecting on how technology affects our daily lives", "expected_category": "REFLECTION"}
     ])
     async def test_transcribed_audio_examples(self, service, mock_openai, create_mock_response, example):
         mock_response = create_mock_response([{"category": example["expected_category"], "extracted_content": example["text"]}])
@@ -238,7 +238,7 @@ class TestLoggingOutput:
     async def test_logging_output(self, service, mock_openai, caplog, create_mock_response):
         caplog.set_level(logging.DEBUG)
         
-        mock_response = create_mock_response([{"category": "THOUGHT", "extracted_content": "test text"}])
+        mock_response = create_mock_response([{"category": "REFLECTION", "extracted_content": "test text"}])
         service.client.chat.completions.create.return_value = mock_response
         
         text = "test text for logging"

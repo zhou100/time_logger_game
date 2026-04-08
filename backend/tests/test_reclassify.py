@@ -106,7 +106,7 @@ async def test_reclassify_happy_path(app):
     entry = _make_entry(
         entry_id=entry_id,
         classifications=[
-            _make_classification("THOUGHT", "worked on project", 0),
+            _make_classification("REFLECTION", "worked on project", 0),
         ],
     )
     db = _mock_db_returning_entry(entry)
@@ -172,7 +172,7 @@ async def test_reclassify_uses_edited_texts(app):
     entry = _make_entry(
         entry_id=entry_id,
         classifications=[
-            _make_classification("THOUGHT", "edited text about learning", 0),
+            _make_classification("REFLECTION", "edited text about learning", 0),
             _make_classification("TODO", "edited todo item", 1),
         ],
         transcript="original unedited transcript",
