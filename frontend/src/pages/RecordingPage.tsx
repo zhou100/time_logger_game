@@ -30,7 +30,7 @@ import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
 const ACTIVITY_CATEGORIES = new Set(['EARNING', 'LEARNING', 'RELAXING', 'FAMILY', 'TIME_RECORD']);
-const CAPTURE_CATEGORIES = new Set(['TODO', 'IDEA', 'THOUGHT']);
+const CAPTURE_CATEGORIES = new Set(['TODO', 'EXPERIMENT', 'REFLECTION']);
 
 /** Format "2026-03-25" → "Mar 25" */
 function formatDateLabel(iso: string): string {

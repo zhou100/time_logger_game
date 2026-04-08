@@ -26,8 +26,8 @@ export enum Category {
     RELAXING = 'RELAXING',
     FAMILY = 'FAMILY',
     TODO = 'TODO',
-    IDEA = 'IDEA',
-    THOUGHT = 'THOUGHT',
+    EXPERIMENT = 'EXPERIMENT',
+    REFLECTION = 'REFLECTION',
     TIME_RECORD = 'TIME_RECORD',
 }
 
@@ -103,7 +103,7 @@ export interface WeeklyAuditHistoryItem {
 // ── Captures (Capture Inbox) ──────────────────────────────────────────────────
 
 export type CaptureStatus = 'open' | 'done' | 'dismissed';
-export type CaptureCategory = 'TODO' | 'IDEA' | 'THOUGHT';
+export type CaptureCategory = 'TODO' | 'EXPERIMENT' | 'REFLECTION';
 
 export interface Capture {
     id: string;
@@ -121,4 +121,3 @@ export interface Capture {
 export interface ApiError {
     detail: string | { msg: string; loc: string[] }[] | Record<string, unknown>;
 }
-

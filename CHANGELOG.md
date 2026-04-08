@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Two-phase upload flow: presign → submit with background job processing
-- Multi-entry classification: one voice note can produce multiple categorized entries (TODO, IDEA, THOUGHT, TIME_RECORD)
+- Multi-entry classification: one voice note can produce multiple categorized entries (TODO, EXPERIMENT, REFLECTION, TIME_RECORD)
 - Daily and weekly AI-powered audit endpoints with cache persistence
 - Supabase Auth integration (Google OAuth, email/password) alongside legacy JWT auth
 - Supabase Realtime notifications for entry processing status

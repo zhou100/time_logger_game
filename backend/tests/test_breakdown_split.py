@@ -27,12 +27,12 @@ class TestActivityBreakdown:
             _make_cls("EARNING", 120),
             _make_cls("LEARNING", 60),
             _make_cls("TODO"),  # capture — should be excluded
-            _make_cls("IDEA"),  # capture — should be excluded
+            _make_cls("EXPERIMENT"),  # capture — should be excluded
         ]
         breakdown, _ = _compute_activity_breakdown(classifications)
         assert set(breakdown.keys()) <= ACTIVITY_CATEGORIES
         assert "TODO" not in breakdown
-        assert "IDEA" not in breakdown
+        assert "EXPERIMENT" not in breakdown
         assert "EARNING" in breakdown
         assert "LEARNING" in breakdown
 
@@ -54,7 +54,7 @@ class TestActivityBreakdown:
 
     def test_no_activity_entries(self):
         """Only capture entries → empty activity breakdown."""
-        classifications = [_make_cls("TODO"), _make_cls("IDEA")]
+        classifications = [_make_cls("TODO"), _make_cls("EXPERIMENT")]
         breakdown, _ = _compute_activity_breakdown(classifications)
         assert breakdown == {}
 
@@ -65,15 +65,15 @@ class TestCaptureCounts:
             _make_cls("EARNING", 120),
             _make_cls("TODO"),
             _make_cls("TODO"),
-            _make_cls("IDEA"),
-            _make_cls("THOUGHT"),
+            _make_cls("EXPERIMENT"),
+            _make_cls("REFLECTION"),
         ]
         counts = _compute_capture_counts(classifications)
         assert set(counts.keys()) <= CAPTURE_CATEGORIES
         assert "EARNING" not in counts
         assert counts["TODO"] == 2
-        assert counts["IDEA"] == 1
-        assert counts["THOUGHT"] == 1
+        assert counts["EXPERIMENT"] == 1
+        assert counts["REFLECTION"] == 1
 
     def test_empty_classifications(self):
         counts = _compute_capture_counts([])
@@ -84,3 +84,10 @@ class TestCaptureCounts:
         classifications = [_make_cls("EARNING", 60), _make_cls("RELAXING", 30)]
         counts = _compute_capture_counts(classifications)
         assert counts == {}
+
+    def test_legacy_capture_categories_fold_into_new_names(self):
+        classifications = [_make_cls("IDEA"), _make_cls("THOUGHT"), _make_cls("TODO")]
+        counts = _compute_capture_counts(classifications)
+        assert counts["EXPERIMENT"] == 1
+        assert counts["REFLECTION"] == 1
+        assert counts["TODO"] == 1

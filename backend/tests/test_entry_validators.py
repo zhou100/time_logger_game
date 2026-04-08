@@ -5,9 +5,15 @@ from pydantic import ValidationError
 
 def test_valid_category_accepted():
     from app.routes.v1.entries import CategoryItem
-    for cat in ("EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "IDEA", "THOUGHT", "TIME_RECORD"):
+    for cat in ("EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "EXPERIMENT", "REFLECTION", "TIME_RECORD"):
         item = CategoryItem(text="test", category=cat)
         assert item.category == cat
+
+
+def test_legacy_capture_categories_normalized():
+    from app.routes.v1.entries import CategoryItem
+    assert CategoryItem(text="test", category="IDEA").category == "EXPERIMENT"
+    assert CategoryItem(text="test", category="THOUGHT").category == "REFLECTION"
 
 
 def test_invalid_category_rejected():

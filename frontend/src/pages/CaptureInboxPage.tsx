@@ -14,7 +14,7 @@ import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
 type StatusFilter = CaptureStatus | 'all';
 
-const CATEGORIES: CaptureCategory[] = ['TODO', 'IDEA', 'THOUGHT'];
+const CATEGORIES: CaptureCategory[] = ['TODO', 'EXPERIMENT', 'REFLECTION'];
 
 const CaptureInboxPage: React.FC = () => {
     const navigate = useNavigate();
@@ -47,7 +47,7 @@ const CaptureInboxPage: React.FC = () => {
             return CATEGORIES.reduce<Record<CaptureCategory, number>>((acc, cat) => {
                 acc[cat] = all.filter(c => c.category === cat).length;
                 return acc;
-            }, { TODO: 0, IDEA: 0, THOUGHT: 0 });
+            }, { TODO: 0, EXPERIMENT: 0, REFLECTION: 0 });
         },
     });
 

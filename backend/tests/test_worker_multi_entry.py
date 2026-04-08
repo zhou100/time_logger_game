@@ -92,7 +92,7 @@ async def test_three_item_result_inserts_three_rows():
     """3-item categorization result → 3 EntryClassification rows added to db."""
     cat_results = [
         {"text": "Worked on dashboard", "category": "EARNING"},
-        {"text": "Add voice replay idea", "category": "IDEA"},
+        {"text": "Add voice replay experiment", "category": "EXPERIMENT"},
         {"text": "Write auth tests", "category": "TODO"},
     ]
 
@@ -111,8 +111,8 @@ async def test_display_order_is_sequential():
     """display_order values are 0, 1, 2 — not all 0."""
     cat_results = [
         {"text": "First", "category": "TODO"},
-        {"text": "Second", "category": "IDEA"},
-        {"text": "Third", "category": "THOUGHT"},
+        {"text": "Second", "category": "EXPERIMENT"},
+        {"text": "Third", "category": "REFLECTION"},
     ]
 
     entry = _make_entry()
@@ -126,12 +126,12 @@ async def test_display_order_is_sequential():
 
 
 @pytest.mark.asyncio
-async def test_empty_categorization_fallback_inserts_one_thought():
+async def test_empty_categorization_fallback_inserts_one_reflection():
     """
-    Fallback from categorize_text already returns [{"text": ..., "category": "THOUGHT"}],
-    so the worker inserts exactly 1 row with category THOUGHT.
+    Fallback from categorize_text already returns [{"text": ..., "category": "REFLECTION"}],
+    so the worker inserts exactly 1 row with category REFLECTION.
     """
-    fallback = [{"text": "full transcript text", "category": "THOUGHT"}]
+    fallback = [{"text": "full transcript text", "category": "REFLECTION"}]
 
     entry = _make_entry(transcript="full transcript text")
     job = _make_job(entry_id=entry.id)
@@ -141,7 +141,7 @@ async def test_empty_categorization_fallback_inserts_one_thought():
 
     rows = [o for o in db.added if isinstance(o, EntryClassification)]
     assert len(rows) == 1
-    assert rows[0].category == "THOUGHT"
+    assert rows[0].category == "REFLECTION"
 
 
 # ── Stale-job recovery ────────────────────────────────────────────────────────

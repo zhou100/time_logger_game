@@ -170,7 +170,7 @@ async def test_update_inserts_new_row_when_id_omitted(app):
     payload = {
         "categories": [
             {"id": str(a.id), "text": "existing item", "category": "TODO", "estimated_minutes": 10},
-            {"text": "brand new", "category": "IDEA", "estimated_minutes": 5},
+            {"text": "brand new", "category": "EXPERIMENT", "estimated_minutes": 5},
         ]
     }
 
@@ -184,4 +184,4 @@ async def test_update_inserts_new_row_when_id_omitted(app):
     # New row appended
     new = [c for c in entry.classifications if c is not a][0]
     assert new.extracted_text == "brand new"
-    assert new.category == "IDEA"
+    assert new.category == "EXPERIMENT"

@@ -72,11 +72,26 @@ class SubmitResponse(BaseModel):
     job_id: str
 
 
-VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "IDEA", "THOUGHT", "TIME_RECORD"}
+VALID_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TODO", "EXPERIMENT", "REFLECTION", "TIME_RECORD"}
+LEGACY_CATEGORY_MAP = {"IDEA": "EXPERIMENT", "THOUGHT": "REFLECTION"}
+ALL_VALID_CATEGORIES = VALID_CATEGORIES | set(LEGACY_CATEGORY_MAP.keys())
 
 # Activity categories count toward time breakdown; capture categories are follow-up items
 ACTIVITY_CATEGORIES = {"EARNING", "LEARNING", "RELAXING", "FAMILY", "TIME_RECORD"}
-CAPTURE_CATEGORIES = {"TODO", "IDEA", "THOUGHT"}
+CAPTURE_CATEGORIES = {"TODO", "EXPERIMENT", "REFLECTION"}
+
+
+def _normalize_category(category: str) -> str:
+    return LEGACY_CATEGORY_MAP.get(category, category)
+
+
+def _category_item_from_classification(c: EntryClassification) -> "CategoryItem":
+    return CategoryItem(
+        id=str(c.id),
+        text=c.display_text,
+        category=_normalize_category(c.category),
+        estimated_minutes=c.estimated_minutes,
+    )
 
 
 class CategoryItem(BaseModel):
@@ -88,9 +103,10 @@ class CategoryItem(BaseModel):
     @field_validator("category")
     @classmethod
     def validate_category(cls, v: str) -> str:
-        if v not in VALID_CATEGORIES:
-            raise ValueError(f"category must be one of {VALID_CATEGORIES}")
-        return v
+        normalized = _normalize_category(v)
+        if normalized not in VALID_CATEGORIES:
+            raise ValueError(f"category must be one of {ALL_VALID_CATEGORIES}")
+        return normalized
 
     @field_validator("estimated_minutes")
     @classmethod
@@ -256,10 +272,7 @@ async def get_entry_status(
         status=job.status.value if job else "unknown",
         step=job.step if job else None,
         transcript=entry.transcript,
-        categories=[
-            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
-            for c in entry.classifications
-        ],
+        categories=[_category_item_from_classification(c) for c in entry.classifications],
     )
 
 
@@ -325,10 +338,7 @@ async def list_entries(
             recorded_at=e.recorded_at.isoformat() if e.recorded_at else None,
             created_at=e.created_at.isoformat(),
             duration_seconds=e.duration_seconds,
-            categories=[
-                CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
-                for c in e.classifications
-            ],
+            categories=[_category_item_from_classification(c) for c in e.classifications],
         )
         for e in entries
     ]
@@ -483,10 +493,7 @@ async def update_entry(
         recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
         created_at=entry.created_at.isoformat(),
         duration_seconds=entry.duration_seconds,
-        categories=[
-            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
-            for c in entry.classifications
-        ],
+        categories=[_category_item_from_classification(c) for c in entry.classifications],
     )
 
 
@@ -572,10 +579,7 @@ async def reclassify_entry(
         recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
         created_at=entry.created_at.isoformat(),
         duration_seconds=entry.duration_seconds,
-        categories=[
-            CategoryItem(id=str(c.id), text=c.display_text, category=c.category, estimated_minutes=c.estimated_minutes)
-            for c in entry.classifications
-        ],
+        categories=[_category_item_from_classification(c) for c in entry.classifications],
     )
 
 
@@ -876,11 +880,12 @@ def _compute_activity_breakdown(
 def _compute_capture_counts(
     all_classifications: list,
 ) -> Dict[str, int]:
-    """Simple counts of capture categories (TODO/IDEA/THOUGHT)."""
+    """Simple counts of capture categories (TODO/EXPERIMENT/REFLECTION)."""
     counts: Dict[str, int] = {}
     for c in all_classifications:
-        if c.category in CAPTURE_CATEGORIES:
-            counts[c.category] = counts.get(c.category, 0) + 1
+        normalized = _normalize_category(c.category)
+        if normalized in CAPTURE_CATEGORIES:
+            counts[normalized] = counts.get(normalized, 0) + 1
     return counts
 
 
@@ -893,7 +898,7 @@ async def _generate_audit_text(
         for c in e.classifications:
             text = c.display_text or e.transcript or ""
             mins = f" ({c.estimated_minutes}min)" if c.estimated_minutes else ""
-            entry_lines.append(f"- [{c.category}]{mins} {text}")
+            entry_lines.append(f"- [{_normalize_category(c.category)}]{mins} {text}")
 
     activity_breakdown, _ = _compute_activity_breakdown(all_classifications)
     capture_counts = _compute_capture_counts(all_classifications)
