@@ -66,6 +66,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Re-hydrate user on mount
     useEffect(() => {
+        // Eager unblock: if we already restored a user synchronously from
+        // localStorage, don't gate the UI on a network round-trip. Awaiting
+        // sb.auth.getSession() can hang indefinitely (supabase-js _acquireLock
+        // deadlock or slow token refresh), which previously left users stuck
+        // on a spinner forever. The finally{} below covers the no-user case.
+        if (user) setIsLoading(false);
+
         const rehydrate = async () => {
             try {
                 if (useSupabase) {
@@ -73,17 +80,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (!sb) return;
                     const { data: { session } } = await sb.auth.getSession();
                     if (session?.user) {
-                        // Set user immediately from Supabase session so the UI isn't blocked
-                        // while the backend cold-starts (Render free tier can take 30-50s)
-                        setUser({ id: 0, email: session.user.email || '' });
-                        setIsLoading(false);
+                        // Don't clobber a synchronously-restored user with id:0
+                        setUser((prev) => prev ?? { id: 0, email: session.user.email || '' });
                         // Fetch real DB user id in the background
                         import('../services/api').then(({ authApi }) =>
                             authApi.getCurrentUser()
                                 .then((profile) => setUser({ id: profile.id, email: session.user.email || '' }))
                                 .catch(() => { /* keep fallback id:0 */ })
                         );
-                        return; // skip the finally setIsLoading(false) — already done
+                    } else {
+                        // No session — clear any stale synchronously-restored user
+                        setUser(null);
                     }
                 } else {
                     // getStoredToken() returns the raw token regardless of expiry.
@@ -92,9 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (AuthService.getStoredToken()) {
                         const userId = AuthService.getUserIdFromToken();
                         if (userId !== null) {
-                            // Unblock UI immediately with token data — don't wait for backend
-                            setUser({ id: userId, email: '' });
-                            setIsLoading(false);
+                            setUser((prev) => prev ?? { id: userId, email: '' });
                             // Fetch full profile in background (triggers token refresh if expired)
                             try {
                                 const { authApi } = await import('../services/api');
@@ -102,14 +107,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                                 setUser({ id: profile.id, email: profile.email });
                             } catch {
                                 // Only log out if tokens were actually cleared (e.g. 401 on refresh).
-                                // getStoredToken() returns null only after clearTokens() is called,
-                                // not when the token is merely expired or the network is down.
                                 if (!AuthService.getStoredToken()) {
                                     setUser(null);
                                 }
-                                // Otherwise (expired token, cold start, transient error): keep session.
                             }
-                            return; // setIsLoading already called above
                         }
                     }
                 }
