@@ -89,6 +89,33 @@ export interface AuditResponse {
     generated_at: string | null;
     cached?: boolean;
     message?: string;
+    week_start?: string;
+    week_end?: string;
+    days_covered?: number;
+    new_themes?: NewThemeRef[];
+}
+
+export interface NewThemeRef {
+    id: string;
+    title: string;
+    polarity: 'positive' | 'negative' | 'neutral';
+    is_new: boolean;
+    occurrences: number;
+}
+
+export interface Theme {
+    id: string;
+    title: string;
+    description: string | null;
+    polarity: 'positive' | 'negative' | 'neutral';
+    category: string | null;
+    first_seen: string;
+    last_seen: string;
+    occurrences: number;
+    status: 'active' | 'pinned' | 'dismissed' | 'resolved';
+    user_note: string | null;
+    evidence: Array<{ audit_date: string; snippet: string }>;
+    streak?: boolean[];
 }
 
 export interface WeeklyAuditHistoryItem {

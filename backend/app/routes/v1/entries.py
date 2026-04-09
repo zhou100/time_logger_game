@@ -33,6 +33,7 @@ from ...models.entry import Entry
 from ...models.user import User
 from ...models.jobs import Job, JobStatus
 from ...models.audit_result import AuditResult
+from ...models.weekly_theme import WeeklyTheme
 from ...services import queue as queue_svc
 from ...services import storage as storage_svc
 from ...settings import settings
@@ -162,6 +163,10 @@ class AuditResponse(BaseModel):
     generated_at: Optional[str]
     cached: bool = False
     message: Optional[str] = None
+    week_start: Optional[str] = None
+    week_end: Optional[str] = None
+    days_covered: Optional[int] = None
+    new_themes: Optional[List[Dict[str, Any]]] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -626,7 +631,7 @@ async def generate_audit(
     breakdown, approximate = _compute_breakdown(all_classifications)
 
     # ── Generate audit text ──────────────────────────────────────────────────
-    audit_text = await _generate_audit_text(entries, all_classifications, breakdown)
+    audit_text = await _generate_audit_text(entries, all_classifications, breakdown, db, current_user.id)
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -714,45 +719,106 @@ async def generate_weekly_audit(
     activity_summary = ", ".join(f"{cat}: {pct}%" for cat, pct in activity_breakdown.items()) or "No activity entries"
     capture_summary = ", ".join(f"{count} {cat}{'s' if count > 1 else ''}" for cat, count in capture_counts.items()) or "None"
 
-    weekly_prompt = f"""You are an opinionated, honest AI time coach writing a weekly review letter.
+    # Pull active prior themes for continuity in the prompt + later dedup
+    prior_themes_q = await db.execute(
+        select(WeeklyTheme).where(
+            WeeklyTheme.user_id == current_user.id,
+            WeeklyTheme.status.in_(["active", "pinned"]),
+        ).order_by(WeeklyTheme.last_seen.desc()).limit(20)
+    )
+    prior_themes = prior_themes_q.scalars().all()
+    prior_themes_text = "\n".join(
+        f"- [{t.polarity}] {t.title}: {t.description or ''} (seen {t.occurrences}x)"
+        for t in prior_themes
+    ) or "(none yet)"
 
-Based ONLY on the activities listed below, write a personal weekly review (3-4 paragraphs, under 400 words) that:
-- Compares how different days were spent — highlight the best and worst days
-- Identifies patterns (e.g. "You front-loaded creative work Mon-Tue but spent Thu-Fri in meetings")
-- Says the uncomfortable truth if the data shows it (e.g. "You spent 60% of your week in meetings despite saying deep work is your priority")
-- Ends with one specific, actionable change for next week
+    # Stage 1 — THINKING (gpt-5.4-mini): structured analysis + theme extraction in JSON
+    thinking_prompt = f"""You are an analytical AI time coach. Analyze the user's week and produce STRUCTURED JSON only.
 
-Frame your analysis using Naval's time framework:
-- EARNING = making money (work, meetings, clients)
-- LEARNING = building knowledge (reading, courses, practice)
-- RELAXING = recharging (exercise, rest, hobbies)
-- FAMILY = relationships (partner, kids, parents)
-Point out the balance or imbalance across the week. If one category dominates or is missing, call it out.
+Naval's framework: EARNING (money/work) | LEARNING (knowledge) | RELAXING (recharge) | FAMILY (relationships).
 
-Tone: direct, slightly provocative, like a coach who respects you enough to be honest.
-IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
-Reference ONLY the activities listed. Do not invent activities.
+Prior recurring themes from past weeks (use these for continuity — extend or contrast with new patterns):
+{prior_themes_text}
 
-Weekly activity breakdown: {activity_summary}
-Weekly follow-up items: {capture_summary}
+This week's activity breakdown: {activity_summary}
+Follow-up items captured: {capture_summary}
 
 Daily activities:
-{day_text}"""
+{day_text}
+
+Respond with ONLY a valid JSON object, no prose, no code fence:
+{{
+  "best_day": "string — which day showed the best balance and why",
+  "worst_day": "string — which day was most off-balance and why",
+  "patterns": ["3-5 short pattern observations"],
+  "uncomfortable_truth": "the most honest thing the data says",
+  "naval_balance": "one sentence on the EARNING/LEARNING/RELAXING/FAMILY mix",
+  "next_week_action": "one specific actionable change",
+  "themes": [
+    {{
+      "title": "short title (under 60 chars)",
+      "description": "1-2 sentence explanation grounded in this week's data",
+      "polarity": "positive | negative | neutral",
+      "category": "EARNING | LEARNING | RELAXING | FAMILY | other"
+    }}
+  ]
+}}
+
+For themes: extract 1-4 patterns worth tracking long-term. Prefer extending a prior theme (use the same title) if it continues. Skip themes if nothing notable repeats."""
 
     try:
-        response = await asyncio.wait_for(
+        thinking_response = await asyncio.wait_for(
+            _get_openai().chat.completions.create(
+                model="gpt-5.4-mini",
+                messages=[{"role": "user", "content": thinking_prompt}],
+                temperature=0.4,
+                response_format={"type": "json_object"},
+            ),
+            timeout=30.0,
+        )
+        thinking_raw = thinking_response.choices[0].message.content or "{}"
+        try:
+            analysis = json.loads(thinking_raw)
+        except json.JSONDecodeError:
+            logger.warning(f"Weekly thinking returned non-JSON: {thinking_raw[:200]}")
+            analysis = {}
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Weekly review timed out. Try again.")
+    except Exception as exc:
+        logger.error(f"Weekly thinking LLM call failed: {exc}", exc_info=True)
+        return AuditResponse(
+            entries=len(entries), breakdown=breakdown, approximate=approximate,
+            audit_text=None, generated_at=None, message="Weekly review generation failed",
+        )
+
+    # Stage 2 — WRITING (gpt-5.4-nano): turn the analysis into a prose letter
+    writing_prompt = f"""You are an opinionated, honest AI time coach. Turn this structured analysis into a 3-4 paragraph weekly review letter (under 400 words).
+
+Tone: direct, slightly provocative, like a coach who respects the user enough to be honest. Reference ONLY what's in the analysis.
+IMPORTANT: Respond in the same language as the daily activities below. If Chinese, write Chinese. If English, write English. Never switch languages.
+
+Analysis JSON:
+{json.dumps(analysis, ensure_ascii=False, indent=2)}
+
+Original daily activities (for language detection only):
+{day_text[:500]}
+
+Write the letter now."""
+
+    try:
+        writing_response = await asyncio.wait_for(
             _get_openai().chat.completions.create(
                 model="gpt-5.4-nano",
-                messages=[{"role": "user", "content": weekly_prompt}],
+                messages=[{"role": "user", "content": writing_prompt}],
                 temperature=0.7,
             ),
             timeout=20.0,
         )
-        audit_text = response.choices[0].message.content
+        audit_text = writing_response.choices[0].message.content
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Weekly review timed out. Try again.")
     except Exception as exc:
-        logger.error(f"Weekly audit LLM call failed: {exc}", exc_info=True)
+        logger.error(f"Weekly writing LLM call failed: {exc}", exc_info=True)
         return AuditResponse(
             entries=len(entries), breakdown=breakdown, approximate=approximate,
             audit_text=None, generated_at=None, message="Weekly review generation failed",
@@ -765,12 +831,73 @@ Daily activities:
         len(entries), breakdown, audit_text,
     )
 
+    # Persist + dedup themes
+    new_theme_payloads: List[Dict[str, Any]] = []
+    extracted = analysis.get("themes") or []
+    if isinstance(extracted, list):
+        prior_by_title = {t.title.strip().lower(): t for t in prior_themes}
+        snippet = (audit_text or "")[:240]
+        for t in extracted:
+            if not isinstance(t, dict):
+                continue
+            title = (t.get("title") or "").strip()
+            if not title:
+                continue
+            key = title.lower()
+            existing = prior_by_title.get(key)
+            if existing is None:
+                # Cheap fuzzy dedup: substring overlap
+                for k, pt in prior_by_title.items():
+                    if k in key or key in k:
+                        existing = pt
+                        break
+            evidence_entry = {"audit_date": today_utc.isoformat(), "snippet": snippet}
+            if existing is not None:
+                existing.last_seen = today_utc
+                existing.occurrences = (existing.occurrences or 0) + 1
+                existing.description = t.get("description") or existing.description
+                existing.polarity = t.get("polarity") or existing.polarity
+                existing.category = t.get("category") or existing.category
+                ev = list(existing.evidence or [])
+                ev.append(evidence_entry)
+                existing.evidence = ev[-10:]
+                new_theme_payloads.append({
+                    "id": str(existing.id), "title": existing.title,
+                    "polarity": existing.polarity, "is_new": False,
+                    "occurrences": existing.occurrences,
+                })
+            else:
+                theme = WeeklyTheme(
+                    user_id=current_user.id,
+                    title=title[:200],
+                    description=t.get("description"),
+                    polarity=(t.get("polarity") or "neutral")[:20],
+                    category=(t.get("category") or None),
+                    first_seen=today_utc,
+                    last_seen=today_utc,
+                    occurrences=1,
+                    status="active",
+                    evidence=[evidence_entry],
+                )
+                db.add(theme)
+                await db.flush()
+                new_theme_payloads.append({
+                    "id": str(theme.id), "title": theme.title,
+                    "polarity": theme.polarity, "is_new": True,
+                    "occurrences": 1,
+                })
+    await db.commit()
+
     return AuditResponse(
         entries=len(entries),
         breakdown=breakdown,
         approximate=approximate,
         audit_text=audit_text,
         generated_at=now_iso,
+        week_start=week_start_date.isoformat(),
+        week_end=today_utc.isoformat(),
+        days_covered=7,
+        new_themes=new_theme_payloads,
     )
 
 
@@ -819,6 +946,155 @@ async def get_weekly_audit_history(
         ))
 
     return items
+
+
+# ── Themes ────────────────────────────────────────────────────────────────────
+
+class ThemeOut(BaseModel):
+    id: str
+    title: str
+    description: Optional[str]
+    polarity: str
+    category: Optional[str]
+    first_seen: str
+    last_seen: str
+    occurrences: int
+    status: str
+    user_note: Optional[str]
+    evidence: List[Dict[str, Any]]
+    streak: List[bool] = []  # last 14 days, oldest → newest, true = day had relevant activity
+
+
+class ThemeUpdateRequest(BaseModel):
+    status: Optional[str] = None  # active | pinned | dismissed | resolved
+    user_note: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        if v is not None and v not in {"active", "pinned", "dismissed", "resolved"}:
+            raise ValueError("invalid status")
+        return v
+
+
+def _theme_to_out(t: WeeklyTheme, streak: Optional[List[bool]] = None) -> ThemeOut:
+    return ThemeOut(
+        id=str(t.id),
+        title=t.title,
+        description=t.description,
+        polarity=t.polarity,
+        category=t.category,
+        first_seen=t.first_seen.isoformat(),
+        last_seen=t.last_seen.isoformat(),
+        occurrences=t.occurrences,
+        status=t.status,
+        user_note=t.user_note,
+        evidence=list(t.evidence or []),
+        streak=streak or [],
+    )
+
+
+async def _compute_theme_streaks(
+    db: AsyncSession, user_id: int, themes: List[WeeklyTheme]
+) -> Dict[str, List[bool]]:
+    """For each theme, return a 14-element bool list (oldest→newest) indicating
+    whether the user had any classification matching the theme's category on that day.
+    Themes with no category fall back to "any entry that day."
+    """
+    if not themes:
+        return {}
+    today = datetime.now(timezone.utc).date()
+    window_start = today - timedelta(days=13)
+    days = [window_start + timedelta(days=i) for i in range(14)]
+
+    day_col = func.coalesce(Entry.local_date, func.date(Entry.created_at))
+    rows = await db.execute(
+        select(day_col.label("d"), EntryClassification.category)
+        .join(EntryClassification, EntryClassification.entry_id == Entry.id)
+        .where(
+            Entry.user_id == user_id,
+            day_col >= window_start,
+            day_col <= today,
+        )
+    )
+    by_day_categories: Dict[Any, set] = {}
+    any_day: set = set()
+    for d, cat in rows.all():
+        any_day.add(d)
+        by_day_categories.setdefault(d, set()).add(cat)
+
+    out: Dict[str, List[bool]] = {}
+    for t in themes:
+        if t.category:
+            out[str(t.id)] = [t.category in by_day_categories.get(d, set()) for d in days]
+        else:
+            out[str(t.id)] = [d in any_day for d in days]
+    return out
+
+
+@router.get("/themes", response_model=List[ThemeOut])
+async def list_themes(
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List recurring weekly themes for the current user."""
+    q = select(WeeklyTheme).where(WeeklyTheme.user_id == current_user.id)
+    if status_filter:
+        q = q.where(WeeklyTheme.status == status_filter)
+    else:
+        q = q.where(WeeklyTheme.status.in_(["active", "pinned"]))
+    q = q.order_by(
+        case((WeeklyTheme.status == "pinned", 0), else_=1),
+        WeeklyTheme.last_seen.desc(),
+    )
+    result = await db.execute(q)
+    themes = result.scalars().all()
+    streaks = await _compute_theme_streaks(db, current_user.id, themes)
+    return [_theme_to_out(t, streaks.get(str(t.id))) for t in themes]
+
+
+@router.patch("/themes/{theme_id}", response_model=ThemeOut)
+async def update_theme(
+    theme_id: str,
+    body: ThemeUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(WeeklyTheme).where(
+            WeeklyTheme.id == theme_id,
+            WeeklyTheme.user_id == current_user.id,
+        )
+    )
+    theme = result.scalar_one_or_none()
+    if theme is None:
+        raise HTTPException(status_code=404, detail="Theme not found")
+    if body.status is not None:
+        theme.status = body.status
+    if body.user_note is not None:
+        theme.user_note = body.user_note
+    await db.commit()
+    return _theme_to_out(theme)
+
+
+@router.delete("/themes/{theme_id}", status_code=204)
+async def delete_theme(
+    theme_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(WeeklyTheme).where(
+            WeeklyTheme.id == theme_id,
+            WeeklyTheme.user_id == current_user.id,
+        )
+    )
+    theme = result.scalar_one_or_none()
+    if theme is None:
+        raise HTTPException(status_code=404, detail="Theme not found")
+    await db.delete(theme)
+    await db.commit()
 
 
 # ── Audit helpers ─────────────────────────────────────────────────────────────
@@ -891,6 +1167,7 @@ def _compute_capture_counts(
 
 async def _generate_audit_text(
     entries: list, all_classifications: list, breakdown: Dict[str, float],
+    db: Optional[AsyncSession] = None, user_id: Optional[int] = None,
 ) -> Optional[str]:
     """Call GPT to generate audit text. Returns None on failure."""
     entry_lines = []
@@ -907,6 +1184,41 @@ async def _generate_audit_text(
     capture_summary = ", ".join(f"{count} {cat}{'s' if count > 1 else ''}" for cat, count in capture_counts.items()) or "None"
     entry_summary = "\n".join(entry_lines)
 
+    # Pull recurring themes (pinned + active) for long-arc context.
+    themes_block = ""
+    if db is not None and user_id is not None:
+        try:
+            themes_q = await db.execute(
+                select(WeeklyTheme).where(
+                    WeeklyTheme.user_id == user_id,
+                    WeeklyTheme.status.in_(["active", "pinned"]),
+                ).order_by(
+                    case((WeeklyTheme.status == "pinned", 0), else_=1),
+                    WeeklyTheme.last_seen.desc(),
+                ).limit(8)
+            )
+            themes = themes_q.scalars().all()
+            if themes:
+                themes_block = "\n".join(
+                    f"- [{t.polarity}] {t.title}"
+                    + (f": {t.description}" if t.description else "")
+                    + f" (seen {t.occurrences}x)"
+                    for t in themes
+                )
+        except Exception as exc:
+            logger.warning(f"Failed to load themes for daily audit: {exc}")
+
+    themes_section = (
+        f"""
+
+The user has been tracking these recurring themes from past weeks:
+{themes_block}
+
+If today's activities clearly extend, support, or contradict any of these themes, mention it in ONE sentence at most. If today's data has nothing to do with any theme, ignore them entirely. Do not force a connection."""
+        if themes_block
+        else ""
+    )
+
     audit_prompt = f"""You are an honest, direct AI time coach. Based ONLY on the \
 activities listed below, write a short audit (2-3 paragraphs, under 300 words) that:
 - Summarizes how the day was actually spent
@@ -921,7 +1233,7 @@ Frame your analysis using Naval's time framework:
 Point out the balance or imbalance. If one category dominates or is missing, call it out.
 
 IMPORTANT: Respond in the same language as the activities. If they are in Chinese, write in Chinese. If in English, write in English. Never mix up languages (e.g. do NOT respond in Japanese to Chinese entries).
-Reference ONLY the activities listed. Do not invent activities not mentioned.
+Reference ONLY the activities listed. Do not invent activities not mentioned.{themes_section}
 
 Activity breakdown: {activity_summary}
 Follow-up items: {capture_summary}
@@ -963,6 +1275,13 @@ async def _get_cached_audit(
         return None
 
     breakdown = json.loads(cached.breakdown_json) if cached.breakdown_json else {}
+    week_start = None
+    week_end = None
+    days_covered = None
+    if audit_type == "weekly":
+        week_end = cached.audit_date.isoformat()
+        week_start = (cached.audit_date - timedelta(days=6)).isoformat()
+        days_covered = 7
     return AuditResponse(
         entries=cached.entries_count,
         breakdown=breakdown,
@@ -970,6 +1289,9 @@ async def _get_cached_audit(
         audit_text=cached.audit_text,
         generated_at=cached.generated_at.isoformat() if cached.generated_at else None,
         cached=True,
+        week_start=week_start,
+        week_end=week_end,
+        days_covered=days_covered,
     )
 
 

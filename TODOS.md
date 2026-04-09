@@ -30,6 +30,18 @@
 
 ## P3 — Low Priority
 
+### Ambient Theme Cue Above Record Button
+**What:** Rotate one pinned theme as a single line above the record button (e.g. *"You said deep-work mornings matter. It's 9:17."*). Time-of-day-aware. No popup, no animation, just text.
+**Why:** Atomic Habits "make it obvious" — turn the recorder surface into an ambient cue at the moment of action. Raises self-awareness from once/week to once/session.
+**Pros:** Closes the awareness loop at the actual decision point. Zero new schema (uses existing pinned themes).
+**Cons:** Touches the sacred click-and-record surface. If it feels naggy, it poisons the core loop. Defer until streak dots + theme injection in daily prompt have proven the broader theme system feels right.
+**Context:** Deferred from Atomic Habits review (2026-04-08). Build #1 (streak dots) and #2 (themes in daily prompt) first, use for a few days, then decide whether this earns its pixels. If shipped, copy should be LLM-generated per theme at weekly review time and stored on the theme row.
+**Effort:** S (human: ~2 hours / CC: ~20 min)
+**Priority:** P3
+**Depends on:** #1 streak dots and #2 theme injection in daily prompt shipping first
+
+---
+
 ### Presigned URL Content-Type Validation
 
 **What:** Validate the `content_type` parameter on the presign endpoint to restrict to audio MIME types.

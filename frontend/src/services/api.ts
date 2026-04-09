@@ -14,6 +14,7 @@ import {
     Capture,
     CaptureCategory,
     CaptureStatus,
+    Theme,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -47,7 +48,10 @@ api.interceptors.request.use(async (config) => {
 // ── Response interceptor: handle 401 with token refresh ───────────────────────
 
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{
+    resolve: (token: string) => void;
+    reject: (error: unknown) => void;
+}> = [];
 
 api.interceptors.response.use(
     (res) => res,
@@ -62,12 +66,13 @@ api.interceptors.response.use(
             isRefreshing = true;
             try {
                 const newToken = await AuthService.getNewToken();
-                refreshQueue.forEach(cb => cb(newToken));
+                refreshQueue.forEach(({ resolve }) => resolve(newToken));
                 refreshQueue = [];
                 original._retry = true;
                 original.headers['Authorization'] = `Bearer ${newToken}`;
                 return api(original);
             } catch (refreshErr) {
+                refreshQueue.forEach(({ reject }) => reject(refreshErr));
                 refreshQueue = [];
                 return Promise.reject(refreshErr);
             } finally {
@@ -75,11 +80,14 @@ api.interceptors.response.use(
             }
         }
 
-        return new Promise(resolve => {
-            refreshQueue.push((token: string) => {
-                original._retry = true;
-                original.headers['Authorization'] = `Bearer ${token}`;
-                resolve(api(original));
+        return new Promise((resolve, reject) => {
+            refreshQueue.push({
+                resolve: (token: string) => {
+                    original._retry = true;
+                    original.headers['Authorization'] = `Bearer ${token}`;
+                    resolve(api(original));
+                },
+                reject,
             });
         });
     }
@@ -242,6 +250,28 @@ export const entriesApi = {
         try {
             const res = await api.get<WeeklyAuditHistoryItem[]>(`/v1/entries/audit/weekly/history?limit=${limit}`);
             return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async listThemes(status?: 'active' | 'pinned' | 'dismissed' | 'resolved'): Promise<Theme[]> {
+        try {
+            const res = await api.get<Theme[]>('/v1/entries/themes', {
+                params: status ? { status } : {},
+            });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async updateTheme(themeId: string, data: { status?: string; user_note?: string }): Promise<Theme> {
+        try {
+            const res = await api.patch<Theme>(`/v1/entries/themes/${themeId}`, data);
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async deleteTheme(themeId: string): Promise<void> {
+        try {
+            await api.delete(`/v1/entries/themes/${themeId}`);
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
