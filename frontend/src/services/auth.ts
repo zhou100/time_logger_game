@@ -2,7 +2,15 @@ import axios, { AxiosError } from 'axios';
 import { LoginCredentials, RegisterCredentials, AuthResponse } from '../types/auth';
 import { API_BASE_URL } from './api';
 import { getSupabase, isSupabaseConfigured } from './supabase';
+import { readSupabaseSession } from './supabaseStorage';
 import Logger from '../utils/logger';
+
+// supabase-js refreshSession() can wedge on a storage lock; cap it so a
+// stuck refresh doesn't translate to a 30s spinner for the user.
+const REFRESH_TIMEOUT_MS = 5000;
+// Refresh slightly before expiry to absorb client clock skew and avoid
+// trip-then-retry on every request near the boundary.
+const TOKEN_EXPIRY_SKEW_S = 30;
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -34,7 +42,10 @@ function decodeToken(token: string): Record<string, unknown> | null {
 function isTokenExpired(token: string): boolean {
     const decoded = decodeToken(token);
     if (!decoded?.exp) return true;
-    return (decoded.exp as number) <= Math.floor(Date.now() / 1000);
+    // Subtract a skew margin so we refresh slightly before the boundary,
+    // avoiding a guaranteed 401 → refresh → retry on every request when
+    // the token is one second from expiry.
+    return (decoded.exp as number) <= Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_SKEW_S;
 }
 
 class AuthService {
@@ -119,12 +130,35 @@ class AuthService {
     }
 
     async getValidToken(): Promise<string> {
-        // Supabase mode: get token from Supabase session
+        // Supabase mode: read the access token directly from localStorage.
+        // Avoid awaiting sb.auth.getSession() on every request — it can hang
+        // indefinitely (supabase-js _acquireLock deadlock or slow refresh),
+        // which would block every API call and freeze the app.
         if (isSupabaseConfigured) {
+            const stored = readSupabaseSession();
+            if (stored?.access_token && !isTokenExpired(stored.access_token)) {
+                return stored.access_token;
+            }
+            // Token missing or expired — fall back to supabase-js refresh.
+            // This is the only place we accept the risk of waiting on
+            // supabase-js, and we cap it with a hard timeout so a wedged
+            // refresh degrades to a normal auth error instead of an
+            // infinite spinner.
             const sb = getSupabase();
             if (sb) {
-                const { data: { session } } = await sb.auth.getSession();
-                if (session?.access_token) return session.access_token;
+                try {
+                    const refreshPromise = sb.auth.refreshSession();
+                    const timeoutPromise = new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('refresh timeout')), REFRESH_TIMEOUT_MS)
+                    );
+                    const { data: { session } } = await Promise.race([
+                        refreshPromise,
+                        timeoutPromise,
+                    ]) as Awaited<ReturnType<typeof sb.auth.refreshSession>>;
+                    if (session?.access_token) return session.access_token;
+                } catch (err) {
+                    Logger.error('Supabase refreshSession failed:', err);
+                }
             }
             throw new Error('Not authenticated');
         }

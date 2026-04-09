@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import AuthService from '../services/auth';
 import { getSupabase, isSupabaseConfigured } from '../services/supabase';
+import { readSupabaseSession } from '../services/supabaseStorage';
 import { User, RegisterCredentials, LoginCredentials } from '../types/auth';
 import Logger from '../utils/logger';
 
@@ -33,23 +34,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // already has isAuthenticated=true — no blank page, no LandingPage flash.
     const [user, setUser] = useState<User | null>(() => {
         if (useSupabase) {
-            // Supabase stores the session in localStorage under sb-<ref>-auth-token.
-            // Read it synchronously so we don't need a loading guard in HomePage.
-            try {
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key?.startsWith('sb-') && key.endsWith('-auth-token')) {
-                        const raw = localStorage.getItem(key);
-                        if (raw) {
-                            const session = JSON.parse(raw);
-                            if (session?.user?.email) {
-                                return { id: 0, email: session.user.email };
-                            }
-                        }
-                        break;
-                    }
-                }
-            } catch { /* fall through to null */ }
+            // Read the Supabase session synchronously from localStorage so the
+            // very first render already has isAuthenticated=true. Going through
+            // sb.auth.getSession() can hang on a storage lock — see
+            // services/supabaseStorage.ts for the rationale.
+            const session = readSupabaseSession();
+            if (session?.user?.email) {
+                return { id: 0, email: session.user.email };
+            }
         } else {
             // JWT mode: getStoredToken() returns the token regardless of expiry.
             // An expired access token can still be decoded for user-id; the Axios
