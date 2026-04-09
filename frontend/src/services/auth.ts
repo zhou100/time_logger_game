@@ -10,11 +10,13 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 // Separate axios instance for auth (form-encoded login)
 const authAxios = axios.create({
     baseURL: `${API_BASE_URL}/api`,
+    timeout: 15_000,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
 });
 
 const formAxios = axios.create({
     baseURL: `${API_BASE_URL}/api`,
+    timeout: 15_000,
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
 });
 

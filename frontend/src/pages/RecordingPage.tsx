@@ -25,7 +25,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
 import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
-import { AuditResponse, EntryItem, WeeklyAuditHistoryItem } from '../types/api';
+import { AuditResponse, EntryItem, WeeklyAuditHistoryItem, Theme } from '../types/api';
+import { Collapse, Tooltip } from '@mui/material';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 import Logger from '../utils/logger';
 
@@ -89,6 +92,29 @@ const RecordingPage: React.FC = () => {
     const [weeklyResult, setWeeklyResult] = useState<AuditResponse | null>(null);
     const [weeklyError, setWeeklyError] = useState<string | undefined>();
     const [weeklyHistory, setWeeklyHistory] = useState<WeeklyAuditHistoryItem[]>([]);
+    const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
+
+    // Themes (long-term recurring patterns)
+    const [themes, setThemes] = useState<Theme[]>([]);
+    const loadThemes = useCallback(() => {
+        entriesApi.listThemes().then(setThemes).catch(() => {});
+    }, []);
+    useEffect(() => { loadThemes(); }, [loadThemes]);
+
+    const toggleThemePin = useCallback(async (theme: Theme) => {
+        const next = theme.status === 'pinned' ? 'active' : 'pinned';
+        try {
+            const updated = await entriesApi.updateTheme(theme.id, { status: next });
+            setThemes((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+        } catch { /* noop */ }
+    }, []);
+
+    const dismissTheme = useCallback(async (theme: Theme) => {
+        try {
+            await entriesApi.updateTheme(theme.id, { status: 'dismissed' });
+            setThemes((prev) => prev.filter((t) => t.id !== theme.id));
+        } catch { /* noop */ }
+    }, []);
 
     const { data: entryStatus } = useEntryStatus(pendingEntryId);
 
@@ -150,12 +176,25 @@ const RecordingPage: React.FC = () => {
             // Refresh history after generating
             const history = await entriesApi.getWeeklyAuditHistory();
             setWeeklyHistory(history);
+            loadThemes();
         } catch (err) {
             setWeeklyError(err instanceof Error ? err.message : 'Weekly review failed');
         } finally {
             setWeeklyLoading(false);
         }
-    }, [weeklyResult]);
+    }, [weeklyResult, loadThemes]);
+
+    const polarityColor = (p: string) =>
+        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.info;
+
+    const formatRange = (start?: string, end?: string) => {
+        if (!start || !end) return '';
+        const fmt = (s: string) => {
+            const [y, m, d] = s.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        };
+        return `${fmt(start)} → ${fmt(end)} · 7 days`;
+    };
 
     // Load history when drawer opens
     useEffect(() => {
@@ -244,6 +283,65 @@ const RecordingPage: React.FC = () => {
                     maxDate={today}
                     onSelect={setSelectedDate}
                 />
+
+                {/* ── Theme chips (long-term recurring patterns) ───────────── */}
+                {themes.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, mb: 2, justifyContent: 'center' }}>
+                        {themes.slice(0, 8).map((t) => {
+                            const streak = t.streak ?? [];
+                            const activeCount = streak.filter(Boolean).length;
+                            return (
+                                <Box key={t.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                    <Tooltip
+                                        title={`${t.description || ''}${t.description ? ' · ' : ''}seen ${t.occurrences}× · ${activeCount}/14 days active · click to open`}
+                                    >
+                                        <Chip
+                                            size="small"
+                                            label={t.title}
+                                            onClick={() => { setDrawerOpen(true); }}
+                                            onDelete={() => dismissTheme(t)}
+                                            icon={
+                                                <PushPinIcon
+                                                    fontSize="small"
+                                                    onClick={(e) => { e.stopPropagation(); toggleThemePin(t); }}
+                                                    sx={{
+                                                        cursor: 'pointer',
+                                                        color: t.status === 'pinned' ? polarityColor(t.polarity) : 'text.disabled',
+                                                        transform: t.status === 'pinned' ? 'none' : 'rotate(45deg)',
+                                                    }}
+                                                />
+                                            }
+                                            sx={{
+                                                borderColor: polarityColor(t.polarity),
+                                                color: polarityColor(t.polarity),
+                                                bgcolor: 'background.paper',
+                                                border: `1px solid ${polarityColor(t.polarity)}`,
+                                                fontWeight: 500,
+                                            }}
+                                            variant="outlined"
+                                        />
+                                    </Tooltip>
+                                    {streak.length > 0 && (
+                                        <Box sx={{ display: 'flex', gap: '2px', mt: '2px' }} aria-label={`${activeCount} of 14 days active`}>
+                                            {streak.map((on, i) => (
+                                                <Box
+                                                    key={i}
+                                                    sx={{
+                                                        width: 5,
+                                                        height: 5,
+                                                        borderRadius: '50%',
+                                                        bgcolor: on ? polarityColor(t.polarity) : palette.rule,
+                                                        opacity: on ? 0.85 : 0.45,
+                                                    }}
+                                                />
+                                            ))}
+                                        </Box>
+                                    )}
+                                </Box>
+                            );
+                        })}
+                    </Box>
+                )}
 
                 {/* ── Recorder ─────────────────────────────────────────────── */}
                 <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
@@ -499,6 +597,11 @@ const RecordingPage: React.FC = () => {
                                 borderRadius: '0 8px 8px 0',
                             }}
                         >
+                            {(weeklyResult.week_start && weeklyResult.week_end) && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                    {formatRange(weeklyResult.week_start, weeklyResult.week_end)}
+                                </Typography>
+                            )}
                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
                                 {weeklyResult.audit_text}
                             </Typography>
@@ -507,6 +610,23 @@ const RecordingPage: React.FC = () => {
                                     {weeklyResult.entries} entries
                                     {weeklyResult.cached && ' · cached'}
                                 </Typography>
+                            )}
+                            {weeklyResult.new_themes && weeklyResult.new_themes.length > 0 && (
+                                <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {weeklyResult.new_themes.map((nt) => (
+                                        <Chip
+                                            key={nt.id}
+                                            size="small"
+                                            label={nt.is_new ? `+ ${nt.title}` : `${nt.title} (${nt.occurrences}×)`}
+                                            sx={{
+                                                bgcolor: 'background.paper',
+                                                border: `1px solid ${polarityColor(nt.polarity)}`,
+                                                color: polarityColor(nt.polarity),
+                                                fontSize: '0.7rem',
+                                            }}
+                                        />
+                                    ))}
+                                </Box>
                             )}
                         </Box>
                     )}
@@ -519,25 +639,49 @@ const RecordingPage: React.FC = () => {
                         <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
                             Past Reviews
                         </Typography>
-                        {weeklyHistory.map((item) => (
-                            <Box
-                                key={item.audit_date}
-                                sx={{
-                                    p: 2,
-                                    mb: 1.5,
-                                    borderRadius: '8px',
-                                    border: `1px solid ${palette.rule}`,
-                                    bgcolor: 'background.paper',
-                                }}
-                            >
-                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
-                                    {item.week_label} · {item.entries} entries
-                                </Typography>
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'text.primary' }}>
-                                    {item.audit_text}
-                                </Typography>
-                            </Box>
-                        ))}
+                        {weeklyHistory.map((item) => {
+                            const isOpen = expandedReviews.has(item.audit_date);
+                            return (
+                                <Box
+                                    key={item.audit_date}
+                                    sx={{
+                                        p: 1.5,
+                                        mb: 1,
+                                        borderRadius: '8px',
+                                        border: `1px solid ${palette.rule}`,
+                                        bgcolor: 'background.paper',
+                                        cursor: 'pointer',
+                                    }}
+                                    onClick={() => {
+                                        setExpandedReviews((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(item.audit_date)) next.delete(item.audit_date);
+                                            else next.add(item.audit_date);
+                                            return next;
+                                        });
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                            {item.week_label} · {item.entries} entries
+                                        </Typography>
+                                        <ExpandMoreIcon
+                                            fontSize="small"
+                                            sx={{
+                                                color: 'text.secondary',
+                                                transform: isOpen ? 'rotate(180deg)' : 'none',
+                                                transition: 'transform 0.2s',
+                                            }}
+                                        />
+                                    </Box>
+                                    <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'text.primary', mt: 1 }}>
+                                            {item.audit_text}
+                                        </Typography>
+                                    </Collapse>
+                                </Box>
+                            );
+                        })}
                     </>
                 )}
             </Drawer>

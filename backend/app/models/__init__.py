@@ -11,6 +11,7 @@ from .jobs import Job, JobStatus
 from .refresh_token import RefreshToken
 from .audit_result import AuditResult
 from .notification import Notification
+from .weekly_theme import WeeklyTheme
 
 __all__ = [
     "Base",
@@ -23,4 +24,5 @@ __all__ = [
     "RefreshToken",
     "AuditResult",
     "Notification",
+    "WeeklyTheme",
 ]
