@@ -7,13 +7,14 @@ import {
     CircularProgress,
     Container,
     IconButton,
-    LinearProgress,
     Typography,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CloseIcon from '@mui/icons-material/Close';
 import RecordButton from '../components/RecordButton';
 import EntryCard from '../components/EntryCard';
 import DatePickerPopover from '../components/DatePickerPopover';
@@ -136,18 +137,29 @@ const RecordingPage: React.FC = () => {
     const hasActivityBreakdown = Object.keys(activityBreakdown).length > 0;
     const hasCaptureCounts = Object.keys(captureCounts).length > 0;
 
+    // Audit panel visibility
+    const [auditVisible, setAuditVisible] = useState(false);
+
     // Reset audit when date changes
     useEffect(() => {
         setAuditResult(null);
         setAuditError(undefined);
+        setAuditVisible(false);
     }, [selectedDate]);
 
-    // Auto-load cached audit when entries are available
+    // Load cached audit silently (don't auto-show)
     useEffect(() => {
         if (entries.length > 0 && !auditResult && !auditLoading) {
             handleGenerateAudit(false);
         }
     }, [entries.length, selectedDate]); // eslint-disable-line
+
+    const handleShowAudit = useCallback(() => {
+        setAuditVisible(true);
+        if (!auditResult && !auditLoading) {
+            handleGenerateAudit(false);
+        }
+    }, [auditResult, auditLoading, handleGenerateAudit]);
 
     return (
         <Container maxWidth="md">
@@ -156,20 +168,21 @@ const RecordingPage: React.FC = () => {
                     Debrief
                 </Typography>
 
-
-                {/* ── Date Navigation ──────────────────────────────────────── */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 3 }}>
-                    <IconButton size="small" onClick={() => shiftDate(-1)} aria-label="Previous day">
-                        <ChevronLeftIcon />
-                    </IconButton>
-
+                {/* ── Hero zone: centered date + record ───────────────────── */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: { xs: 2, md: 0 }, pb: 1.5, gap: 0.75 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <IconButton size="small" onClick={() => shiftDate(-1)} aria-label="Previous day">
+                            <ChevronLeftIcon />
+                        </IconButton>
                         <Typography
                             variant="body1"
-                            sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 100, textAlign: 'center', fontWeight: 500 }}
+                            sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'center', fontWeight: 500 }}
                         >
                             {isToday ? 'Today' : formatDateLabel(selectedDate)}
                         </Typography>
+                        <IconButton size="small" onClick={() => shiftDate(1)} disabled={isToday} aria-label="Next day">
+                            <ChevronRightIcon />
+                        </IconButton>
                         <IconButton
                             ref={calBtnRef}
                             size="small"
@@ -178,17 +191,15 @@ const RecordingPage: React.FC = () => {
                         >
                             <CalendarMonthIcon fontSize="small" />
                         </IconButton>
+                        {!isToday && (
+                            <IconButton size="small" onClick={() => setSelectedDate(today)} aria-label="Go to today"
+                                sx={{ color: palette.accent }}>
+                                <Typography variant="caption" fontWeight={700}>Today</Typography>
+                            </IconButton>
+                        )}
                     </Box>
-
-                    <IconButton size="small" onClick={() => shiftDate(1)} disabled={isToday} aria-label="Next day">
-                        <ChevronRightIcon />
-                    </IconButton>
-                    {!isToday && (
-                        <IconButton size="small" onClick={() => setSelectedDate(today)} aria-label="Go to today"
-                            sx={{ color: palette.accent }}>
-                            <Typography variant="caption" fontWeight={700}>Today</Typography>
-                        </IconButton>
-                    )}
+                    <RecordButton onRecordingComplete={handleRecordingComplete} />
+                    <Typography variant="caption" color="text.secondary">Tap to debrief</Typography>
                 </Box>
 
                 <DatePickerPopover
@@ -200,192 +211,175 @@ const RecordingPage: React.FC = () => {
                     onSelect={setSelectedDate}
                 />
 
+                {/* ── Processing feedback ─────────────────────────────────── */}
+                {isProcessing && (
+                    <Box sx={{ mb: 2, textAlign: 'center' }}>
+                        <Chip
+                            label={stepLabel(entryStatus?.step ?? null, upload.isPending)}
+                            size="small"
+                            variant="outlined"
+                            icon={<CircularProgress size={12} />}
+                        />
+                    </Box>
+                )}
 
-                {/* ── Recorder ─────────────────────────────────────────────── */}
-                <Box sx={{ p: { xs: 4, md: 3 }, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
-                    <RecordButton onRecordingComplete={handleRecordingComplete} />
+                {(uploadError || entryStatus?.status === 'failed') && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                        {uploadError ?? 'Processing failed. Please try again.'}
+                    </Alert>
+                )}
 
-                    {isProcessing && (
-                        <Box sx={{ mt: 2, textAlign: 'center' }}>
-                            <Chip
-                                label={stepLabel(entryStatus?.step ?? null, upload.isPending)}
-                                size="small"
-                                variant="outlined"
-                                icon={<CircularProgress size={12} />}
-                            />
-                        </Box>
-                    )}
+                {entryStatus?.transcript && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic', textAlign: 'center' }}>
+                        "{entryStatus.transcript}"
+                    </Typography>
+                )}
 
-                    {(uploadError || entryStatus?.status === 'failed') && (
-                        <Alert severity="error" sx={{ mt: 2 }}>
-                            {uploadError ?? 'Processing failed. Please try again.'}
-                        </Alert>
-                    )}
-
-                    {entryStatus?.status === 'done' && entryStatus.categories.length > 0 && (
-                        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-                            {entryStatus.categories.map((c, i) => (
+                {/* ── Chip breakdown ──────────────────────────────────────── */}
+                {(hasActivityBreakdown || hasCaptureCounts) && (
+                    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
+                        {hasActivityBreakdown && Object.entries(activityBreakdown)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([cat, pct]) => (
                                 <Chip
-                                    key={i}
-                                    label={c.category}
+                                    key={cat}
+                                    label={`${CATEGORY_LABELS[cat] ?? cat} ${pct}%`}
                                     size="small"
-                                    sx={{
-                                        borderColor: CATEGORY_COLORS[c.category] ?? palette.textMuted,
-                                        color: CATEGORY_COLORS[c.category] ?? palette.textMuted,
-                                        bgcolor: `${CATEGORY_COLORS[c.category] ?? palette.textMuted}0F`,
-                                    }}
                                     variant="outlined"
+                                    sx={{
+                                        fontWeight: 600,
+                                        fontVariantNumeric: 'tabular-nums',
+                                        fontSize: '0.7rem',
+                                        borderColor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}4D`,
+                                        color: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                        bgcolor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}0A`,
+                                        borderRadius: '12px',
+                                    }}
                                 />
                             ))}
-                        </Box>
-                    )}
+                        {hasCaptureCounts && Object.entries(captureCounts).map(([cat, count]) => (
+                            <Chip
+                                key={`cap-${cat}`}
+                                label={`${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`}
+                                size="small"
+                                variant="outlined"
+                                sx={{
+                                    fontSize: '0.7rem',
+                                    borderColor: palette.rule,
+                                    color: palette.textMuted,
+                                    borderRadius: '12px',
+                                }}
+                            />
+                        ))}
+                    </Box>
+                )}
 
-                    {entryStatus?.transcript && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic' }}>
-                            "{entryStatus.transcript}"
-                        </Typography>
-                    )}
-                </Box>
+                {/* ── Daily Debrief toggle ────────────────────────────────── */}
+                {!auditVisible && entries.length > 0 && (
+                    <Button
+                        fullWidth
+                        variant="outlined"
+                        onClick={handleShowAudit}
+                        startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                        disabled={auditLoading}
+                        sx={{
+                            mb: 1.5,
+                            py: 1.5,
+                            borderColor: palette.rule,
+                            color: palette.textMuted,
+                            bgcolor: 'background.paper',
+                            '&:hover': { borderColor: `${palette.accent}4D`, color: palette.accent },
+                        }}
+                    >
+                        Daily Debrief
+                    </Button>
+                )}
 
-                {/* ── Two-column: entries + breakdown/audit ─────────────────── */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' }, gap: 2 }}>
-
-                    {/* Left: today's entries */}
-                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                        <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                            {isToday ? "Today's" : formatDateLabel(selectedDate)} Entries {entries.length > 0 && `— ${entries.length}`}
-                        </Typography>
-
-                        {entries.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">
-                                {isToday ? 'Record your day to see entries here.' : 'No entries recorded on this day.'}
+                {/* ── Daily Debrief expanded card ─────────────────────────── */}
+                {auditVisible && (
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 1.5 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                            <Typography variant="overline" color="text.secondary">
+                                Daily Debrief
                             </Typography>
-                        ) : (
-                            entries.slice(0, 10).map((entry) => (
-                                <EntryCard key={entry.id} entry={entry} />
-                            ))
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => handleGenerateAudit(true)}
+                                    disabled={auditLoading || entries.length === 0}
+                                    title="Regenerate"
+                                    sx={{ border: `1px solid ${palette.rule}`, borderRadius: '4px', width: 28, height: 28 }}
+                                >
+                                    {auditLoading ? <CircularProgress size={14} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+                                </IconButton>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setAuditVisible(false)}
+                                    title="Hide"
+                                    sx={{ border: `1px solid ${palette.rule}`, borderRadius: '4px', width: 28, height: 28 }}
+                                >
+                                    <CloseIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                            </Box>
+                        </Box>
+
+                        {auditError && (
+                            <Alert severity="error" sx={{ mb: 1 }}>{auditError}</Alert>
+                        )}
+
+                        {auditResult === null && !auditLoading && !auditError && (
+                            <Typography variant="body2" color="text.secondary">
+                                Generating your daily debrief...
+                            </Typography>
+                        )}
+
+                        {auditResult?.message && !auditResult.audit_text && (
+                            <Typography variant="body2" color="text.secondary">
+                                {auditResult.message}
+                            </Typography>
+                        )}
+
+                        {auditResult?.audit_text && (
+                            <Box
+                                sx={{
+                                    borderLeft: `2px solid ${palette.accent}`,
+                                    pl: 2,
+                                    py: 1,
+                                    bgcolor: 'background.paper',
+                                    borderRadius: '0 8px 8px 0',
+                                }}
+                            >
+                                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                                    Your AI Coach says:
+                                </Typography>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                    {auditResult.audit_text}
+                                </Typography>
+                                {auditResult.generated_at && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+                                        Based on {auditResult.entries} entries · {new Date(auditResult.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </Typography>
+                                )}
+                            </Box>
                         )}
                     </Box>
+                )}
 
-                    {/* Right: breakdown bars + AI audit */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* ── Entries (primary card) ──────────────────────────────── */}
+                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, borderColor: `${palette.accent}26`, bgcolor: 'background.paper' }}>
+                    <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
+                        {isToday ? "Today's" : formatDateLabel(selectedDate)} Entries {entries.length > 0 && `— ${entries.length}`}
+                    </Typography>
 
-                        {/* Activity breakdown */}
-                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                            {hasActivityBreakdown && (
-                                <>
-                                    <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                                        How you spent time — {isToday ? 'today' : formatDateLabel(selectedDate)}
-                                    </Typography>
-                                    {Object.entries(activityBreakdown)
-                                        .sort(([, a], [, b]) => b - a)
-                                        .map(([cat, pct]) => (
-                                            <Box key={cat} sx={{ mb: 1 }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                    <Typography variant="caption">
-                                                        {CATEGORY_LABELS[cat] ?? cat}
-                                                    </Typography>
-                                                    <Typography variant="caption" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                                        {pct}%
-                                                    </Typography>
-                                                </Box>
-                                                <LinearProgress
-                                                    variant="determinate"
-                                                    value={pct}
-                                                    sx={{
-                                                        '& .MuiLinearProgress-bar': {
-                                                            borderRadius: 4,
-                                                            backgroundColor: CATEGORY_COLORS[cat] ?? palette.textMuted,
-                                                            transition: 'width 600ms ease-out',
-                                                        },
-                                                    }}
-                                                />
-                                            </Box>
-                                        ))}
-                                </>
-                            )}
-
-                            {hasCaptureCounts && (
-                                <Box sx={hasActivityBreakdown ? { mt: 2, pt: 1.5, borderTop: `1px solid ${palette.rule}` } : {}}>
-                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                                        What came up
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {Object.entries(captureCounts)
-                                            .map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`)
-                                            .join(' · ')}
-                                    </Typography>
-                                </Box>
-                            )}
-
-                            {!hasActivityBreakdown && !hasCaptureCounts && (
-                                <Typography variant="body2" color="text.secondary">
-                                    No time entries yet.
-                                </Typography>
-                            )}
-                        </Box>
-
-                        {/* AI Audit */}
-                        <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                                <Typography variant="overline" color="text.secondary">
-                                    AI Audit
-                                </Typography>
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
-                                    onClick={() => handleGenerateAudit(!!auditResult)}
-                                    disabled={auditLoading || entries.length === 0 || (!isToday && !!auditResult)}
-                                >
-                                    {auditResult ? (isToday ? 'Regenerate' : 'Cached') : 'Generate Audit'}
-                                </Button>
-                            </Box>
-
-                            {auditError && (
-                                <Alert severity="error" sx={{ mb: 1 }}>{auditError}</Alert>
-                            )}
-
-                            {auditResult === null && !auditLoading && !auditError && (
-                                <Typography variant="body2" color="text.secondary">
-                                    {entries.length === 0
-                                        ? 'Record your day first.'
-                                        : 'Click "Generate Audit" for an honest breakdown of your day.'}
-                                </Typography>
-                            )}
-
-                            {auditResult?.message && !auditResult.audit_text && (
-                                <Typography variant="body2" color="text.secondary">
-                                    {auditResult.message}
-                                </Typography>
-                            )}
-
-                            {auditResult?.audit_text && (
-                                <Box
-                                    sx={{
-                                        borderLeft: `2px solid ${palette.accent}`,
-                                        pl: 2,
-                                        py: 1,
-                                        bgcolor: 'background.paper',
-                                        borderRadius: '0 8px 8px 0',
-                                    }}
-                                >
-                                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                                        Your AI Coach says:
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                                        {auditResult.audit_text}
-                                    </Typography>
-                                    {auditResult.generated_at && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-                                            Based on {auditResult.entries} entries · {new Date(auditResult.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </Typography>
-                                    )}
-                                </Box>
-                            )}
-                        </Box>
-
-                    </Box>
+                    {entries.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                            {isToday ? 'Record your day to see entries here.' : 'No entries recorded on this day.'}
+                        </Typography>
+                    ) : (
+                        entries.slice(0, 10).map((entry) => (
+                            <EntryCard key={entry.id} entry={entry} />
+                        ))
+                    )}
                 </Box>
 
             </Box>
