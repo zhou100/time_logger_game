@@ -226,7 +226,7 @@ const RecordingPage: React.FC = () => {
         <Container maxWidth="md">
             <Box sx={{ mt: 4, mb: 8 }}>
                 <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 1 }}>
-                    Time Logger
+                    Debrief
                 </Typography>
 
                 <Box sx={{ mb: 2 }}>

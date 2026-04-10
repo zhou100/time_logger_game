@@ -77,14 +77,13 @@ const LandingPage: React.FC = () => {
                 {/* Hero */}
                 <Box sx={{ mb: 6 }}>
                     <Typography variant="h1" component="h1" sx={{ mb: 2 }}>
-                        Time Logger
+                        Debrief your day.
                     </Typography>
                     <Typography variant="h3" component="p" color="text.secondary" sx={{ mb: 1 }}>
-                        Track your time by voice. AI categorizes your day.
+                        A daily work debrief, powered by your voice. Turn what you did into a clear, structured brief.
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 540 }}>
-                        Record a quick voice note, and our AI breaks it down into tasks, experiments,
-                        time logs, and reflections — then coaches you on how your day is going.
+                        No timers. No typing. Just talk.
                     </Typography>
                     <Button
                         component={RouterLink}
@@ -94,7 +93,7 @@ const LandingPage: React.FC = () => {
                         startIcon={<MicIcon />}
                         sx={{ px: 4, py: 1.5 }}
                     >
-                        Get Started Free
+                        Start your debrief
                     </Button>
                 </Box>
 

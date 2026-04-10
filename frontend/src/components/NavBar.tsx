@@ -47,7 +47,7 @@ const NavBar: React.FC = () => {
                     to="/"
                     sx={{ flexGrow: 1, color: 'text.primary', textDecoration: 'none' }}
                 >
-                    Time Logger
+                    Debrief
                 </Typography>
                 {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
