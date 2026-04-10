@@ -9,6 +9,7 @@ import { RegisterForm } from './components/auth/RegisterForm';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import CaptureInboxPage from './pages/CaptureInboxPage';
+import WeeklyReportPage from './pages/WeeklyReportPage';
 import NavBar from './components/NavBar';
 import { Box } from '@mui/material';
 
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/register" element={<RegisterForm />} />
                 <Route path="/" element={<HomePage />} />
+                <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
                 <Route path="/captures" element={<ProtectedRoute><CaptureInboxPage /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

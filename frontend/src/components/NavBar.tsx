@@ -53,6 +53,14 @@ const NavBar: React.FC = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Button
                             component={RouterLink}
+                            to="/week"
+                            size="small"
+                            sx={{ color: 'text.secondary', mr: 1 }}
+                        >
+                            Week
+                        </Button>
+                        <Button
+                            component={RouterLink}
                             to="/captures"
                             size="small"
                             sx={{ color: 'text.secondary', mr: 1 }}
