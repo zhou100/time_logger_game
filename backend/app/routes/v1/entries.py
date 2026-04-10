@@ -131,6 +131,8 @@ class EntryItem(BaseModel):
     transcript: Optional[str]
     recorded_at: Optional[str]
     created_at: str
+    local_date: Optional[str] = None
+    match_sources: Optional[List[str]] = None
     duration_seconds: Optional[int]
     categories: List[CategoryItem]
 
@@ -176,9 +178,35 @@ def _entry_item_from_entry(entry: Entry) -> EntryItem:
         transcript=entry.transcript,
         recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
         created_at=entry.created_at.isoformat(),
+        local_date=entry.local_date.isoformat() if entry.local_date else None,
         duration_seconds=entry.duration_seconds,
         categories=[_category_item_from_classification(c) for c in entry.classifications],
     )
+
+
+def _search_match_sources(entry: Entry, query_text: str) -> List[str]:
+    lowered_query = query_text.strip().lower()
+    if not lowered_query:
+        return []
+
+    sources: List[str] = []
+    if entry.transcript and lowered_query in entry.transcript.lower():
+        sources.append("transcript")
+
+    category_line_matched = False
+    category_name_matched = False
+    for classification in entry.classifications:
+        display_text = classification.display_text or ""
+        if display_text and lowered_query in display_text.lower():
+            category_line_matched = True
+        if classification.category and lowered_query in classification.category.lower():
+            category_name_matched = True
+
+    if category_line_matched:
+        sources.append("category_line")
+    if category_name_matched:
+        sources.append("category_name")
+    return sources
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -377,7 +405,7 @@ async def list_entries(
 
 @router.get("/search", response_model=EntryListResponse)
 async def search_entries(
-    q: str = Query(..., min_length=1, description="Search past records"),
+    q: str = Query(..., min_length=2, description="Search past records"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None, description="Filter by category"),
@@ -468,7 +496,12 @@ async def search_entries(
     ordered_entries = [entries_by_id[entry_id] for entry_id in entry_ids if entry_id in entries_by_id]
 
     return EntryListResponse(
-        items=[_entry_item_from_entry(entry) for entry in ordered_entries],
+        items=[
+            _entry_item_from_entry(entry).model_copy(
+                update={"match_sources": _search_match_sources(entry, query_text)}
+            )
+            for entry in ordered_entries
+        ],
         total=total,
         skip=skip,
         limit=limit,
@@ -599,6 +632,7 @@ async def update_entry(
         transcript=entry.transcript,
         recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
         created_at=entry.created_at.isoformat(),
+        local_date=entry.local_date.isoformat() if entry.local_date else None,
         duration_seconds=entry.duration_seconds,
         categories=[_category_item_from_classification(c) for c in entry.classifications],
     )

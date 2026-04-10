@@ -6,6 +6,7 @@ import {
     Alert,
     Box,
     Button,
+    Chip,
     CircularProgress,
     Container,
     FormControl,
@@ -24,6 +25,28 @@ import { Category } from '../types/api';
 import { palette } from '../theme';
 
 const SEARCH_PAGE_SIZE = 20;
+const MATCH_SOURCE_LABELS: Record<string, string> = {
+    transcript: 'Matched transcript',
+    category_line: 'Matched classified line',
+    category_name: 'Matched category',
+};
+const MATCH_SOURCE_STYLES: Record<string, { borderColor: string; color: string; backgroundColor: string }> = {
+    transcript: {
+        borderColor: palette.info,
+        color: palette.info,
+        backgroundColor: 'rgba(62, 90, 99, 0.10)',
+    },
+    category_line: {
+        borderColor: palette.accent,
+        color: palette.accent,
+        backgroundColor: 'rgba(182, 73, 45, 0.10)',
+    },
+    category_name: {
+        borderColor: palette.warning,
+        color: palette.warning,
+        backgroundColor: 'rgba(156, 107, 47, 0.10)',
+    },
+};
 const SEARCHABLE_CATEGORIES = [
     Category.EARNING,
     Category.LEARNING,
@@ -42,6 +65,31 @@ function normalizeSearchText(value: string): string {
 function toLocalDateString(value: string): string {
     const date = new Date(value);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildTranscriptSnippet(transcript: string | null, query: string): string | null {
+    const text = transcript?.trim();
+    if (!text) return null;
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const compactText = text.replace(/\s+/g, ' ');
+    const maxLength = 140;
+
+    if (!normalizedQuery) {
+        return compactText.length > maxLength ? `${compactText.slice(0, maxLength).trimEnd()}...` : compactText;
+    }
+
+    const matchIndex = compactText.toLowerCase().indexOf(normalizedQuery);
+    if (matchIndex === -1) {
+        return compactText.length > maxLength ? `${compactText.slice(0, maxLength).trimEnd()}...` : compactText;
+    }
+
+    const contextRadius = 45;
+    const start = Math.max(0, matchIndex - contextRadius);
+    const end = Math.min(compactText.length, matchIndex + normalizedQuery.length + contextRadius);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < compactText.length ? '...' : '';
+    return `${prefix}${compactText.slice(start, end).trim()}${suffix}`;
 }
 
 const SearchPage: React.FC = () => {
@@ -250,22 +298,62 @@ const SearchPage: React.FC = () => {
                                     }}
                                 >
                                     {results.map((entry) => (
-                                        <EntryCard
-                                            key={entry.id}
-                                            entry={entry}
-                                            readOnly
-                                            highlightTerm={currentQuery}
-                                            footerExtra={(
-                                                <Button
-                                                    component={RouterLink}
-                                                    to={`/?date=${encodeURIComponent(toLocalDateString(entry.recorded_at || entry.created_at))}`}
-                                                    size="small"
-                                                    sx={{ minWidth: 'auto', px: 0 }}
+                                        <Stack key={entry.id} spacing={0.75}>
+                                            {!!entry.match_sources?.length && (
+                                                <Box
+                                                    sx={{
+                                                        display: 'flex',
+                                                        gap: 0.75,
+                                                        flexWrap: 'wrap',
+                                                        alignItems: 'center',
+                                                    }}
                                                 >
-                                                    Open day
-                                                </Button>
+                                                    <Typography
+                                                        variant="caption"
+                                                        sx={{
+                                                            color: 'text.secondary',
+                                                            textTransform: 'uppercase',
+                                                            letterSpacing: '0.08em',
+                                                            fontWeight: 600,
+                                                        }}
+                                                    >
+                                                        Why this matched
+                                                    </Typography>
+                                                    {entry.match_sources.map((source) => (
+                                                        <Chip
+                                                            key={`${entry.id}-${source}`}
+                                                            size="small"
+                                                            label={MATCH_SOURCE_LABELS[source] || source}
+                                                            variant="outlined"
+                                                            sx={{
+                                                                height: 22,
+                                                                fontSize: '0.72rem',
+                                                                fontWeight: 600,
+                                                                letterSpacing: '0.01em',
+                                                                borderWidth: 1,
+                                                                ...MATCH_SOURCE_STYLES[source],
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </Box>
                                             )}
-                                        />
+                                            <EntryCard
+                                                entry={entry}
+                                                readOnly
+                                                highlightTerm={currentQuery}
+                                                snippetText={buildTranscriptSnippet(entry.transcript, currentQuery)}
+                                                footerExtra={(
+                                                    <Button
+                                                        component={RouterLink}
+                                                        to={`/?date=${encodeURIComponent(entry.local_date || toLocalDateString(entry.recorded_at || entry.created_at))}`}
+                                                        size="small"
+                                                        sx={{ minWidth: 'auto', px: 0 }}
+                                                    >
+                                                        Open day
+                                                    </Button>
+                                                )}
+                                            />
+                                        </Stack>
                                     ))}
                                 </Box>
 

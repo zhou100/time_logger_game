@@ -35,6 +35,7 @@ interface EntryCardProps {
     entry: EntryItem;
     readOnly?: boolean;
     highlightTerm?: string;
+    snippetText?: string;
     footerExtra?: React.ReactNode;
 }
 
@@ -66,7 +67,7 @@ function renderHighlightedText(value: string | null | undefined, highlightTerm?:
     ));
 }
 
-const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highlightTerm, footerExtra }) => {
+const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highlightTerm, snippetText, footerExtra }) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [confirmLastLineDelete, setConfirmLastLineDelete] = useState(false);
@@ -141,7 +142,11 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     return (
         <>
             <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
-                {hasCats ? categories.map((catItem, i) => {
+                {snippetText ? (
+                    <Typography variant="body2" sx={{ lineHeight: 1.6, color: 'text.primary' }}>
+                        {renderHighlightedText(snippetText, highlightTerm)}
+                    </Typography>
+                ) : hasCats ? categories.map((catItem, i) => {
                     const isEditingThis = editingIndex === i;
 
                     if (isEditingThis) {

@@ -56,6 +56,7 @@ def _make_entry(text: str, category: str = "TODO", created_at: datetime | None =
         transcript=text,
         recorded_at=created,
         created_at=created,
+        local_date=created.date(),
         duration_seconds=60,
         classifications=[_make_classification(text, category)],
         user_id=1,
@@ -91,6 +92,8 @@ async def test_search_returns_paginated_entry_items(app):
     assert body["total"] == 2
     assert [item["id"] for item in body["items"]] == [str(entry_a.id), str(entry_b.id)]
     assert body["items"][0]["categories"][0]["category"] == "TODO"
+    assert body["items"][0]["local_date"] == "2026-04-10"
+    assert body["items"][0]["match_sources"] == ["transcript", "category_line"]
 
 
 @pytest.mark.asyncio
@@ -130,3 +133,68 @@ async def test_search_rejects_invalid_date_range(app):
 
     assert resp.status_code == 400
     assert "date_from cannot be after date_to" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_one_character_queries(app):
+    db = AsyncMock()
+    _override_auth(app)
+    _override_db(app, db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/entries/search?q=a")
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_whitespace_only_query(app):
+    db = AsyncMock()
+    _override_auth(app)
+    _override_db(app, db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/entries/search?q=   ")
+
+    assert resp.status_code == 400
+    assert "Search query cannot be empty" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_invalid_category(app):
+    db = AsyncMock()
+    _override_auth(app)
+    _override_db(app, db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/entries/search?q=milk&category=NOT_A_REAL_CATEGORY")
+
+    assert resp.status_code == 400
+    assert "category must be one of" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_search_returns_category_name_match_provenance(app):
+    entry = _make_entry("finished the sprint review", "TODO", datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc))
+
+    total_result = MagicMock()
+    total_result.scalar.return_value = 1
+    ids_result = MagicMock()
+    ids_result.all.return_value = [
+        SimpleNamespace(id=entry.id, created_at=entry.created_at),
+    ]
+    entries_result = MagicMock()
+    entries_result.scalars.return_value.all.return_value = [entry]
+
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[total_result, ids_result, entries_result])
+
+    _override_auth(app)
+    _override_db(app, db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/entries/search?q=todo")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"][0]["match_sources"] == ["category_name"]
