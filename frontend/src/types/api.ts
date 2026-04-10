@@ -81,11 +81,25 @@ export interface EntryListResponse {
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
 
+export interface WeeklyReportJson {
+    time_breakdown: {
+        activity: Record<string, number>;
+        captures: Record<string, number>;
+        best_day: string | null;
+        worst_day: string | null;
+        naval_balance: string | null;
+    };
+    open_loops: string[];
+    recurring_themes: string[];
+    draft_status_update: string;
+}
+
 export interface AuditResponse {
     entries: number;
     breakdown: Record<string, number>;
     approximate: boolean;
     audit_text: string | null;
+    report_json?: WeeklyReportJson | null;
     generated_at: string | null;
     cached?: boolean;
     message?: string;

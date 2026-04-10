@@ -14,8 +14,114 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { entriesApi } from '../services/api';
-import { AuditResponse, WeeklyAuditHistoryItem, Theme } from '../types/api';
-import { palette } from '../theme';
+import { AuditResponse, WeeklyAuditHistoryItem, WeeklyReportJson, Theme } from '../types/api';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
+
+/** Renders the 4 structured sections of the weekly report */
+const StructuredReport: React.FC<{ report: WeeklyReportJson }> = ({ report }) => {
+    const [copied, setCopied] = React.useState(false);
+    const tb = report.time_breakdown;
+    const activityEntries = Object.entries(tb.activity || {}).sort(([, a], [, b]) => b - a);
+    const captureEntries = Object.entries(tb.captures || {});
+
+    const handleCopy = () => {
+        const text = report.draft_status_update || '';
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+        } else {
+            // textarea fallback
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <>
+            {/* Section 1: Time Breakdown */}
+            <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                    Time Breakdown
+                </Typography>
+                {activityEntries.map(([cat, pct]) => (
+                    <Box key={cat} sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2">{CATEGORY_LABELS[cat] ?? cat}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: CATEGORY_COLORS[cat] ?? palette.textMuted }}>
+                            {pct}%
+                        </Typography>
+                    </Box>
+                ))}
+                {captureEntries.length > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        {captureEntries.map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`).join(' \u00b7 ')}
+                    </Typography>
+                )}
+                {tb.naval_balance && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                        {tb.naval_balance}
+                    </Typography>
+                )}
+            </Box>
+
+            {/* Section 2: Open Loops */}
+            {report.open_loops.length > 0 && (
+                <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Open Loops \u00b7 {report.open_loops.length}
+                    </Typography>
+                    {report.open_loops.map((item, i) => (
+                        <Typography key={i} variant="body2" sx={{ mb: 0.5, pl: 1, borderLeft: `2px solid ${palette.accent}` }}>
+                            {item}
+                        </Typography>
+                    ))}
+                </Box>
+            )}
+
+            {/* Section 3: Recurring Themes */}
+            {report.recurring_themes.length > 0 && (
+                <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Patterns
+                    </Typography>
+                    {report.recurring_themes.map((theme, i) => (
+                        <Typography key={i} variant="body2" sx={{ mb: 0.5 }}>
+                            \u2022 {theme}
+                        </Typography>
+                    ))}
+                </Box>
+            )}
+
+            {/* Section 4: Draft Status Update */}
+            {report.draft_status_update && (
+                <Box sx={{ p: 3, mb: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="overline" color="text.secondary">
+                            Status Update
+                        </Typography>
+                        <Button
+                            size="small"
+                            variant="text"
+                            startIcon={<ContentCopyIcon fontSize="small" />}
+                            onClick={handleCopy}
+                            sx={{ color: palette.textMuted, textTransform: 'none' }}
+                        >
+                            {copied ? 'Copied!' : 'Copy'}
+                        </Button>
+                    </Box>
+                    <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                        {report.draft_status_update}
+                    </Typography>
+                </Box>
+            )}
+        </>
+    );
+};
 
 const WeeklyReportPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
@@ -146,57 +252,67 @@ const WeeklyReportPage: React.FC = () => {
                     </Box>
                 )}
 
-                {/* This Week */}
-                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                        <Typography variant="overline" color="text.secondary">
-                            This Week
-                        </Typography>
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={loading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
-                            onClick={handleGenerate}
-                            disabled={loading}
-                        >
-                            {result ? 'Regenerate' : 'Generate'}
-                        </Button>
-                    </Box>
+                {/* This Week — header */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="overline" color="text.secondary">
+                        This Week
+                        {(result?.week_start && result?.week_end) &&
+                            ` \u00b7 ${formatRange(result.week_start, result.week_end)}`}
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={loading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
+                        onClick={handleGenerate}
+                        disabled={loading}
+                    >
+                        {result ? 'Regenerate' : 'Generate'}
+                    </Button>
+                </Box>
 
-                    {error && (
-                        <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>
-                    )}
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+                )}
 
-                    {result === null && !loading && !error && (
+                {result === null && !loading && !error && (
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                         <Typography variant="body2" color="text.secondary">
                             Get an honest weekly review comparing your days and calling out patterns.
                         </Typography>
-                    )}
+                    </Box>
+                )}
 
-                    {result?.message && !result.audit_text && (
+                {result?.message && !result.audit_text && (
+                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                         <Typography variant="body2" color="text.secondary">
                             {result.message}
                         </Typography>
-                    )}
+                    </Box>
+                )}
 
-                    {result?.audit_text && (
-                        <Box
-                            sx={{
+                {result?.audit_text && (
+                    <>
+                        {/* Structured report sections */}
+                        {result.report_json && <StructuredReport report={result.report_json} />}
+
+                        {/* Prose coach letter */}
+                        <Box sx={{
+                            p: 3, mb: 3, borderRadius: '8px',
+                            border: `1px solid ${palette.rule}`, bgcolor: 'background.paper',
+                        }}>
+                            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                                Coach Letter
+                            </Typography>
+                            <Box sx={{
                                 borderLeft: `2px solid ${palette.info}`,
-                                pl: 2,
-                                py: 1,
+                                pl: 2, py: 1,
                                 bgcolor: palette.surface2,
                                 borderRadius: '0 8px 8px 0',
-                            }}
-                        >
-                            {(result.week_start && result.week_end) && (
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                    {formatRange(result.week_start, result.week_end)}
+                            }}>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+                                    {result.audit_text}
                                 </Typography>
-                            )}
-                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                                {result.audit_text}
-                            </Typography>
+                            </Box>
                             {result.generated_at && (
                                 <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
                                     {result.entries} entries
@@ -221,8 +337,8 @@ const WeeklyReportPage: React.FC = () => {
                                 </Box>
                             )}
                         </Box>
-                    )}
-                </Box>
+                    </>
+                )}
 
                 {/* Past Reviews */}
                 {history.length > 0 && (
