@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar, Button } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import Logger from '../utils/logger';
 
 const NavBar: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, logout, loginWithGoogle, useSupabase } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -55,7 +56,13 @@ const NavBar: React.FC = () => {
                             component={RouterLink}
                             to="/week"
                             size="small"
-                            sx={{ color: 'text.secondary', mr: 1 }}
+                            sx={{
+                                color: location.pathname === '/week' ? palette.accent : 'text.secondary',
+                                fontWeight: location.pathname === '/week' ? 600 : 400,
+                                borderBottom: location.pathname === '/week' ? `2px solid ${palette.accent}` : '2px solid transparent',
+                                borderRadius: 0,
+                                mr: 1,
+                            }}
                         >
                             Week
                         </Button>
