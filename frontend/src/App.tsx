@@ -11,6 +11,7 @@ import HomePage from './pages/HomePage';
 import CaptureInboxPage from './pages/CaptureInboxPage';
 import WeeklyReportPage from './pages/WeeklyReportPage';
 import NavBar from './components/NavBar';
+import InstallBanner from './components/InstallBanner';
 import { Box } from '@mui/material';
 
 
@@ -26,6 +27,7 @@ function App() {
         <CssBaseline />
         <AuthProvider>
           <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            <InstallBanner />
             <NavBar />
             <Box
               aria-label="main-content"
