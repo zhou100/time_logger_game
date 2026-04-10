@@ -69,10 +69,13 @@ def _mock_db_with_entries(entries):
     entries_result = MagicMock()
     entries_result.scalars.return_value.all.return_value = entries
 
+    themes_result = MagicMock()
+    themes_result.scalars.return_value.all.return_value = []
+
     stale_result = MagicMock()
     stale_result.scalars.return_value.all.return_value = []
 
-    db.execute = AsyncMock(side_effect=[cache_result, entries_result, stale_result])
+    db.execute = AsyncMock(side_effect=[cache_result, entries_result, themes_result, stale_result])
     db.add = MagicMock()
     db.flush = AsyncMock()
     return db

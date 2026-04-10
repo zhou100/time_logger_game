@@ -212,6 +212,25 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
+    async search(
+        query: string,
+        opts?: { skip?: number; limit?: number; category?: string; dateFrom?: string; dateTo?: string }
+    ): Promise<EntryListResponse> {
+        try {
+            const res = await api.get<EntryListResponse>('/v1/entries/search', {
+                params: {
+                    q: query,
+                    skip: opts?.skip ?? 0,
+                    limit: opts?.limit ?? 20,
+                    ...(opts?.category ? { category: opts.category } : {}),
+                    ...(opts?.dateFrom ? { date_from: opts.dateFrom } : {}),
+                    ...(opts?.dateTo ? { date_to: opts.dateTo } : {}),
+                },
+            });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
     async deleteEntry(entryId: string): Promise<void> {
         try {
             await api.delete(`/v1/entries/${entryId}`);

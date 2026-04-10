@@ -170,6 +170,17 @@ class AuditResponse(BaseModel):
     new_themes: Optional[List[Dict[str, Any]]] = None
 
 
+def _entry_item_from_entry(entry: Entry) -> EntryItem:
+    return EntryItem(
+        id=str(entry.id),
+        transcript=entry.transcript,
+        recorded_at=entry.recorded_at.isoformat() if entry.recorded_at else None,
+        created_at=entry.created_at.isoformat(),
+        duration_seconds=entry.duration_seconds,
+        categories=[_category_item_from_classification(c) for c in entry.classifications],
+    )
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/presign", response_model=PresignResponse)
@@ -337,17 +348,7 @@ async def list_entries(
     )
     entries = result.scalars().all()
 
-    items = [
-        EntryItem(
-            id=str(e.id),
-            transcript=e.transcript,
-            recorded_at=e.recorded_at.isoformat() if e.recorded_at else None,
-            created_at=e.created_at.isoformat(),
-            duration_seconds=e.duration_seconds,
-            categories=[_category_item_from_classification(c) for c in e.classifications],
-        )
-        for e in entries
-    ]
+    items = [_entry_item_from_entry(e) for e in entries]
 
     # Compute server-side breakdown when date filter is present (avoids pagination truncation)
     activity_breakdown = None
@@ -371,6 +372,106 @@ async def list_entries(
     return EntryListResponse(
         items=items, total=total, skip=skip, limit=limit,
         activity_breakdown=activity_breakdown, capture_counts=capture_counts,
+    )
+
+
+@router.get("/search", response_model=EntryListResponse)
+async def search_entries(
+    q: str = Query(..., min_length=1, description="Search past records"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    date_from: Optional[str] = Query(None, description="Filter from local date YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="Filter to local date YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Search the user's entries by transcript and classification content."""
+    query_text = q.strip()
+    if not query_text:
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+
+    normalized_category = None
+    if category:
+        try:
+            normalized_category = _normalize_category(category)
+        except Exception:
+            normalized_category = category
+        if normalized_category not in VALID_CATEGORIES:
+            raise HTTPException(status_code=400, detail=f"category must be one of {sorted(VALID_CATEGORIES)}")
+
+    parsed_date_from = None
+    parsed_date_to = None
+    if date_from:
+        try:
+            parsed_date_from = datetime.strptime(date_from, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_from format, use YYYY-MM-DD")
+    if date_to:
+        try:
+            parsed_date_to = datetime.strptime(date_to, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_to format, use YYYY-MM-DD")
+    if parsed_date_from and parsed_date_to and parsed_date_from > parsed_date_to:
+        raise HTTPException(status_code=400, detail="date_from cannot be after date_to")
+
+    pattern = f"%{query_text}%"
+    effective_date = func.coalesce(Entry.local_date, func.date(Entry.created_at))
+    base_filters = [
+        Entry.user_id == current_user.id,
+        Job.status != JobStatus.FAILED,
+        or_(
+            Entry.transcript.ilike(pattern),
+            EntryClassification.extracted_text.ilike(pattern),
+            EntryClassification.edited_text.ilike(pattern),
+            EntryClassification.category.ilike(pattern),
+        ),
+    ]
+    if normalized_category:
+        base_filters.append(EntryClassification.category == normalized_category)
+    if parsed_date_from:
+        base_filters.append(effective_date >= parsed_date_from)
+    if parsed_date_to:
+        base_filters.append(effective_date <= parsed_date_to)
+
+    total_result = await db.execute(
+        select(func.count(func.distinct(Entry.id)))
+        .select_from(Entry)
+        .join(Job, Job.entry_id == Entry.id)
+        .outerjoin(EntryClassification, EntryClassification.entry_id == Entry.id)
+        .where(*base_filters)
+    )
+    total = total_result.scalar() or 0
+
+    ids_result = await db.execute(
+        select(Entry.id, Entry.created_at)
+        .join(Job, Job.entry_id == Entry.id)
+        .outerjoin(EntryClassification, EntryClassification.entry_id == Entry.id)
+        .where(*base_filters)
+        .group_by(Entry.id, Entry.created_at)
+        .order_by(Entry.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    rows = ids_result.all()
+    entry_ids = [row.id for row in rows]
+
+    if not entry_ids:
+        return EntryListResponse(items=[], total=total, skip=skip, limit=limit)
+
+    entries_result = await db.execute(
+        select(Entry)
+        .options(selectinload(Entry.classifications))
+        .where(Entry.id.in_(entry_ids), Entry.user_id == current_user.id)
+    )
+    entries_by_id = {entry.id: entry for entry in entries_result.scalars().all()}
+    ordered_entries = [entries_by_id[entry_id] for entry_id in entry_ids if entry_id in entries_by_id]
+
+    return EntryListResponse(
+        items=[_entry_item_from_entry(entry) for entry in ordered_entries],
+        total=total,
+        skip=skip,
+        limit=limit,
     )
 
 

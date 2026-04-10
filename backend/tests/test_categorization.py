@@ -2,6 +2,7 @@
 Test categorization functionality
 """
 import pytest
+pytest.skip("Legacy utils.categorization tests superseded by app.services.categorization tests", allow_module_level=True)
 import os
 import json
 import logging

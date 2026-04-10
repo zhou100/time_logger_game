@@ -1,6 +1,19 @@
-import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { AppBar, Toolbar, IconButton, Menu, MenuItem, Typography, Box, Avatar, Button } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate, Link as RouterLink, useSearchParams } from 'react-router-dom';
+import SearchIcon from '@mui/icons-material/Search';
+import {
+    AppBar,
+    Toolbar,
+    IconButton,
+    Menu,
+    MenuItem,
+    Typography,
+    Box,
+    Avatar,
+    Button,
+    TextField,
+    InputAdornment,
+} from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { palette } from '../theme';
@@ -8,8 +21,17 @@ import Logger from '../utils/logger';
 
 const NavBar: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { user, logout, loginWithGoogle, useSupabase } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        if (location.pathname === '/search') {
+            setSearchQuery(searchParams.get('q') ?? '');
+        }
+    }, [location.pathname, searchParams]);
 
     const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -38,6 +60,12 @@ const NavBar: React.FC = () => {
         }
     };
 
+    const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const next = searchQuery.trim();
+        navigate(next ? `/search?q=${encodeURIComponent(next)}` : '/search');
+    };
+
     return (
         <AppBar position="static" elevation={0} sx={{ bgcolor: palette.bg }}>
             <Toolbar>
@@ -59,6 +87,31 @@ const NavBar: React.FC = () => {
                         >
                             Week
                         </Button>
+                        <Box
+                            component="form"
+                            onSubmit={handleSearchSubmit}
+                            sx={{ mr: { xs: 1, sm: 1.5 } }}
+                        >
+                            <TextField
+                                size="small"
+                                value={searchQuery}
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                placeholder="Search records"
+                                sx={{
+                                    minWidth: { xs: 150, sm: 240 },
+                                    '& .MuiOutlinedInput-root': {
+                                        bgcolor: 'background.paper',
+                                    },
+                                }}
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchIcon fontSize="small" />
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Box>
                         <Typography
                             variant="body2"
                             sx={{

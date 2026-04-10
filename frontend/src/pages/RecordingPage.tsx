@@ -19,6 +19,7 @@ import EntryCard from '../components/EntryCard';
 import DatePickerPopover from '../components/DatePickerPopover';
 import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useUpload } from '../hooks/useUpload';
 import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
@@ -44,8 +45,10 @@ const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
+    const [searchParams, setSearchParams] = useSearchParams();
     const today = useMemo(localToday, []);
-    const [selectedDate, setSelectedDate] = useState(today);
+    const initialDate = searchParams.get('date') || today;
+    const [selectedDate, setSelectedDate] = useState(initialDate);
     const isToday = selectedDate === today;
 
     // Calendar popover state
@@ -66,9 +69,16 @@ const RecordingPage: React.FC = () => {
         setSelectedDate((prev) => {
             const d = new Date(prev + 'T12:00:00');
             d.setDate(d.getDate() + days);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const nextDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            setSearchParams((current) => {
+                const params = new URLSearchParams(current);
+                if (nextDate === today) params.delete('date');
+                else params.set('date', nextDate);
+                return params;
+            }, { replace: true });
+            return nextDate;
         });
-    }, []);
+    }, [setSearchParams, today]);
 
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | undefined>();
@@ -184,7 +194,7 @@ const RecordingPage: React.FC = () => {
                         <ChevronRightIcon />
                     </IconButton>
                     {!isToday && (
-                        <IconButton size="small" onClick={() => setSelectedDate(today)} aria-label="Go to today"
+                            <IconButton size="small" onClick={() => updateSelectedDate(today)} aria-label="Go to today"
                             sx={{ color: palette.accent }}>
                             <Typography variant="caption" fontWeight={700}>Today</Typography>
                         </IconButton>
@@ -197,7 +207,7 @@ const RecordingPage: React.FC = () => {
                     selectedDate={selectedDate}
                     activeDates={activeDates}
                     maxDate={today}
-                    onSelect={setSelectedDate}
+                    onSelect={updateSelectedDate}
                 />
 
 
@@ -408,3 +418,22 @@ function stepLabel(step: string | null, isUploading: boolean): string {
 }
 
 export default RecordingPage;
+    useEffect(() => {
+        const routeDate = searchParams.get('date');
+        if (routeDate && routeDate !== selectedDate) {
+            setSelectedDate(routeDate);
+        }
+        if (!routeDate && selectedDate !== today) {
+            setSelectedDate(today);
+        }
+    }, [searchParams, selectedDate, today]);
+
+    const updateSelectedDate = useCallback((nextDate: string) => {
+        setSelectedDate(nextDate);
+        setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            if (nextDate === today) params.delete('date');
+            else params.set('date', nextDate);
+            return params;
+        }, { replace: true });
+    }, [setSearchParams, today]);

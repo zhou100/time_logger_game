@@ -8,6 +8,7 @@ import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import HomePage from './pages/HomePage';
+import SearchPage from './pages/SearchPage';
 import WeeklyReportPage from './pages/WeeklyReportPage';
 import NavBar from './components/NavBar';
 import InstallBanner from './components/InstallBanner';
@@ -39,6 +40,7 @@ function App() {
                 <Route path="/register" element={<RegisterForm />} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
+                <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>
