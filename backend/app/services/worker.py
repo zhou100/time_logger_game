@@ -16,7 +16,7 @@ import logging
 import os
 import tempfile
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import async_session
@@ -37,6 +37,12 @@ _openai: AsyncOpenAI | None = None
 
 # Jobs stuck in PROCESSING longer than this are considered dead and will be failed.
 _STALE_JOB_THRESHOLD = timedelta(minutes=5)
+
+# Notification rows are transient pub/sub events consumed by Supabase Realtime.
+# After the frontend has rendered the update, rows have no further value, so we
+# delete anything older than this to keep the table bounded.
+_NOTIFICATION_TTL = timedelta(hours=24)
+_NOTIFICATION_CLEANUP_INTERVAL = timedelta(hours=1)
 
 
 def _get_openai() -> AsyncOpenAI:
@@ -194,17 +200,30 @@ async def _process_job(db: AsyncSession, job: Job) -> None:
                 r = await db3.execute(select(Entry).where(Entry.id == job.entry_id))
                 e = r.scalar_one_or_none()
                 if e:
+                    # Do not leak raw exception text to the client — full
+                    # traceback is already logged above via exc_info=True.
                     db3.add(Notification(
                         user_id=e.user_id,
                         event_type="entry.failed",
                         payload_json=json.dumps({
                             "entry_id": str(job.entry_id),
-                            "error": str(exc),
+                            "error": "Processing failed. Please try again.",
                         }),
                     ))
                     await db3.commit()
         except Exception:
             pass
+
+
+async def _cleanup_old_notifications(db: AsyncSession) -> None:
+    """Delete notification rows older than _NOTIFICATION_TTL."""
+    cutoff = datetime.now(timezone.utc) - _NOTIFICATION_TTL
+    result = await db.execute(
+        delete(Notification).where(Notification.created_at < cutoff)
+    )
+    await db.commit()
+    if result.rowcount:
+        logger.info(f"Pruned {result.rowcount} old notification row(s)")
 
 
 async def run_worker(poll_interval: float = 2.0) -> None:
@@ -217,8 +236,16 @@ async def run_worker(poll_interval: float = 2.0) -> None:
     async with async_session() as db:
         await _recover_stale_jobs(db)
 
+    next_cleanup = datetime.now(timezone.utc)
+
     while True:
         try:
+            now = datetime.now(timezone.utc)
+            if now >= next_cleanup:
+                async with async_session() as db:
+                    await _cleanup_old_notifications(db)
+                next_cleanup = now + _NOTIFICATION_CLEANUP_INTERVAL
+
             async with async_session() as db:
                 job = await queue_svc.dequeue(db)
                 if job:

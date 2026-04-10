@@ -10,24 +10,6 @@
 
 ---
 
-## P2 — Medium Priority
-
-### Notifications Table Cleanup
-**What:** Add TTL or archival for the notifications table to prevent unbounded growth.
-**Why:** Adversarial review flagged that notification rows accumulate indefinitely.
-**Effort:** S (human: ~1 hour / CC: ~10 min)
-**Priority:** P2
-
----
-
-### Worker Error Message Sanitization
-**What:** Sanitize internal error messages in worker failure notifications before sending to frontend.
-**Why:** Adversarial review flagged that raw Python exception messages may leak to the client via notification payload.
-**Effort:** S (human: ~1 hour / CC: ~10 min)
-**Priority:** P2
-
----
-
 ## P3 — Low Priority
 
 ### Ambient Theme Cue Above Record Button
@@ -52,6 +34,12 @@
 ---
 
 ## Completed
+
+### ~~Notifications Table Cleanup~~ — 2026-04-09
+Worker loop now prunes notification rows older than 24h every hour. Added `ix_notifications_created_at` index for efficient deletes.
+
+### ~~Worker Error Message Sanitization~~ — 2026-04-09
+Worker failure notification payload now sends a generic "Processing failed" message instead of raw `str(exc)`. Full traceback still logged server-side via `exc_info=True`.
 
 ### ~~Old Model Cleanup~~ — v0.2.0.0 (2026-03-26)
 Removed Audio, CategorizedEntry, old /api routes, and routers/ directory in v2 revamp.
