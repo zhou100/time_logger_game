@@ -8,13 +8,16 @@ import {
     Collapse,
     Container,
     Divider,
+    IconButton,
     Typography,
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PushPinIcon from '@mui/icons-material/PushPin';
-import { entriesApi } from '../services/api';
-import { AuditResponse, WeeklyAuditHistoryItem, WeeklyReportJson, Theme } from '../types/api';
+import { capturesApi, entriesApi } from '../services/api';
+import { AuditResponse, Capture, WeeklyAuditHistoryItem, WeeklyReportJson, Theme } from '../types/api';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
@@ -129,6 +132,27 @@ const WeeklyReportPage: React.FC = () => {
     const [error, setError] = useState<string | undefined>();
     const [history, setHistory] = useState<WeeklyAuditHistoryItem[]>([]);
     const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
+
+    // Open loops (live from captures API)
+    const [openLoops, setOpenLoops] = useState<Capture[]>([]);
+    const loadOpenLoops = useCallback(() => {
+        capturesApi.list({ category: 'TODO', status: 'open' }).then(setOpenLoops).catch(() => {});
+    }, []);
+    useEffect(() => { loadOpenLoops(); }, [loadOpenLoops]);
+
+    const markLoopDone = useCallback(async (id: string) => {
+        try {
+            await capturesApi.patch(id, { status: 'done' });
+            setOpenLoops((prev) => prev.filter((c) => c.id !== id));
+        } catch { /* noop */ }
+    }, []);
+
+    const dismissLoop = useCallback(async (id: string) => {
+        try {
+            await capturesApi.patch(id, { status: 'dismissed' });
+            setOpenLoops((prev) => prev.filter((c) => c.id !== id));
+        } catch { /* noop */ }
+    }, []);
 
     // Themes
     const [themes, setThemes] = useState<Theme[]>([]);
@@ -249,6 +273,30 @@ const WeeklyReportPage: React.FC = () => {
                                 );
                             })}
                         </Box>
+                    </Box>
+                )}
+
+                {/* Open Loops — live from captures */}
+                {openLoops.length > 0 && (
+                    <Box sx={{ mb: 3, p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
+                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                            Open Loops · {openLoops.length}
+                        </Typography>
+                        {openLoops.map((c) => (
+                            <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, pl: 1, borderLeft: `2px solid ${palette.accent}` }}>
+                                <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }}>
+                                    {c.display_text || '(no text)'}
+                                </Typography>
+                                <Box sx={{ display: 'flex', ml: 1, flexShrink: 0 }}>
+                                    <IconButton size="small" onClick={() => markLoopDone(c.id)} aria-label="mark done" sx={{ color: palette.success }}>
+                                        <CheckIcon fontSize="small" />
+                                    </IconButton>
+                                    <IconButton size="small" onClick={() => dismissLoop(c.id)} aria-label="dismiss" sx={{ color: palette.textMuted }}>
+                                        <CloseIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                            </Box>
+                        ))}
                     </Box>
                 )}
 

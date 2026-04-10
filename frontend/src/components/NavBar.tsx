@@ -59,14 +59,6 @@ const NavBar: React.FC = () => {
                         >
                             Week
                         </Button>
-                        <Button
-                            component={RouterLink}
-                            to="/captures"
-                            size="small"
-                            sx={{ color: 'text.secondary', mr: 1 }}
-                        >
-                            Inbox
-                        </Button>
                         <Typography
                             variant="body2"
                             sx={{
