@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from openai import AsyncOpenAI
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select, func, or_, and_, case
@@ -160,6 +160,7 @@ class AuditResponse(BaseModel):
     breakdown: Dict[str, float]
     approximate: bool = False  # True if some estimated_minutes were null (filled with avg)
     audit_text: Optional[str]
+    report_json: Optional[Dict[str, Any]] = None  # structured 4-section weekly report
     generated_at: Optional[str]
     cached: bool = False
     message: Optional[str] = None
@@ -654,6 +655,25 @@ class WeeklyAuditRequest(BaseModel):
     regenerate: bool = False
 
 
+def _current_week_start(today: "date") -> "date":
+    """Monday of the current calendar week."""
+    return today - timedelta(days=today.weekday())
+
+
+@router.get("/audit/weekly")
+async def get_weekly_audit(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return cached weekly report for current calendar week, or 204 if none."""
+    today_utc = datetime.now(timezone.utc).date()
+    week_start = _current_week_start(today_utc)
+    cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
+    if cached is not None:
+        return cached
+    return Response(status_code=204)
+
+
 @router.post("/audit/weekly", response_model=AuditResponse)
 async def generate_weekly_audit(
     body: WeeklyAuditRequest = WeeklyAuditRequest(),
@@ -661,10 +681,11 @@ async def generate_weekly_audit(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Generate an opinionated weekly AI Coach letter.
+    Generate a structured weekly report + AI Coach letter.
 
-    Aggregates entries from the past 7 days, compares days, identifies patterns.
-    User-initiated only (button click). Persisted with audit_type="weekly".
+    Calendar-week aligned (Monday–Sunday). Produces both prose audit_text
+    and structured report_json with 4 sections: time_breakdown, open_loops,
+    recurring_themes, draft_status_update.
     """
     today_utc = datetime.now(timezone.utc).date()
 
@@ -674,8 +695,8 @@ async def generate_weekly_audit(
         if cached is not None:
             return cached
 
-    # Fetch entries for the past 7 days
-    week_start_date = today_utc - timedelta(days=6)
+    # Calendar week: Monday of current week
+    week_start_date = _current_week_start(today_utc)
 
     result = await db.execute(
         select(Entry)
@@ -691,15 +712,31 @@ async def generate_weekly_audit(
     )
     entries = result.scalars().all()
 
-    if not entries:
+    if len(entries) < 3:
         return AuditResponse(
-            entries=0, breakdown={}, approximate=False,
+            entries=len(entries), breakdown={}, approximate=False,
             audit_text=None, generated_at=None,
-            message="No entries recorded this week.",
+            message="Record more this week for a useful report. Need at least 3 entries.",
+            week_start=week_start_date.isoformat(),
+            week_end=today_utc.isoformat(),
         )
 
     all_classifications = [c for e in entries for c in e.classifications]
     breakdown, approximate = _compute_breakdown(all_classifications)
+
+    # Query open loops: TODOs still marked 'open'
+    open_loops_q = await db.execute(
+        select(EntryClassification)
+        .where(
+            EntryClassification.entry_id.in_([e.id for e in entries]),
+            EntryClassification.category == "TODO",
+            EntryClassification.status == "open",
+        )
+        .order_by(EntryClassification.classified_at.asc())
+    )
+    open_loops = [
+        (c.display_text or c.extracted_text or "") for c in open_loops_q.scalars().all()
+    ]
 
     # Build per-day summary for the coach prompt
     day_summaries: Dict[str, List[str]] = {}
@@ -732,6 +769,8 @@ async def generate_weekly_audit(
         for t in prior_themes
     ) or "(none yet)"
 
+    open_loops_text = "\n".join(f"- {t}" for t in open_loops) if open_loops else "(none)"
+
     # Stage 1 — THINKING (gpt-5.4-mini): structured analysis + theme extraction in JSON
     thinking_prompt = f"""You are an analytical AI time coach. Analyze the user's week and produce STRUCTURED JSON only.
 
@@ -742,6 +781,9 @@ Prior recurring themes from past weeks (use these for continuity — extend or c
 
 This week's activity breakdown: {activity_summary}
 Follow-up items captured: {capture_summary}
+
+Open TODOs (still unresolved from this week):
+{open_loops_text}
 
 Daily activities:
 {day_text}
@@ -824,11 +866,25 @@ Write the letter now."""
             audit_text=None, generated_at=None, message="Weekly review generation failed",
         )
 
+    # Build structured 4-section report from analysis + DB data
+    report_json = {
+        "time_breakdown": {
+            "activity": dict(activity_breakdown),
+            "captures": dict(capture_counts),
+            "best_day": analysis.get("best_day"),
+            "worst_day": analysis.get("worst_day"),
+            "naval_balance": analysis.get("naval_balance"),
+        },
+        "open_loops": open_loops,
+        "recurring_themes": analysis.get("patterns", []),
+        "draft_status_update": analysis.get("uncomfortable_truth", ""),
+    }
+
     now_iso = datetime.now(timezone.utc).isoformat()
 
     await _save_audit(
         db, current_user.id, today_utc, "weekly",
-        len(entries), breakdown, audit_text,
+        len(entries), breakdown, audit_text, report_json=report_json,
     )
 
     # Persist + dedup themes
@@ -893,10 +949,11 @@ Write the letter now."""
         breakdown=breakdown,
         approximate=approximate,
         audit_text=audit_text,
+        report_json=report_json,
         generated_at=now_iso,
         week_start=week_start_date.isoformat(),
         week_end=today_utc.isoformat(),
-        days_covered=7,
+        days_covered=(today_utc - week_start_date).days + 1,
         new_themes=new_theme_payloads,
     )
 
@@ -1278,15 +1335,23 @@ async def _get_cached_audit(
     week_start = None
     week_end = None
     days_covered = None
+    report_json_parsed = None
     if audit_type == "weekly":
+        week_start_d = _current_week_start(cached.audit_date)
         week_end = cached.audit_date.isoformat()
-        week_start = (cached.audit_date - timedelta(days=6)).isoformat()
-        days_covered = 7
+        week_start = week_start_d.isoformat()
+        days_covered = (cached.audit_date - week_start_d).days + 1
+        if cached.report_json:
+            try:
+                report_json_parsed = json.loads(cached.report_json)
+            except json.JSONDecodeError:
+                pass
     return AuditResponse(
         entries=cached.entries_count,
         breakdown=breakdown,
         approximate=False,
         audit_text=cached.audit_text,
+        report_json=report_json_parsed,
         generated_at=cached.generated_at.isoformat() if cached.generated_at else None,
         cached=True,
         week_start=week_start,
@@ -1298,6 +1363,7 @@ async def _get_cached_audit(
 async def _save_audit(
     db: AsyncSession, user_id: int, audit_date, audit_type: str,
     entries_count: int, breakdown: Dict[str, float], audit_text: Optional[str],
+    report_json: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Persist an audit result, replacing any previous for the same user+date+type."""
     # Mark old results stale
@@ -1318,6 +1384,7 @@ async def _save_audit(
         entries_count=entries_count,
         breakdown_json=json.dumps(breakdown),
         audit_text=audit_text,
+        report_json=json.dumps(report_json, ensure_ascii=False) if report_json else None,
     ))
     await db.flush()
 

@@ -18,6 +18,7 @@ class AuditResult(Base):
     entries_count = Column(Integer, nullable=False)
     breakdown_json = Column(Text, nullable=True)  # JSON-serialized breakdown dict
     audit_text = Column(Text, nullable=True)
+    report_json = Column(Text, nullable=True)  # structured 4-section weekly report JSON
     is_stale = Column(Boolean, nullable=False, default=False)
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
 
