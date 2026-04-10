@@ -82,8 +82,8 @@ const RecordButton: React.FC<RecordButtonProps> = memo(({ onRecordingComplete })
         disabled={isStoppingRecording || status === 'acquiring_media'}
         aria-label={isRecording ? 'Stop recording' : 'Start recording'}
         sx={{
-          width: 72,
-          height: 72,
+          width: { xs: 'min(60vw, 200px)', md: 72 },
+          height: { xs: 'min(60vw, 200px)', md: 72 },
           bgcolor: isRecording ? palette.accentHover : palette.accent,
           color: '#fff',
           '&:hover': {
@@ -93,7 +93,9 @@ const RecordButton: React.FC<RecordButtonProps> = memo(({ onRecordingComplete })
           transition: 'background-color 100ms ease-out',
         }}
       >
-        {isRecording ? <StopIcon sx={{ fontSize: 32 }} /> : <MicIcon sx={{ fontSize: 32 }} />}
+        {isRecording
+          ? <StopIcon sx={{ fontSize: { xs: 64, md: 32 } }} />
+          : <MicIcon sx={{ fontSize: { xs: 64, md: 32 } }} />}
       </IconButton>
 
       {status === 'acquiring_media' && (

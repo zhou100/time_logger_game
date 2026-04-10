@@ -151,8 +151,8 @@ const RecordingPage: React.FC = () => {
 
     return (
         <Container maxWidth="md">
-            <Box sx={{ mt: 4, mb: 8 }}>
-                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 1 }}>
+            <Box sx={{ mt: { xs: 2, md: 4 }, mb: 8 }}>
+                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 1, display: { xs: 'none', md: 'block' } }}>
                     Debrief
                 </Typography>
 
@@ -202,7 +202,7 @@ const RecordingPage: React.FC = () => {
 
 
                 {/* ── Recorder ─────────────────────────────────────────────── */}
-                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
+                <Box sx={{ p: { xs: 4, md: 3 }, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
                     <RecordButton onRecordingComplete={handleRecordingComplete} />
 
                     {isProcessing && (
