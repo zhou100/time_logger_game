@@ -65,18 +65,6 @@ class Settings(BaseSettings):
         "extra": "allow",
     }
 
-    @staticmethod
-    def parse_origins(value) -> List[str]:
-        import json
-        if isinstance(value, list):
-            return value
-        if not isinstance(value, str):
-            return [str(value)]
-        stripped = value.strip()
-        if stripped.startswith("["):
-            return json.loads(stripped)
-        return [origin.strip() for origin in stripped.split(",") if origin.strip()]
-
 
 @lru_cache()
 def get_settings() -> Settings:

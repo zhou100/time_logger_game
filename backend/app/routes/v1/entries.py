@@ -196,8 +196,9 @@ def _search_match_sources(entry: Entry, query_text: str) -> List[str]:
     category_line_matched = False
     category_name_matched = False
     for classification in entry.classifications:
-        display_text = classification.display_text or ""
-        if display_text and lowered_query in display_text.lower():
+        extracted = classification.extracted_text or ""
+        edited = classification.edited_text or ""
+        if (extracted and lowered_query in extracted.lower()) or (edited and lowered_query in edited.lower()):
             category_line_matched = True
         if classification.category and lowered_query in classification.category.lower():
             category_name_matched = True
@@ -418,6 +419,8 @@ async def search_entries(
     query_text = q.strip()
     if not query_text:
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    if len(query_text) < 2:
+        raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
 
     normalized_category = None
     if category:
@@ -443,7 +446,8 @@ async def search_entries(
     if parsed_date_from and parsed_date_to and parsed_date_from > parsed_date_to:
         raise HTTPException(status_code=400, detail="date_from cannot be after date_to")
 
-    pattern = f"%{query_text}%"
+    escaped = query_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
     effective_date = func.coalesce(Entry.local_date, func.date(Entry.created_at))
     base_filters = [
         Entry.user_id == current_user.id,
@@ -455,6 +459,10 @@ async def search_entries(
             EntryClassification.category.ilike(pattern),
         ),
     ]
+    # Category filter semantics: the matched classification row must itself belong
+    # to the given category. Entries whose matched content lives in a different
+    # classification row are excluded, even if they also have a classification in
+    # the filtered category. This is intentional — "show me TODO-line matches".
     if normalized_category:
         base_filters.append(EntryClassification.category == normalized_category)
     if parsed_date_from:

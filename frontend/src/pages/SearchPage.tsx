@@ -341,7 +341,7 @@ const SearchPage: React.FC = () => {
                                                 entry={entry}
                                                 readOnly
                                                 highlightTerm={currentQuery}
-                                                snippetText={buildTranscriptSnippet(entry.transcript, currentQuery)}
+                                                snippetText={entry.match_sources?.includes('transcript') ? buildTranscriptSnippet(entry.transcript, currentQuery) : undefined}
                                                 footerExtra={(
                                                     <Button
                                                         component={RouterLink}

@@ -80,6 +80,26 @@ const RecordingPage: React.FC = () => {
         });
     }, [setSearchParams, today]);
 
+    const updateSelectedDate = useCallback((nextDate: string) => {
+        setSelectedDate(nextDate);
+        setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            if (nextDate === today) params.delete('date');
+            else params.set('date', nextDate);
+            return params;
+        }, { replace: true });
+    }, [setSearchParams, today]);
+
+    useEffect(() => {
+        const routeDate = searchParams.get('date');
+        if (routeDate && routeDate !== selectedDate) {
+            setSelectedDate(routeDate);
+        }
+        if (!routeDate && selectedDate !== today) {
+            setSelectedDate(today);
+        }
+    }, [searchParams, selectedDate, today]);
+
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | undefined>();
 
@@ -194,7 +214,7 @@ const RecordingPage: React.FC = () => {
                         <ChevronRightIcon />
                     </IconButton>
                     {!isToday && (
-                            <IconButton size="small" onClick={() => updateSelectedDate(today)} aria-label="Go to today"
+                        <IconButton size="small" onClick={() => updateSelectedDate(today)} aria-label="Go to today"
                             sx={{ color: palette.accent }}>
                             <Typography variant="caption" fontWeight={700}>Today</Typography>
                         </IconButton>
@@ -418,22 +438,3 @@ function stepLabel(step: string | null, isUploading: boolean): string {
 }
 
 export default RecordingPage;
-    useEffect(() => {
-        const routeDate = searchParams.get('date');
-        if (routeDate && routeDate !== selectedDate) {
-            setSelectedDate(routeDate);
-        }
-        if (!routeDate && selectedDate !== today) {
-            setSelectedDate(today);
-        }
-    }, [searchParams, selectedDate, today]);
-
-    const updateSelectedDate = useCallback((nextDate: string) => {
-        setSelectedDate(nextDate);
-        setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            if (nextDate === today) params.delete('date');
-            else params.set('date', nextDate);
-            return params;
-        }, { replace: true });
-    }, [setSearchParams, today]);
