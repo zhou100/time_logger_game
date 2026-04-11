@@ -406,7 +406,7 @@ async def list_entries(
 
 @router.get("/search", response_model=EntryListResponse)
 async def search_entries(
-    q: str = Query(..., min_length=2, description="Search past records"),
+    q: str = Query(..., min_length=2, max_length=200, description="Search past records"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None, description="Filter by category"),

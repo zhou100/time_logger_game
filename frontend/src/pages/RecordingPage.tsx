@@ -42,13 +42,21 @@ function localToday(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function sanitizeDateParam(raw: string | null, today: string): string | null {
+    if (!raw || !DATE_PARAM_RE.test(raw)) return null;
+    if (raw > today) return null;
+    return raw;
+}
+
 const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
     const today = useMemo(localToday, []);
-    const initialDate = searchParams.get('date') || today;
+    const initialDate = sanitizeDateParam(searchParams.get('date'), today) ?? today;
     const [selectedDate, setSelectedDate] = useState(initialDate);
     const isToday = selectedDate === today;
 
@@ -84,7 +92,7 @@ const RecordingPage: React.FC = () => {
     }, [selectedDate, updateSelectedDate]);
 
     useEffect(() => {
-        const routeDate = searchParams.get('date');
+        const routeDate = sanitizeDateParam(searchParams.get('date'), today);
         if (routeDate && routeDate !== selectedDate) {
             setSelectedDate(routeDate);
         }
