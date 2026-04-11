@@ -6,6 +6,7 @@ A FastAPI and React-based voice-enabled time tracking and content organization s
 
 - Voice-based time tracking and note-taking
 - Automatic content categorization (TODOs, Ideas, Thoughts, Time Records)
+- Past record search with filters and deep-linkable day view (v0.3.0.0)
 - User authentication and multi-user support
 - RESTful API with OpenAPI documentation
 - Structured data storage with PostgreSQL
