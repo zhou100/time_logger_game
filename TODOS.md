@@ -10,7 +10,37 @@
 
 ---
 
+## P2 — Medium Priority
+
+### pg_trgm GIN Indexes for Search at Scale
+**What:** Add pg_trgm extension + GIN indexes on `entries.transcript` and `entry_classifications.extracted_text` / `edited_text` so `ILIKE '%q%'` uses trigram search instead of a sequential scan.
+**Why:** Current `/api/v1/entries/search` uses unanchored ILIKE, which is O(N) per column. Fine for today's volume, but once any user crosses a few thousand entries the endpoint will start stalling the event loop. Trigram indexes let Postgres serve the same query shape without changing the route.
+**Effort:** S (human: ~1 hour / CC: ~20 min) — one Alembic migration creating the extension + three indexes, no code changes.
+**Priority:** P2
+**Depends on:** Nothing — can ship any time before scale hits.
+**Context:** Deferred from past-record-search eng review (2026-04-10). User confirmed current volume is fine; revisit when an individual user approaches ~5k entries or the search route shows up in slow-query logs.
+
+---
+
 ## P3 — Low Priority
+
+### Integration Test for Search Query Behavior
+**What:** Add a pytest integration test that exercises `/api/v1/entries/search` against a real Postgres (not mocks) to verify ILIKE escaping, match_sources provenance, and category filter semantics end-to-end.
+**Why:** Current backend tests mock the DB, so they only verify the query *was built*, not that it *returns the right rows*. A regression in SQL construction (e.g. escaping, join direction, filter semantics) would pass unit tests but break prod.
+**Effort:** S (human: ~2 hours / CC: ~30 min) — reuse existing integration test fixtures, seed a handful of entries with known transcripts and classifications, assert on returned IDs and match_sources.
+**Priority:** P3
+**Context:** Deferred from past-record-search eng review (2026-04-10). Ship the feature with mocked unit tests; add integration coverage before the next search-related change.
+
+---
+
+### Saved Retrieval Chips
+**What:** Let users save a search query (text + category + date range) as a named chip on the search page, so they can re-run "last week's TODOs" or "all REFLECTION entries this month" with one click.
+**Why:** The CEO plan frames search as retrieval v1 toward a memory-layer product. Saved chips are the smallest step from "I can search" to "the app remembers what I care about retrieving." Also removes friction from the weekly-review loop.
+**Effort:** M (human: ~1 day / CC: ~2 hours) — new `saved_searches` table, CRUD endpoints, chip UI on SearchPage, serialize/restore from URL params.
+**Priority:** P3
+**Context:** Deferred from past-record-search eng review (2026-04-10). Wait for search to see real usage before committing to this shape — users may want something more powerful (e.g. full saved dashboards) or something simpler (e.g. browser bookmarks are enough).
+
+---
 
 ### Ambient Theme Cue Above Record Button
 **What:** Rotate one pinned theme as a single line above the record button (e.g. *"You said deep-work mornings matter. It's 9:17."*). Time-of-day-aware. No popup, no animation, just text.
