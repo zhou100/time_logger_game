@@ -123,6 +123,28 @@ async def test_search_applies_user_and_filter_params_to_query(app):
 
 
 @pytest.mark.asyncio
+async def test_search_escapes_like_wildcards(app):
+    """User-entered % and _ should be escaped so they don't act as LIKE wildcards."""
+    total_result = MagicMock()
+    total_result.scalar.return_value = 0
+    ids_result = MagicMock()
+    ids_result.all.return_value = []
+
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[total_result, ids_result])
+
+    _override_auth(app)
+    _override_db(app, db)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/entries/search?q=50%25%20off")
+
+    assert resp.status_code == 200
+    compiled = str(db.execute.call_args_list[0][0][0].compile(compile_kwargs={"literal_binds": True}))
+    assert r"50\%" in compiled, f"expected escaped literal '50\\%' in compiled SQL, got: {compiled}"
+
+
+@pytest.mark.asyncio
 async def test_search_rejects_invalid_date_range(app):
     db = AsyncMock()
     _override_auth(app)
