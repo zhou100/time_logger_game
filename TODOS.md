@@ -51,6 +51,15 @@
 
 ## P3 — Low Priority
 
+### Strip Malformed `?date=` URL Param on Fallback
+**What:** When `/?date=banana` or `/?date=9999-12-31` loads, the RecordingPage correctly falls back to today's data but leaves the invalid param in the address bar. Extend the URL-sync `useEffect` to call `setSearchParams` and delete the bad param whenever `sanitizeDateParam` returns null.
+**Why:** If a user copies and shares a malformed deep-link, the recipient sees today's data under a URL that implies a different date. Cosmetic mismatch between address bar and rendered state. Data correctness is already intact (the original HIGH finding from adversarial review — "bad param reaches backend" — is fully fixed).
+**Effort:** XS (human: ~15 min / CC: ~5 min) — one `if` block in the existing `useEffect`.
+**Priority:** P3
+**Context:** Deferred from past-record-search QA (2026-04-11). Found as ISSUE-001 in `.gstack/qa-reports/qa-report-localhost-2026-04-11.md`.
+
+---
+
 ### Integration Test for Search Query Behavior
 **What:** Add a pytest integration test that exercises `/api/v1/entries/search` against a real Postgres (not mocks) to verify ILIKE escaping, match_sources provenance, and category filter semantics end-to-end.
 **Why:** Current backend tests mock the DB, so they only verify the query *was built*, not that it *returns the right rows*. A regression in SQL construction (e.g. escaping, join direction, filter semantics) would pass unit tests but break prod.
