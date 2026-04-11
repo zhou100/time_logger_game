@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Alert,
     Box,
@@ -41,12 +42,22 @@ function localToday(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function sanitizeDateParam(raw: string | null, today: string): string | null {
+    if (!raw || !DATE_PARAM_RE.test(raw)) return null;
+    if (raw > today) return null;
+    return raw;
+}
+
 const RecordingPage: React.FC = () => {
     useRealtimeNotifications();
 
     const queryClient = useQueryClient();
+    const [searchParams, setSearchParams] = useSearchParams();
     const today = useMemo(localToday, []);
-    const [selectedDate, setSelectedDate] = useState(today);
+    const initialDate = sanitizeDateParam(searchParams.get('date'), today) ?? today;
+    const [selectedDate, setSelectedDate] = useState(initialDate);
     const isToday = selectedDate === today;
 
     // Calendar popover state
@@ -63,13 +74,32 @@ const RecordingPage: React.FC = () => {
     const { data: entriesData } = useEntries(0, 20, selectedDate);
     const upload = useUpload();
 
+    const updateSelectedDate = useCallback((nextDate: string) => {
+        setSelectedDate(nextDate);
+        setSearchParams((prev) => {
+            const params = new URLSearchParams(prev);
+            if (nextDate === today) params.delete('date');
+            else params.set('date', nextDate);
+            return params;
+        }, { replace: true });
+    }, [setSearchParams, today]);
+
     const shiftDate = useCallback((days: number) => {
-        setSelectedDate((prev) => {
-            const d = new Date(prev + 'T12:00:00');
-            d.setDate(d.getDate() + days);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        });
-    }, []);
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() + days);
+        const nextDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        updateSelectedDate(nextDate);
+    }, [selectedDate, updateSelectedDate]);
+
+    useEffect(() => {
+        const routeDate = sanitizeDateParam(searchParams.get('date'), today);
+        if (routeDate && routeDate !== selectedDate) {
+            setSelectedDate(routeDate);
+        }
+        if (!routeDate && selectedDate !== today) {
+            setSelectedDate(today);
+        }
+    }, [searchParams, selectedDate, today]);
 
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | undefined>();
@@ -192,7 +222,7 @@ const RecordingPage: React.FC = () => {
                             <CalendarMonthIcon fontSize="small" />
                         </IconButton>
                         {!isToday && (
-                            <IconButton size="small" onClick={() => setSelectedDate(today)} aria-label="Go to today"
+                            <IconButton size="small" onClick={() => updateSelectedDate(today)} aria-label="Go to today"
                                 sx={{ color: palette.accent }}>
                                 <Typography variant="caption" fontWeight={700}>Today</Typography>
                             </IconButton>
@@ -208,7 +238,7 @@ const RecordingPage: React.FC = () => {
                     selectedDate={selectedDate}
                     activeDates={activeDates}
                     maxDate={today}
-                    onSelect={setSelectedDate}
+                    onSelect={updateSelectedDate}
                 />
 
                 {/* ── Processing feedback ─────────────────────────────────── */}

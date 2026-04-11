@@ -65,6 +65,8 @@ export interface EntryItem {
     transcript: string | null;
     recorded_at: string | null;
     created_at: string;
+    local_date?: string | null;
+    match_sources?: string[] | null;
     duration_seconds: number | null;
     categories: CategoryItem[];
 }

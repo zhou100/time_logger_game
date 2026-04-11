@@ -2,7 +2,6 @@
 Application settings — all configuration sourced from environment variables.
 """
 from typing import List
-from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 

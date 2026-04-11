@@ -34,9 +34,40 @@ const CATEGORIES = ['EARNING', 'LEARNING', 'RELAXING', 'FAMILY', 'TODO', 'EXPERI
 interface EntryCardProps {
     entry: EntryItem;
     readOnly?: boolean;
+    highlightTerm?: string;
+    snippetText?: string;
+    footerExtra?: React.ReactNode;
 }
 
-const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function renderHighlightedText(value: string | null | undefined, highlightTerm?: string): React.ReactNode {
+    const text = value ?? 'Processing…';
+    const query = highlightTerm?.trim();
+    if (!query) return text;
+
+    const regex = new RegExp(`(${escapeRegExp(query)})`, 'ig');
+    const parts = text.split(regex);
+    const lowerQuery = query.toLowerCase();
+
+    return parts.map((part, index) => (
+        part.toLowerCase() === lowerQuery
+            ? (
+                <Box
+                    key={`${part}-${index}`}
+                    component="mark"
+                    sx={{ bgcolor: '#F5E6A7', color: 'inherit', px: 0.25, borderRadius: '2px' }}
+                >
+                    {part}
+                </Box>
+            )
+            : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+    ));
+}
+
+const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highlightTerm, snippetText, footerExtra }) => {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [confirmLastLineDelete, setConfirmLastLineDelete] = useState(false);
@@ -111,7 +142,11 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
     return (
         <>
             <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
-                {hasCats ? categories.map((catItem, i) => {
+                {snippetText ? (
+                    <Typography variant="body2" sx={{ lineHeight: 1.6, color: 'text.primary' }}>
+                        {renderHighlightedText(snippetText, highlightTerm)}
+                    </Typography>
+                ) : hasCats ? categories.map((catItem, i) => {
                     const isEditingThis = editingIndex === i;
 
                     if (isEditingThis) {
@@ -163,7 +198,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                                 variant="outlined"
                             />
                             <Typography variant="body2" sx={{ lineHeight: 1.5, flex: 1 }}>
-                                {catItem.text ?? entry.transcript ?? 'Processing…'}
+                                {renderHighlightedText(catItem.text ?? entry.transcript, highlightTerm)}
                             </Typography>
                             {!readOnly && (
                                 <>
@@ -179,13 +214,16 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false }) => {
                     );
                 }) : (
                     <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-                        {entry.transcript ?? 'Processing…'}
+                        {renderHighlightedText(entry.transcript, highlightTerm)}
                     </Typography>
                 )}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Typography>
+                        {footerExtra}
+                    </Box>
                     {!readOnly && (
                         <Box sx={{ display: 'flex', gap: 0.25 }}>
                             <IconButton
