@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0.0] - 2026-04-10
+
+### Added
+- **Past record search** — dedicated `/search` page to find old entries by transcript text, classification line, or category metadata. Infinite scroll, highlighted matches, and chips explaining why each result matched.
+- **Nav bar search input** — type a query from anywhere in the app and jump straight to filtered results.
+- **Deep-linkable day view** — `/?date=YYYY-MM-DD` opens the recording page pinned to that day. Search results link back to the exact day each entry belongs to.
+- Filter search by category and date range.
+- Backend `GET /api/v1/entries/search` endpoint with case-insensitive matching, match-source provenance, and result pagination.
+
+### Fixed
+- Escape LIKE special characters (`%`, `_`) in the search endpoint so a user-entered `%` behaves as a literal, not a wildcard.
+- Reject search queries shorter than 2 characters *after* trimming whitespace.
+- Cap search query length at 200 characters so oversized queries can't pin DB CPU.
+- Reject malformed or future-dated `?date=` URL parameters before they reach the upload payload.
+- Match-source provenance now correctly reports classification-line matches against both original and edited text.
+
 ## [0.2.0.0] - 2026-03-26
 
 ### Added
