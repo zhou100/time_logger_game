@@ -6,7 +6,7 @@ EntryClassification id and status (done/dismissed) for rows the client echoes
 back, and must delete rows whose ids the client omits.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -185,3 +185,28 @@ async def test_update_inserts_new_row_when_id_omitted(app):
     new = [c for c in entry.classifications if c is not a][0]
     assert new.extracted_text == "brand new"
     assert new.category == "EXPERIMENT"
+
+
+@pytest.mark.asyncio
+async def test_move_entry_updates_local_date_for_empty_target_day(app):
+    """Moving an entry must update local_date, not just timestamps.
+
+    The Day page filters by local_date. If PATCH only changes created_at, the
+    entry still appears on the old day and an empty target day stays empty.
+    """
+    old_day = date(2026, 4, 5)
+    new_day = date(2026, 4, 8)
+    entry = _make_entry([])
+    entry.created_at = datetime(2026, 4, 5, 18, 30, tzinfo=timezone.utc)
+    entry.recorded_at = entry.created_at
+    entry.local_date = old_day
+    _override_deps(app, entry)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.patch(f"/entries/{entry.id}", json={"date": "2026-04-08"})
+
+    assert resp.status_code == 200
+    assert entry.local_date == new_day
+    assert entry.created_at == datetime(2026, 4, 8, 12, 0, tzinfo=timezone.utc)
+    assert entry.recorded_at == datetime(2026, 4, 8, 12, 0, tzinfo=timezone.utc)
+    assert resp.json()["local_date"] == "2026-04-08"
