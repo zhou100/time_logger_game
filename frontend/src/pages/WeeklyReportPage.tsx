@@ -3,7 +3,6 @@ import {
     Alert,
     Box,
     Button,
-    Chip,
     CircularProgress,
     Collapse,
     Container,
@@ -15,25 +14,133 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PushPinIcon from '@mui/icons-material/PushPin';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { capturesApi, entriesApi } from '../services/api';
 import { AuditResponse, Capture, WeeklyAuditHistoryItem, WeeklyReportJson, Theme } from '../types/api';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DayWeekTabs from '../components/DayWeekTabs';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
-/** Renders the 4 structured sections of the weekly report */
-const StructuredReport: React.FC<{ report: WeeklyReportJson }> = ({ report }) => {
+/* ── Category Breakdown bar ────────────────────────────────────────────────── */
+const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: Record<string, number> }> = ({ activity, captures }) => {
+    const sorted = Object.entries(activity).sort(([, a], [, b]) => b - a);
+    const captureEntries = Object.entries(captures);
+    if (sorted.length === 0 && captureEntries.length === 0) return null;
+
+    const maxPct = sorted.length > 0 ? sorted[0][1] : 0;
+
+    return (
+        <Box sx={{ mb: 3 }}>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+                Category Breakdown
+            </Typography>
+            {sorted.map(([cat, pct]) => (
+                <Box key={cat} sx={{ display: 'flex', alignItems: 'center', mb: 1, minHeight: 32 }}>
+                    <Typography variant="body2" sx={{ width: 90, flexShrink: 0, color: palette.textPrimary }}>
+                        {CATEGORY_LABELS[cat] ?? cat}
+                    </Typography>
+                    <Box sx={{ flex: 1, mx: 1.5, height: 8, borderRadius: 4, bgcolor: `${palette.rule}40`, overflow: 'hidden' }}>
+                        <Box
+                            sx={{
+                                height: '100%',
+                                borderRadius: 4,
+                                bgcolor: CATEGORY_COLORS[cat] ?? palette.textMuted,
+                                width: `${maxPct > 0 ? (pct / maxPct) * 100 : 0}%`,
+                                transition: 'width 0.3s ease-out',
+                            }}
+                        />
+                    </Box>
+                    <Typography
+                        variant="body2"
+                        sx={{ width: 40, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: CATEGORY_COLORS[cat] ?? palette.textMuted }}
+                    >
+                        {pct}%
+                    </Typography>
+                </Box>
+            ))}
+            {captureEntries.length > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    {captureEntries.map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`).join(' \u00b7 ')}
+                </Typography>
+            )}
+        </Box>
+    );
+};
+
+/* ── Recurring Themes (display-only list) ──────────────────────────────────── */
+const RecurringThemes: React.FC<{ themes: Theme[]; onDismiss: (t: Theme) => void }> = ({ themes, onDismiss }) => {
+    if (themes.length === 0) return null;
+
+    const polarityColor = (p: string) =>
+        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.info;
+
+    return (
+        <Box sx={{ mb: 3 }}>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+                Recurring Themes
+            </Typography>
+            {themes.slice(0, 8).map((t) => (
+                <Box
+                    key={t.id}
+                    sx={{
+                        py: 1.5,
+                        px: 2,
+                        mb: 1,
+                        borderRadius: '8px',
+                        bgcolor: palette.surface,
+                        borderLeft: `3px solid ${polarityColor(t.polarity)}`,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 1.5,
+                    }}
+                >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+                            {t.title}
+                        </Typography>
+                        {t.description && (
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, mt: 0.25, display: 'block' }}>
+                                {t.description}
+                            </Typography>
+                        )}
+                        {(t.streak ?? []).length > 0 && (
+                            <Box sx={{ display: 'flex', gap: '2px', mt: 0.75 }}>
+                                {(t.streak ?? []).map((on, i) => (
+                                    <Box
+                                        key={i}
+                                        sx={{
+                                            width: 5,
+                                            height: 5,
+                                            borderRadius: '50%',
+                                            bgcolor: on ? polarityColor(t.polarity) : palette.rule,
+                                            opacity: on ? 0.85 : 0.45,
+                                        }}
+                                    />
+                                ))}
+                            </Box>
+                        )}
+                    </Box>
+                    <IconButton
+                        size="small"
+                        onClick={() => onDismiss(t)}
+                        sx={{ p: 0.25, flexShrink: 0, color: palette.textMuted, opacity: 0.5, '&:hover': { opacity: 1 } }}
+                        aria-label="dismiss theme"
+                    >
+                        <CloseIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                </Box>
+            ))}
+        </Box>
+    );
+};
+
+/* ── Status Update (copy-able) ─────────────────────────────────────────────── */
+const StatusUpdate: React.FC<{ text: string }> = ({ text }) => {
     const [copied, setCopied] = React.useState(false);
-    const tb = report.time_breakdown;
-    const activityEntries = Object.entries(tb.activity || {}).sort(([, a], [, b]) => b - a);
-    const captureEntries = Object.entries(tb.captures || {});
 
     const handleCopy = () => {
-        const text = report.draft_status_update || '';
         if (navigator.clipboard) {
             navigator.clipboard.writeText(text);
         } else {
-            // textarea fallback
             const ta = document.createElement('textarea');
             ta.value = text;
             document.body.appendChild(ta);
@@ -46,86 +153,29 @@ const StructuredReport: React.FC<{ report: WeeklyReportJson }> = ({ report }) =>
     };
 
     return (
-        <>
-            {/* Section 1: Time Breakdown */}
-            <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                    Time Breakdown
+        <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="overline" color="text.secondary">
+                    Status Update
                 </Typography>
-                {activityEntries.map(([cat, pct]) => (
-                    <Box key={cat} sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2">{CATEGORY_LABELS[cat] ?? cat}</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: CATEGORY_COLORS[cat] ?? palette.textMuted }}>
-                            {pct}%
-                        </Typography>
-                    </Box>
-                ))}
-                {captureEntries.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        {captureEntries.map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`).join(' \u00b7 ')}
-                    </Typography>
-                )}
-                {tb.naval_balance && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-                        {tb.naval_balance}
-                    </Typography>
-                )}
+                <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<ContentCopyIcon fontSize="small" />}
+                    onClick={handleCopy}
+                    sx={{ color: palette.textMuted, textTransform: 'none' }}
+                >
+                    {copied ? 'Copied!' : 'Copy'}
+                </Button>
             </Box>
-
-            {/* Section 2: Open Loops */}
-            {report.open_loops.length > 0 && (
-                <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                        Open Loops \u00b7 {report.open_loops.length}
-                    </Typography>
-                    {report.open_loops.map((item, i) => (
-                        <Typography key={i} variant="body2" sx={{ mb: 0.5, pl: 1, borderLeft: `2px solid ${palette.accent}` }}>
-                            {item}
-                        </Typography>
-                    ))}
-                </Box>
-            )}
-
-            {/* Section 3: Recurring Themes */}
-            {report.recurring_themes.length > 0 && (
-                <Box sx={{ p: 3, mb: 2, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                    <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                        Patterns
-                    </Typography>
-                    {report.recurring_themes.map((theme, i) => (
-                        <Typography key={i} variant="body2" sx={{ mb: 0.5 }}>
-                            \u2022 {theme}
-                        </Typography>
-                    ))}
-                </Box>
-            )}
-
-            {/* Section 4: Draft Status Update */}
-            {report.draft_status_update && (
-                <Box sx={{ p: 3, mb: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="overline" color="text.secondary">
-                            Status Update
-                        </Typography>
-                        <Button
-                            size="small"
-                            variant="text"
-                            startIcon={<ContentCopyIcon fontSize="small" />}
-                            onClick={handleCopy}
-                            sx={{ color: palette.textMuted, textTransform: 'none' }}
-                        >
-                            {copied ? 'Copied!' : 'Copy'}
-                        </Button>
-                    </Box>
-                    <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-                        {report.draft_status_update}
-                    </Typography>
-                </Box>
-            )}
-        </>
+            <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                {text}
+            </Typography>
+        </Box>
     );
 };
 
+/* ── Main page ─────────────────────────────────────────────────────────────── */
 const WeeklyReportPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<AuditResponse | null>(null);
@@ -161,14 +211,6 @@ const WeeklyReportPage: React.FC = () => {
     }, []);
     useEffect(() => { loadThemes(); }, [loadThemes]);
 
-    const toggleThemePin = useCallback(async (theme: Theme) => {
-        const next = theme.status === 'pinned' ? 'active' : 'pinned';
-        try {
-            const updated = await entriesApi.updateTheme(theme.id, { status: next });
-            setThemes((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-        } catch { /* noop */ }
-    }, []);
-
     const dismissTheme = useCallback(async (theme: Theme) => {
         try {
             await entriesApi.updateTheme(theme.id, { status: 'dismissed' });
@@ -176,16 +218,13 @@ const WeeklyReportPage: React.FC = () => {
         } catch { /* noop */ }
     }, []);
 
-    const polarityColor = (p: string) =>
-        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.info;
-
     const formatRange = (start?: string, end?: string) => {
         if (!start || !end) return '';
         const fmt = (s: string) => {
             const [y, m, d] = s.split('-').map(Number);
             return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         };
-        return `${fmt(start)} \u2192 ${fmt(end)} \u00b7 7 days`;
+        return `${fmt(start)} \u2192 ${fmt(end)}`;
     };
 
     // Load history on mount
@@ -210,97 +249,15 @@ const WeeklyReportPage: React.FC = () => {
         }
     }, [result, loadThemes]);
 
+    const report = result?.report_json;
+
     return (
         <Container maxWidth="sm">
-            <Box sx={{ mt: 4, mb: 8 }}>
-                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 3 }}>
-                    Weekly Report
-                </Typography>
+            <Box sx={{ mt: { xs: 2, md: 4 }, mb: 8 }}>
+                {/* ── Day / Week tabs ────────────────────────────────── */}
+                <DayWeekTabs active="week" />
 
-                {/* Themes */}
-                {themes.length > 0 && (
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                            Recurring Themes
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
-                            {themes.slice(0, 8).map((t) => {
-                                const streak = t.streak ?? [];
-                                const activeCount = streak.filter(Boolean).length;
-                                return (
-                                    <Box key={t.id} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-                                        <Chip
-                                            size="small"
-                                            label={t.title}
-                                            onDelete={() => dismissTheme(t)}
-                                            icon={
-                                                <PushPinIcon
-                                                    fontSize="small"
-                                                    onClick={(e) => { e.stopPropagation(); toggleThemePin(t); }}
-                                                    sx={{
-                                                        cursor: 'pointer',
-                                                        color: t.status === 'pinned' ? polarityColor(t.polarity) : 'text.disabled',
-                                                        transform: t.status === 'pinned' ? 'none' : 'rotate(45deg)',
-                                                    }}
-                                                />
-                                            }
-                                            sx={{
-                                                borderColor: polarityColor(t.polarity),
-                                                color: polarityColor(t.polarity),
-                                                bgcolor: 'background.paper',
-                                                border: `1px solid ${polarityColor(t.polarity)}`,
-                                                fontWeight: 500,
-                                            }}
-                                            variant="outlined"
-                                        />
-                                        {streak.length > 0 && (
-                                            <Box sx={{ display: 'flex', gap: '2px', mt: '2px' }} aria-label={`${activeCount} of 14 days active`}>
-                                                {streak.map((on, i) => (
-                                                    <Box
-                                                        key={i}
-                                                        sx={{
-                                                            width: 5,
-                                                            height: 5,
-                                                            borderRadius: '50%',
-                                                            bgcolor: on ? polarityColor(t.polarity) : palette.rule,
-                                                            opacity: on ? 0.85 : 0.45,
-                                                        }}
-                                                    />
-                                                ))}
-                                            </Box>
-                                        )}
-                                    </Box>
-                                );
-                            })}
-                        </Box>
-                    </Box>
-                )}
-
-                {/* Open Loops — live from captures */}
-                {openLoops.length > 0 && (
-                    <Box sx={{ mb: 3, p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper' }}>
-                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                            Open Loops · {openLoops.length}
-                        </Typography>
-                        {openLoops.map((c) => (
-                            <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5, pl: 1, borderLeft: `2px solid ${palette.accent}` }}>
-                                <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    {c.display_text || '(no text)'}
-                                </Typography>
-                                <Box sx={{ display: 'flex', ml: 1, flexShrink: 0 }}>
-                                    <IconButton size="small" onClick={() => markLoopDone(c.id)} aria-label="mark done" sx={{ color: palette.success }}>
-                                        <CheckIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton size="small" onClick={() => dismissLoop(c.id)} aria-label="dismiss" sx={{ color: palette.textMuted }}>
-                                        <CloseIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-                            </Box>
-                        ))}
-                    </Box>
-                )}
-
-                {/* This Week — header */}
+                {/* ── Week header + generate ─────────────────────────── */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="overline" color="text.secondary">
                         This Week
@@ -318,77 +275,87 @@ const WeeklyReportPage: React.FC = () => {
                     </Button>
                 </Box>
 
-                {error && (
-                    <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                {/* ── Summary (top, lightweight) ─────────────────────── */}
+                {result?.audit_text && (
+                    <Typography
+                        variant="body1"
+                        sx={{
+                            mb: 3,
+                            lineHeight: 1.7,
+                            fontSize: '15px',
+                            color: palette.textPrimary,
+                            whiteSpace: 'pre-wrap',
+                        }}
+                    >
+                        {result.audit_text}
+                    </Typography>
                 )}
 
                 {result === null && !loading && !error && (
-                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
-                        <Typography variant="body2" color="text.secondary">
-                            Get an honest weekly review comparing your days and calling out patterns.
-                        </Typography>
-                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center', py: 4 }}>
+                        Get an honest weekly review comparing your days and calling out patterns.
+                    </Typography>
                 )}
 
                 {result?.message && !result.audit_text && (
-                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 3 }}>
-                        <Typography variant="body2" color="text.secondary">
-                            {result.message}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {result.message}
+                    </Typography>
+                )}
+
+                {/* ── Category Breakdown ──────────────────────────────── */}
+                {report && (
+                    <CategoryBreakdown
+                        activity={report.time_breakdown.activity || {}}
+                        captures={report.time_breakdown.captures || {}}
+                    />
+                )}
+
+                {/* ── Recurring Themes ────────────────────────────────── */}
+                <RecurringThemes themes={themes} onDismiss={dismissTheme} />
+
+                {/* ── Open Loops ──────────────────────────────────────── */}
+                {openLoops.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+                            Open Loops · {openLoops.length}
                         </Typography>
+                        {openLoops.map((c) => (
+                            <Box
+                                key={c.id}
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    py: 1,
+                                    px: 2,
+                                    mb: 0.75,
+                                    borderRadius: '8px',
+                                    bgcolor: palette.surface,
+                                }}
+                            >
+                                <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }}>
+                                    {c.display_text || '(no text)'}
+                                </Typography>
+                                <Box sx={{ display: 'flex', ml: 1, flexShrink: 0 }}>
+                                    <IconButton size="small" onClick={() => markLoopDone(c.id)} aria-label="mark done" sx={{ color: palette.success }}>
+                                        <CheckIcon fontSize="small" />
+                                    </IconButton>
+                                    <IconButton size="small" onClick={() => dismissLoop(c.id)} aria-label="dismiss" sx={{ color: palette.textMuted }}>
+                                        <CloseIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                            </Box>
+                        ))}
                     </Box>
                 )}
 
-                {result?.audit_text && (
-                    <>
-                        {/* Structured report sections */}
-                        {result.report_json && <StructuredReport report={result.report_json} />}
+                {/* ── Status Update ───────────────────────────────────── */}
+                {report?.draft_status_update && <StatusUpdate text={report.draft_status_update} />}
 
-                        {/* Prose coach letter */}
-                        <Box sx={{
-                            p: 3, mb: 3, borderRadius: '8px',
-                            border: `1px solid ${palette.rule}`, bgcolor: 'background.paper',
-                        }}>
-                            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                                Coach Letter
-                            </Typography>
-                            <Box sx={{
-                                borderLeft: `2px solid ${palette.info}`,
-                                pl: 2, py: 1,
-                                bgcolor: palette.surface2,
-                                borderRadius: '0 8px 8px 0',
-                            }}>
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                                    {result.audit_text}
-                                </Typography>
-                            </Box>
-                            {result.generated_at && (
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-                                    {result.entries} entries
-                                    {result.cached && ' \u00b7 cached'}
-                                </Typography>
-                            )}
-                            {result.new_themes && result.new_themes.length > 0 && (
-                                <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                    {result.new_themes.map((nt) => (
-                                        <Chip
-                                            key={nt.id}
-                                            size="small"
-                                            label={nt.is_new ? `+ ${nt.title}` : `${nt.title} (${nt.occurrences}\u00d7)`}
-                                            sx={{
-                                                bgcolor: 'background.paper',
-                                                border: `1px solid ${polarityColor(nt.polarity)}`,
-                                                color: polarityColor(nt.polarity),
-                                                fontSize: '0.7rem',
-                                            }}
-                                        />
-                                    ))}
-                                </Box>
-                            )}
-                        </Box>
-                    </>
-                )}
-
-                {/* Past Reviews */}
+                {/* ── Past Reviews ────────────────────────────────────── */}
                 {history.length > 0 && (
                     <>
                         <Divider sx={{ my: 2 }} />
@@ -401,11 +368,11 @@ const WeeklyReportPage: React.FC = () => {
                                 <Box
                                     key={item.audit_date}
                                     sx={{
-                                        p: 1.5,
+                                        py: 1.5,
+                                        px: 2,
                                         mb: 1,
                                         borderRadius: '8px',
-                                        border: `1px solid ${palette.rule}`,
-                                        bgcolor: 'background.paper',
+                                        bgcolor: palette.surface,
                                         cursor: 'pointer',
                                     }}
                                     onClick={() => {
