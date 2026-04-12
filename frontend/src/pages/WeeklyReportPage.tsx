@@ -4,19 +4,18 @@ import {
     Box,
     Button,
     CircularProgress,
-    Collapse,
     Container,
     Divider,
     IconButton,
     Typography,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { capturesApi, entriesApi } from '../services/api';
-import { AuditResponse, Capture, WeeklyAuditHistoryItem, WeeklyReportJson, Theme } from '../types/api';
+import { AuditResponse, Capture, Theme, WeeklyReportJson } from '../types/api';
 import DayWeekTabs from '../components/DayWeekTabs';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
@@ -30,19 +29,19 @@ const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: 
 
     return (
         <Box sx={{ mb: 3 }}>
-            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
                 Category Breakdown
             </Typography>
             {sorted.map(([cat, pct]) => (
-                <Box key={cat} sx={{ display: 'flex', alignItems: 'center', mb: 1, minHeight: 32 }}>
-                    <Typography variant="body2" sx={{ width: 90, flexShrink: 0, color: palette.textPrimary }}>
+                <Box key={cat} sx={{ display: 'flex', alignItems: 'center', mb: 0.75, minHeight: 28 }}>
+                    <Typography variant="caption" sx={{ width: 80, flexShrink: 0, color: palette.textMuted }}>
                         {CATEGORY_LABELS[cat] ?? cat}
                     </Typography>
-                    <Box sx={{ flex: 1, mx: 1.5, height: 8, borderRadius: 4, bgcolor: `${palette.rule}40`, overflow: 'hidden' }}>
+                    <Box sx={{ flex: 1, mx: 1, height: 6, borderRadius: 3, bgcolor: `${palette.rule}40`, overflow: 'hidden' }}>
                         <Box
                             sx={{
                                 height: '100%',
-                                borderRadius: 4,
+                                borderRadius: 3,
                                 bgcolor: CATEGORY_COLORS[cat] ?? palette.textMuted,
                                 width: `${maxPct > 0 ? (pct / maxPct) * 100 : 0}%`,
                                 transition: 'width 0.3s ease-out',
@@ -50,15 +49,15 @@ const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: 
                         />
                     </Box>
                     <Typography
-                        variant="body2"
-                        sx={{ width: 40, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: CATEGORY_COLORS[cat] ?? palette.textMuted }}
+                        variant="caption"
+                        sx={{ width: 36, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: CATEGORY_COLORS[cat] ?? palette.textMuted }}
                     >
                         {pct}%
                     </Typography>
                 </Box>
             ))}
             {captureEntries.length > 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block' }}>
                     {captureEntries.map(([cat, count]) => `${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`).join(' \u00b7 ')}
                 </Typography>
             )}
@@ -66,63 +65,54 @@ const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: 
     );
 };
 
-/* ── Recurring Themes (display-only list) ──────────────────────────────────── */
+/* ── Recurring Themes (lightweight insight list) ──────────────────────────── */
 const RecurringThemes: React.FC<{ themes: Theme[]; onDismiss: (t: Theme) => void }> = ({ themes, onDismiss }) => {
     if (themes.length === 0) return null;
 
     const polarityColor = (p: string) =>
-        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.info;
+        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.textMuted;
 
     return (
         <Box sx={{ mb: 3 }}>
-            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
                 Recurring Themes
             </Typography>
             {themes.slice(0, 8).map((t) => (
                 <Box
                     key={t.id}
                     sx={{
-                        py: 1.5,
-                        px: 2,
-                        mb: 1,
-                        borderRadius: '8px',
-                        bgcolor: palette.surface,
-                        borderLeft: `3px solid ${polarityColor(t.polarity)}`,
                         display: 'flex',
                         alignItems: 'flex-start',
-                        gap: 1.5,
+                        gap: 1,
+                        py: 1,
+                        borderBottom: `1px solid ${palette.rule}40`,
+                        '&:last-child': { borderBottom: 'none' },
                     }}
                 >
+                    <Box
+                        sx={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            bgcolor: polarityColor(t.polarity),
+                            flexShrink: 0,
+                            mt: '7px',
+                        }}
+                    />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.4 }}>
                             {t.title}
                         </Typography>
                         {t.description && (
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, mt: 0.25, display: 'block' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, display: 'block' }}>
                                 {t.description}
                             </Typography>
-                        )}
-                        {(t.streak ?? []).length > 0 && (
-                            <Box sx={{ display: 'flex', gap: '2px', mt: 0.75 }}>
-                                {(t.streak ?? []).map((on, i) => (
-                                    <Box
-                                        key={i}
-                                        sx={{
-                                            width: 5,
-                                            height: 5,
-                                            borderRadius: '50%',
-                                            bgcolor: on ? polarityColor(t.polarity) : palette.rule,
-                                            opacity: on ? 0.85 : 0.45,
-                                        }}
-                                    />
-                                ))}
-                            </Box>
                         )}
                     </Box>
                     <IconButton
                         size="small"
                         onClick={() => onDismiss(t)}
-                        sx={{ p: 0.25, flexShrink: 0, color: palette.textMuted, opacity: 0.5, '&:hover': { opacity: 1 } }}
+                        sx={{ p: 0.25, flexShrink: 0, color: palette.textMuted, opacity: 0.35, '&:hover': { opacity: 0.8 } }}
                         aria-label="dismiss theme"
                     >
                         <CloseIcon sx={{ fontSize: 14 }} />
@@ -133,55 +123,54 @@ const RecurringThemes: React.FC<{ themes: Theme[]; onDismiss: (t: Theme) => void
     );
 };
 
-/* ── Status Update (copy-able) ─────────────────────────────────────────────── */
-const StatusUpdate: React.FC<{ text: string }> = ({ text }) => {
-    const [copied, setCopied] = React.useState(false);
-
-    const handleCopy = () => {
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-        } else {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-        }
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
+/* ── Open Loops ───────────────────────────────────────────────────────────── */
+const OpenLoops: React.FC<{
+    loops: Capture[];
+    onDone: (id: string) => void;
+    onDismiss: (id: string) => void;
+}> = ({ loops, onDone, onDismiss }) => {
+    if (loops.length === 0) return null;
 
     return (
         <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                    Status Update
-                </Typography>
-                <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<ContentCopyIcon fontSize="small" />}
-                    onClick={handleCopy}
-                    sx={{ color: palette.textMuted, textTransform: 'none' }}
-                >
-                    {copied ? 'Copied!' : 'Copy'}
-                </Button>
-            </Box>
-            <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-                {text}
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Open Loops · {loops.length}
             </Typography>
+            {loops.map((c) => (
+                <Box
+                    key={c.id}
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        py: 0.75,
+                        borderBottom: `1px solid ${palette.rule}30`,
+                        '&:last-child': { borderBottom: 'none' },
+                    }}
+                >
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>
+                        {c.display_text || '(no text)'}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexShrink: 0 }}>
+                        <IconButton size="small" onClick={() => onDone(c.id)} aria-label="mark done" sx={{ color: palette.success, p: 0.5 }}>
+                            <CheckIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                        <IconButton size="small" onClick={() => onDismiss(c.id)} aria-label="dismiss" sx={{ color: palette.textMuted, opacity: 0.5, p: 0.5 }}>
+                            <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                    </Box>
+                </Box>
+            ))}
         </Box>
     );
 };
 
 /* ── Main page ─────────────────────────────────────────────────────────────── */
 const WeeklyReportPage: React.FC = () => {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<AuditResponse | null>(null);
     const [error, setError] = useState<string | undefined>();
-    const [history, setHistory] = useState<WeeklyAuditHistoryItem[]>([]);
-    const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
 
     // Open loops (live from captures API)
     const [openLoops, setOpenLoops] = useState<Capture[]>([]);
@@ -224,13 +213,8 @@ const WeeklyReportPage: React.FC = () => {
             const [y, m, d] = s.split('-').map(Number);
             return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         };
-        return `${fmt(start)} \u2192 ${fmt(end)}`;
+        return `${fmt(start)} \u2013 ${fmt(end)}`;
     };
-
-    // Load history on mount
-    useEffect(() => {
-        entriesApi.getWeeklyAuditHistory().then(setHistory).catch(() => {});
-    }, []);
 
     const handleGenerate = useCallback(async () => {
         const shouldRegenerate = result !== null;
@@ -239,8 +223,6 @@ const WeeklyReportPage: React.FC = () => {
         try {
             const res = await entriesApi.generateWeeklyAudit(shouldRegenerate);
             setResult(res);
-            const hist = await entriesApi.getWeeklyAuditHistory();
-            setHistory(hist);
             loadThemes();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Weekly review failed');
@@ -250,6 +232,9 @@ const WeeklyReportPage: React.FC = () => {
     }, [result, loadThemes]);
 
     const report = result?.report_json;
+
+    // Key insight: prefer draft_status_update (concise), fall back to audit_text
+    const keyInsight = report?.draft_status_update || result?.audit_text || null;
 
     return (
         <Container maxWidth="sm">
@@ -262,7 +247,7 @@ const WeeklyReportPage: React.FC = () => {
                     <Typography variant="overline" color="text.secondary">
                         This Week
                         {(result?.week_start && result?.week_end) &&
-                            ` \u00b7 ${formatRange(result.week_start, result.week_end)}`}
+                            ` · ${formatRange(result.week_start, result.week_end)}`}
                     </Typography>
                     <Button
                         variant="outlined"
@@ -277,8 +262,21 @@ const WeeklyReportPage: React.FC = () => {
 
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-                {/* ── Summary (top, lightweight) ─────────────────────── */}
-                {result?.audit_text && (
+                {/* ── Empty state ────────────────────────────────────── */}
+                {result === null && !loading && !error && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center', py: 4 }}>
+                        Generate an honest weekly review to see patterns, breakdowns, and open loops.
+                    </Typography>
+                )}
+
+                {result?.message && !keyInsight && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {result.message}
+                    </Typography>
+                )}
+
+                {/* ── Key Insight (top summary, no label) ───────────── */}
+                {keyInsight && (
                     <Typography
                         variant="body1"
                         sx={{
@@ -286,22 +284,9 @@ const WeeklyReportPage: React.FC = () => {
                             lineHeight: 1.7,
                             fontSize: '15px',
                             color: palette.textPrimary,
-                            whiteSpace: 'pre-wrap',
                         }}
                     >
-                        {result.audit_text}
-                    </Typography>
-                )}
-
-                {result === null && !loading && !error && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center', py: 4 }}>
-                        Get an honest weekly review comparing your days and calling out patterns.
-                    </Typography>
-                )}
-
-                {result?.message && !result.audit_text && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {result.message}
+                        {keyInsight.length > 300 ? keyInsight.slice(0, 300).trimEnd() + '…' : keyInsight}
                     </Typography>
                 )}
 
@@ -317,96 +302,34 @@ const WeeklyReportPage: React.FC = () => {
                 <RecurringThemes themes={themes} onDismiss={dismissTheme} />
 
                 {/* ── Open Loops ──────────────────────────────────────── */}
-                {openLoops.length > 0 && (
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
-                            Open Loops · {openLoops.length}
-                        </Typography>
-                        {openLoops.map((c) => (
-                            <Box
-                                key={c.id}
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    py: 1,
-                                    px: 2,
-                                    mb: 0.75,
-                                    borderRadius: '8px',
-                                    bgcolor: palette.surface,
-                                }}
-                            >
-                                <Typography variant="body2" sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    {c.display_text || '(no text)'}
-                                </Typography>
-                                <Box sx={{ display: 'flex', ml: 1, flexShrink: 0 }}>
-                                    <IconButton size="small" onClick={() => markLoopDone(c.id)} aria-label="mark done" sx={{ color: palette.success }}>
-                                        <CheckIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton size="small" onClick={() => dismissLoop(c.id)} aria-label="dismiss" sx={{ color: palette.textMuted }}>
-                                        <CloseIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-                            </Box>
-                        ))}
-                    </Box>
-                )}
+                <OpenLoops loops={openLoops} onDone={markLoopDone} onDismiss={dismissLoop} />
 
-                {/* ── Status Update ───────────────────────────────────── */}
-                {report?.draft_status_update && <StatusUpdate text={report.draft_status_update} />}
-
-                {/* ── Past Reviews ────────────────────────────────────── */}
-                {history.length > 0 && (
-                    <>
-                        <Divider sx={{ my: 2 }} />
-                        <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
-                            Past Reviews
-                        </Typography>
-                        {history.map((item) => {
-                            const isOpen = expandedReviews.has(item.audit_date);
-                            return (
-                                <Box
-                                    key={item.audit_date}
-                                    sx={{
-                                        py: 1.5,
-                                        px: 2,
-                                        mb: 1,
-                                        borderRadius: '8px',
-                                        bgcolor: palette.surface,
-                                        cursor: 'pointer',
-                                    }}
-                                    onClick={() => {
-                                        setExpandedReviews((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(item.audit_date)) next.delete(item.audit_date);
-                                            else next.add(item.audit_date);
-                                            return next;
-                                        });
-                                    }}
-                                >
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                                            {item.week_label} \u00b7 {item.entries} entries
-                                        </Typography>
-                                        <ExpandMoreIcon
-                                            fontSize="small"
-                                            sx={{
-                                                color: 'text.secondary',
-                                                transform: isOpen ? 'rotate(180deg)' : 'none',
-                                                transition: 'transform 0.2s',
-                                            }}
-                                        />
-                                    </Box>
-                                    <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'text.primary', mt: 1 }}>
-                                            {item.audit_text}
-                                        </Typography>
-                                    </Collapse>
-                                </Box>
-                            );
-                        })}
-                    </>
-                )}
+                {/* ── Past Weeks entry ────────────────────────────────── */}
+                <Divider sx={{ my: 2, borderColor: `${palette.rule}60` }} />
+                <Box
+                    onClick={() => navigate('/weeks')}
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        py: 1.5,
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        mx: -0.5,
+                        px: 0.5,
+                        WebkitTapHighlightColor: 'transparent',
+                        transition: 'background-color 0.1s',
+                        '&:active': { bgcolor: `${palette.rule}20` },
+                        '@media (hover: hover)': {
+                            '&:hover': { bgcolor: `${palette.rule}15` },
+                        },
+                    }}
+                >
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        Past weeks
+                    </Typography>
+                    <ChevronRightIcon sx={{ fontSize: 18, color: palette.textMuted, opacity: 0.5 }} />
+                </Box>
             </Box>
         </Container>
     );
