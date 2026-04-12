@@ -34,7 +34,6 @@ interface EntryCardProps {
     highlightTerm?: string;
     snippetText?: string;
     footerExtra?: React.ReactNode;
-    /** Show onboarding hint on this card */
     showHint?: boolean;
 }
 
@@ -66,21 +65,149 @@ function renderHighlightedText(value: string | null | undefined, highlightTerm?:
     ));
 }
 
-const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highlightTerm, snippetText, footerExtra, showHint }) => {
+/* ── Per-line editable row ───────────────────────────────────────────────── */
+interface EditableLineProps {
+    text: string;
+    category: string;
+    dotColor: string;
+    readOnly: boolean;
+    highlightTerm?: string;
+    onSave: (newText: string) => void;
+    onLongPress: (target: HTMLElement) => void;
+}
+
+const EditableLine: React.FC<EditableLineProps> = ({ text, category, dotColor, readOnly, highlightTerm, onSave, onLongPress }) => {
     const [editing, setEditing] = useState(false);
-    const [editTexts, setEditTexts] = useState<string[]>([]);
+    const [editText, setEditText] = useState(text);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const didLongPress = useRef(false);
+    const rowRef = useRef<HTMLDivElement>(null);
+
+    // Sync text prop when entry updates from server
+    useEffect(() => { if (!editing) setEditText(text); }, [text, editing]);
+
+    const save = useCallback(() => {
+        if (editText !== text) onSave(editText);
+        setEditing(false);
+    }, [editText, text, onSave]);
+
+    const handlePointerDown = useCallback((e: React.PointerEvent) => {
+        if (readOnly || editing) return;
+        didLongPress.current = false;
+        const target = e.currentTarget as HTMLElement;
+        longPressTimer.current = setTimeout(() => {
+            didLongPress.current = true;
+            onLongPress(target);
+        }, 500);
+    }, [readOnly, editing, onLongPress]);
+
+    const clearTimer = useCallback(() => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    }, []);
+
+    const handleClick = useCallback(() => {
+        if (readOnly || didLongPress.current) return;
+        setEditing(true);
+        try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch { /* noop */ }
+    }, [readOnly]);
+
+    useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
+
+    if (editing) {
+        return (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', minHeight: 44 }}>
+                <Box
+                    sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0, mt: '12px' }}
+                    title={category}
+                />
+                <TextField
+                    variant="standard"
+                    fullWidth
+                    multiline
+                    autoFocus
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onBlur={() => setTimeout(save, 80)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+                        if (e.key === 'Escape') { setEditText(text); setEditing(false); }
+                    }}
+                    InputProps={{
+                        disableUnderline: true,
+                        sx: { fontSize: '14px', lineHeight: 1.4, py: 0.5 },
+                    }}
+                    sx={{
+                        '& .MuiInputBase-root': {
+                            p: 0,
+                            bgcolor: `${palette.accent}08`,
+                            borderRadius: '4px',
+                            px: 0.5,
+                        },
+                    }}
+                />
+            </Box>
+        );
+    }
+
+    return (
+        <Box
+            ref={rowRef}
+            onPointerDown={!readOnly ? handlePointerDown : undefined}
+            onPointerUp={clearTimer}
+            onPointerLeave={clearTimer}
+            onPointerCancel={clearTimer}
+            onClick={handleClick}
+            sx={{
+                display: 'flex',
+                gap: 1,
+                alignItems: 'flex-start',
+                minHeight: 44,    // 44px touch target
+                py: 0.5,
+                px: 0.5,
+                mx: -0.5,
+                borderRadius: '4px',
+                cursor: readOnly ? 'default' : 'pointer',
+                userSelect: 'none',
+                WebkitTapHighlightColor: 'transparent',
+                WebkitTouchCallout: 'none',
+                transition: 'background-color 0.1s',
+                '&:active': !readOnly ? { bgcolor: `${palette.accent}0D` } : {},
+                '@media (hover: hover)': {
+                    '&:hover': !readOnly ? { bgcolor: `${palette.rule}25` } : {},
+                },
+            }}
+        >
+            <Box
+                sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0, mt: '6px' }}
+                title={category}
+            />
+            <Typography variant="body2" sx={{ lineHeight: 1.4, flex: 1 }}>
+                {renderHighlightedText(text, highlightTerm)}
+            </Typography>
+        </Box>
+    );
+};
+
+/* ── Main EntryCard ──────────────────────────────────────────────────────── */
+const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highlightTerm, snippetText, footerExtra, showHint }) => {
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [confirmReclassify, setConfirmReclassify] = useState(false);
     const [reclassifyError, setReclassifyError] = useState(false);
 
-    // Long-press menu
+    // Long-press menu (shared across lines)
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const didLongPress = useRef(false);
 
     // Move date picker
     const moveRef = useRef<HTMLLIElement>(null);
     const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
+
+    // Single-line edit (no categories)
+    const [editingSingle, setEditingSingle] = useState(false);
+    const [singleText, setSingleText] = useState(entry.transcript ?? '');
+    useEffect(() => { if (!editingSingle) setSingleText(entry.transcript ?? ''); }, [entry.transcript, editingSingle]);
 
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
@@ -102,72 +229,18 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     const categories = entry.categories;
     const hasCats = categories.length > 0;
 
-    // ── Enter edit mode ─────────────────────────────────────────────────────
-    const enterEdit = useCallback(() => {
-        if (readOnly || editing) return;
-        if (hasCats) {
-            setEditTexts(categories.map((c) => c.text ?? entry.transcript ?? ''));
-        } else {
-            setEditTexts([entry.transcript ?? '']);
-        }
-        setEditing(true);
-        // Mark onboarding as seen
-        try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch { /* noop */ }
-    }, [readOnly, editing, hasCats, categories, entry.transcript]);
+    const handleLineSave = useCallback((index: number, newText: string) => {
+        const updatedCategories = categories.map((c, i) => ({
+            id: c.id,
+            text: i === index ? newText : c.text,
+            category: c.category,
+            estimated_minutes: c.estimated_minutes,
+        }));
+        updateEntry.mutate({ entryId: entry.id, data: { categories: updatedCategories } });
+    }, [categories, entry.id, updateEntry]);
 
-    // ── Save & exit edit ────────────────────────────────────────────────────
-    const saveAndExit = useCallback(() => {
-        if (!editing) return;
-        if (hasCats) {
-            const changed = categories.some((c, i) => (c.text ?? entry.transcript ?? '') !== editTexts[i]);
-            if (changed) {
-                const updatedCategories = categories.map((c, i) => ({
-                    id: c.id,
-                    text: editTexts[i],
-                    category: c.category,
-                    estimated_minutes: c.estimated_minutes,
-                }));
-                updateEntry.mutate({ entryId: entry.id, data: { categories: updatedCategories } });
-            }
-        }
-        setEditing(false);
-    }, [editing, hasCats, categories, editTexts, entry, updateEntry]);
-
-    // ── Long-press handlers ─────────────────────────────────────────────────
-    const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-        if (readOnly || editing) return;
-        didLongPress.current = false;
-        longPressTimer.current = setTimeout(() => {
-            didLongPress.current = true;
-            setMenuAnchor(e.currentTarget);
-        }, 500);
-    }, [readOnly, editing]);
-
-    const handlePointerUp = useCallback(() => {
-        if (longPressTimer.current) {
-            clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-        }
-    }, []);
-
-    const handlePointerLeave = useCallback(() => {
-        if (longPressTimer.current) {
-            clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-        }
-    }, []);
-
-    const handleClick = useCallback(() => {
-        if (didLongPress.current) return;
-        if (menuAnchor) return;
-        enterEdit();
-    }, [enterEdit, menuAnchor]);
-
-    // Cleanup timer on unmount
-    useEffect(() => {
-        return () => {
-            if (longPressTimer.current) clearTimeout(longPressTimer.current);
-        };
+    const handleLongPress = useCallback((target: HTMLElement) => {
+        setMenuAnchor(target);
     }, []);
 
     const handleDelete = () => {
@@ -175,142 +248,127 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
         setConfirmDelete(false);
     };
 
-    const isEditing = editing;
+    // Long-press for single-line entries (no categories)
+    const singleLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const singleDidLongPress = useRef(false);
+
+    const handleSinglePointerDown = useCallback((e: React.PointerEvent) => {
+        if (readOnly || editingSingle) return;
+        singleDidLongPress.current = false;
+        const target = e.currentTarget as HTMLElement;
+        singleLongPressTimer.current = setTimeout(() => {
+            singleDidLongPress.current = true;
+            setMenuAnchor(target);
+        }, 500);
+    }, [readOnly, editingSingle]);
+
+    const clearSingleTimer = useCallback(() => {
+        if (singleLongPressTimer.current) {
+            clearTimeout(singleLongPressTimer.current);
+            singleLongPressTimer.current = null;
+        }
+    }, []);
+
+    useEffect(() => () => { if (singleLongPressTimer.current) clearTimeout(singleLongPressTimer.current); }, []);
 
     return (
         <>
-            {/* Onboarding hint */}
             {showHint && (
                 <Typography
                     variant="caption"
                     color="text.secondary"
                     sx={{ display: 'block', textAlign: 'center', mb: 0.5, fontStyle: 'italic', opacity: 0.7 }}
                 >
-                    Tap an entry to edit
+                    Tap a line to edit
                 </Typography>
             )}
 
-            <Box
-                onPointerDown={!readOnly ? handlePointerDown : undefined}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
-                onClick={!readOnly && !isEditing ? handleClick : undefined}
-                sx={{
-                    py: 1.5,
-                    px: 1,
-                    borderRadius: '6px',
-                    cursor: readOnly ? 'default' : isEditing ? 'text' : 'pointer',
-                    userSelect: isEditing ? 'text' : 'none',
-                    transition: 'background-color 0.12s',
-                    // Press feedback
-                    ...(!readOnly && !isEditing ? {
-                        '&:active': { bgcolor: `${palette.accent}0A` },
-                        '@media (hover: hover)': {
-                            '&:hover': { bgcolor: `${palette.rule}30` },
-                        },
-                    } : {}),
-                    // Edit mode highlight
-                    ...(isEditing ? {
-                        bgcolor: `${palette.accent}08`,
-                        boxShadow: `inset 0 0 0 1px ${palette.rule}`,
-                    } : {}),
-                    // Prevent text selection while long-pressing
-                    WebkitTouchCallout: isEditing ? 'default' : 'none',
-                }}
-            >
+            <Box sx={{ py: 1, px: 0.5 }}>
                 {snippetText ? (
-                    <Typography variant="body2" sx={{ lineHeight: 1.4, color: 'text.primary' }}>
+                    <Typography variant="body2" sx={{ lineHeight: 1.4, color: 'text.primary', minHeight: 44, display: 'flex', alignItems: 'center' }}>
                         {renderHighlightedText(snippetText, highlightTerm)}
                     </Typography>
-                ) : isEditing ? (
-                    /* ── Inline edit mode ─────────────────────────────────── */
-                    hasCats ? categories.map((catItem, i) => {
-                        const dotColor = CATEGORY_COLORS[catItem.category] ?? palette.textMuted;
-                        return (
-                            <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: i < categories.length - 1 ? 0.75 : 0 }}>
-                                <Box
-                                    sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0, mt: '12px' }}
-                                    title={catItem.category}
-                                />
-                                <TextField
-                                    variant="standard"
-                                    fullWidth
-                                    multiline
-                                    autoFocus={i === 0}
-                                    value={editTexts[i] ?? ''}
-                                    onChange={(e) => {
-                                        const next = [...editTexts];
-                                        next[i] = e.target.value;
-                                        setEditTexts(next);
-                                    }}
-                                    onBlur={(e) => {
-                                        // Only save if focus leaves the entire entry card
-                                        const related = e.relatedTarget as HTMLElement | null;
-                                        if (related && e.currentTarget.closest('[data-entry-card]')?.contains(related)) return;
-                                        // Delay to allow other fields to receive focus
-                                        setTimeout(() => saveAndExit(), 100);
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            saveAndExit();
-                                        }
-                                        if (e.key === 'Escape') {
-                                            setEditing(false);
-                                        }
-                                    }}
-                                    InputProps={{
-                                        disableUnderline: true,
-                                        sx: { fontSize: '14px', lineHeight: 1.4, py: 0 },
-                                    }}
-                                    sx={{ '& .MuiInputBase-root': { p: 0 } }}
-                                />
-                            </Box>
-                        );
-                    }) : (
+                ) : hasCats ? (
+                    categories.map((catItem, i) => (
+                        <EditableLine
+                            key={catItem.id ?? i}
+                            text={catItem.text ?? entry.transcript ?? ''}
+                            category={catItem.category}
+                            dotColor={CATEGORY_COLORS[catItem.category] ?? palette.textMuted}
+                            readOnly={readOnly}
+                            highlightTerm={highlightTerm}
+                            onSave={(newText) => handleLineSave(i, newText)}
+                            onLongPress={handleLongPress}
+                        />
+                    ))
+                ) : editingSingle ? (
+                    <Box sx={{ minHeight: 44 }}>
                         <TextField
                             variant="standard"
                             fullWidth
                             multiline
                             autoFocus
-                            value={editTexts[0] ?? ''}
-                            onChange={(e) => setEditTexts([e.target.value])}
-                            onBlur={() => setTimeout(() => saveAndExit(), 100)}
+                            value={singleText}
+                            onChange={(e) => setSingleText(e.target.value)}
+                            onBlur={() => {
+                                // No save for single-line (transcript is read-only for now)
+                                setEditingSingle(false);
+                            }}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveAndExit(); }
-                                if (e.key === 'Escape') setEditing(false);
+                                if (e.key === 'Escape') setEditingSingle(false);
                             }}
                             InputProps={{
                                 disableUnderline: true,
-                                sx: { fontSize: '14px', lineHeight: 1.4, py: 0 },
+                                sx: { fontSize: '14px', lineHeight: 1.4, py: 0.5 },
                             }}
-                            sx={{ '& .MuiInputBase-root': { p: 0 } }}
+                            sx={{
+                                '& .MuiInputBase-root': {
+                                    p: 0,
+                                    bgcolor: `${palette.accent}08`,
+                                    borderRadius: '4px',
+                                    px: 0.5,
+                                },
+                            }}
                         />
-                    )
+                    </Box>
                 ) : (
-                    /* ── Display mode ─────────────────────────────────────── */
-                    hasCats ? categories.map((catItem, i) => {
-                        const dotColor = CATEGORY_COLORS[catItem.category] ?? palette.textMuted;
-                        return (
-                            <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: i < categories.length - 1 ? 0.75 : 0 }}>
-                                <Box
-                                    sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0, mt: '6px' }}
-                                    title={catItem.category}
-                                />
-                                <Typography variant="body2" sx={{ lineHeight: 1.4, flex: 1 }}>
-                                    {renderHighlightedText(catItem.text ?? entry.transcript, highlightTerm)}
-                                </Typography>
-                            </Box>
-                        );
-                    }) : (
+                    <Box
+                        onPointerDown={!readOnly ? handleSinglePointerDown : undefined}
+                        onPointerUp={clearSingleTimer}
+                        onPointerLeave={clearSingleTimer}
+                        onPointerCancel={clearSingleTimer}
+                        onClick={() => {
+                            if (readOnly || singleDidLongPress.current) return;
+                            setEditingSingle(true);
+                            try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch { /* noop */ }
+                        }}
+                        sx={{
+                            minHeight: 44,
+                            display: 'flex',
+                            alignItems: 'center',
+                            py: 0.5,
+                            px: 0.5,
+                            mx: -0.5,
+                            borderRadius: '4px',
+                            cursor: readOnly ? 'default' : 'pointer',
+                            userSelect: 'none',
+                            WebkitTapHighlightColor: 'transparent',
+                            WebkitTouchCallout: 'none',
+                            transition: 'background-color 0.1s',
+                            '&:active': !readOnly ? { bgcolor: `${palette.accent}0D` } : {},
+                            '@media (hover: hover)': {
+                                '&:hover': !readOnly ? { bgcolor: `${palette.rule}25` } : {},
+                            },
+                        }}
+                    >
                         <Typography variant="body2" sx={{ lineHeight: 1.4 }}>
                             {renderHighlightedText(entry.transcript, highlightTerm)}
                         </Typography>
-                    )
+                    </Box>
                 )}
 
                 {/* Footer: time */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25, flexWrap: 'wrap', px: 0.5 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                         {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Typography>
