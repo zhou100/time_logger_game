@@ -79,14 +79,6 @@ const NavBar: React.FC = () => {
                 </Typography>
                 {user ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Button
-                            component={RouterLink}
-                            to="/week"
-                            size="small"
-                            sx={{ color: 'text.secondary', mr: 1 }}
-                        >
-                            Week
-                        </Button>
                         <Box
                             component="form"
                             onSubmit={handleSearchSubmit}

@@ -10,6 +10,8 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import WeeklyReportPage from './pages/WeeklyReportPage';
+import PastWeeksPage from './pages/PastWeeksPage';
+import PastWeekDetailPage from './pages/PastWeekDetailPage';
 import NavBar from './components/NavBar';
 import InstallBanner from './components/InstallBanner';
 import { Box } from '@mui/material';
@@ -40,6 +42,8 @@ function App() {
                 <Route path="/register" element={<RegisterForm />} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
+                <Route path="/weeks" element={<ProtectedRoute><PastWeeksPage /></ProtectedRoute>} />
+                <Route path="/weeks/:auditDate" element={<ProtectedRoute><PastWeekDetailPage /></ProtectedRoute>} />
                 <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
