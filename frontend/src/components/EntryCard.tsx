@@ -195,6 +195,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [confirmReclassify, setConfirmReclassify] = useState(false);
     const [reclassifyError, setReclassifyError] = useState(false);
+    const [moveNotice, setMoveNotice] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
 
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const moveRef = useRef<HTMLLIElement>(null);
@@ -250,6 +251,16 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
         deleteEntry.mutate(entry.id);
         setConfirmDelete(false);
     };
+
+    const handleMoveSelect = useCallback((date: string) => {
+        moveEntry.mutate(
+            { entryId: entry.id, date },
+            {
+                onSuccess: () => setMoveNotice({ severity: 'success', message: 'Entry moved' }),
+                onError: () => setMoveNotice({ severity: 'error', message: 'Move failed — please try again' }),
+            }
+        );
+    }, [entry.id, moveEntry]);
 
     return (
         <>
@@ -388,7 +399,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
                 selectedDate={entry.created_at.split('T')[0]}
                 activeDates={activeDates}
                 maxDate={today}
-                onSelect={(date) => moveEntry.mutate({ entryId: entry.id, date })}
+                onSelect={handleMoveSelect}
             />
 
             <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)} maxWidth="xs">
@@ -432,6 +443,12 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
             <Snackbar open={reclassifyError} autoHideDuration={4000} onClose={() => setReclassifyError(false)}>
                 <Alert severity="error" onClose={() => setReclassifyError(false)} variant="filled" sx={{ width: '100%' }}>
                     Re-classify failed — please try again
+                </Alert>
+            </Snackbar>
+
+            <Snackbar open={!!moveNotice} autoHideDuration={3000} onClose={() => setMoveNotice(null)}>
+                <Alert severity={moveNotice?.severity ?? 'success'} onClose={() => setMoveNotice(null)} variant="filled" sx={{ width: '100%' }}>
+                    {moveNotice?.message}
                 </Alert>
             </Snackbar>
         </>

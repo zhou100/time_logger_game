@@ -569,15 +569,25 @@ async def update_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
+    original_audit_date = entry.local_date or entry.created_at.date()
+
     if body.date is not None:
         try:
-            target_dt = datetime.strptime(body.date, "%Y-%m-%d").replace(
-                hour=12, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
+            target_date = datetime.strptime(body.date, "%Y-%m-%d").date()
+            target_dt = datetime(
+                target_date.year,
+                target_date.month,
+                target_date.day,
+                12,
+                0,
+                0,
+                tzinfo=timezone.utc,
             )
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
         entry.created_at = target_dt
         entry.recorded_at = target_dt
+        entry.local_date = target_date
 
     if body.transcript is not None:
         entry.transcript = body.transcript
@@ -620,12 +630,13 @@ async def update_entry(
                 await db.delete(c)
         await db.flush()
 
-    # Invalidate cached audits for this date (categories may have changed)
-    audit_date = entry.local_date or entry.created_at.date()
+    # Invalidate cached audits for both source and target dates. Moving an
+    # entry changes the old day's totals and the new day's totals.
+    audit_dates = {original_audit_date, entry.local_date or entry.created_at.date()}
     stale_result = await db.execute(
         select(AuditResult).where(
             AuditResult.user_id == current_user.id,
-            AuditResult.audit_date == audit_date,
+            AuditResult.audit_date.in_(audit_dates),
             AuditResult.is_stale.is_(False),
         )
     )

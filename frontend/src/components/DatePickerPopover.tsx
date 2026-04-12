@@ -61,8 +61,9 @@ const DatePickerPopover: React.FC<Props> = ({
         year > maxY || (year === maxY && month + 1 > maxM) ||
         (year === maxY && month + 1 === maxM && day > maxD);
 
-    const canGoNext = !isAfterMax(viewYear, viewMonth + 1 > 11 ? viewYear + 1 : viewYear,
-        viewMonth + 1 > 11 ? 0 : viewMonth + 1);
+    const nextViewMonth = viewMonth + 1 > 11 ? 0 : viewMonth + 1;
+    const nextViewYear = viewMonth + 1 > 11 ? viewYear + 1 : viewYear;
+    const canGoNext = !isAfterMax(nextViewYear, nextViewMonth, 1);
 
     return (
         <Popover
@@ -75,13 +76,13 @@ const DatePickerPopover: React.FC<Props> = ({
         >
             {/* Month header */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                <IconButton size="small" onClick={() => shiftMonth(-1)}>
+                <IconButton size="small" onClick={() => shiftMonth(-1)} aria-label="Previous month">
                     <ChevronLeftIcon fontSize="small" />
                 </IconButton>
                 <Typography variant="body2" fontWeight={600}>
                     {MONTHS[viewMonth]} {viewYear}
                 </Typography>
-                <IconButton size="small" onClick={() => shiftMonth(1)} disabled={!canGoNext}>
+                <IconButton size="small" onClick={() => shiftMonth(1)} disabled={!canGoNext} aria-label="Next month">
                     <ChevronRightIcon fontSize="small" />
                 </IconButton>
             </Box>
