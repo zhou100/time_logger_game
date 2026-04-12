@@ -139,6 +139,12 @@ const RecordingPage: React.FC = () => {
 
     const entries = entriesData?.items ?? [];
 
+    // Onboarding hint: show on first entry if user hasn't seen it
+    const [hintSeen] = useState(() => {
+        try { return localStorage.getItem('debrief_tap_to_edit_seen') === '1'; } catch { return false; }
+    });
+    let hintShownOnce = false;
+
     return (
         <Container maxWidth="md">
             <Box sx={{ mt: { xs: 2, md: 4 }, mb: 8 }}>
@@ -241,9 +247,11 @@ const RecordingPage: React.FC = () => {
                                 >
                                     {group.label}
                                 </Typography>
-                                {group.items.map((entry) => (
-                                    <EntryCard key={entry.id} entry={entry} />
-                                ))}
+                                {group.items.map((entry) => {
+                                    const hint = !hintSeen && !hintShownOnce;
+                                    if (hint) hintShownOnce = true;
+                                    return <EntryCard key={entry.id} entry={entry} showHint={hint} />;
+                                })}
                             </Box>
                         ));
                     })()}
