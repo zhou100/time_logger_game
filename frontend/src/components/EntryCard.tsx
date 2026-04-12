@@ -77,7 +77,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     const [confirmReclassify, setConfirmReclassify] = useState(false);
     const [editText, setEditText] = useState('');
     const [editCategory, setEditCategory] = useState('');
-    const moveRef = useRef<HTMLButtonElement>(null);
+    const moveRef = useRef<HTMLLIElement>(null);
     const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
     const [reclassifyError, setReclassifyError] = useState(false);
 

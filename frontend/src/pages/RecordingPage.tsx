@@ -6,6 +6,7 @@ import {
     Chip,
     CircularProgress,
     Container,
+    Divider,
     IconButton,
     Typography,
 } from '@mui/material';
@@ -211,17 +212,41 @@ const RecordingPage: React.FC = () => {
                     </Typography>
                 )}
 
-                {/* ── Entry timeline ──────────────────────────────────── */}
+                {/* ── Entry timeline (grouped by hour) ────────────────── */}
                 <Box sx={{ px: { xs: 0, sm: 1 } }}>
                     {entries.length === 0 ? (
                         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                             {isToday ? 'Record your day to see entries here.' : 'No entries recorded on this day.'}
                         </Typography>
-                    ) : (
-                        entries.slice(0, 10).map((entry) => (
-                            <EntryCard key={entry.id} entry={entry} />
-                        ))
-                    )}
+                    ) : (() => {
+                        const visible = entries.slice(0, 10);
+                        const groups: { label: string; items: typeof visible }[] = [];
+                        for (const entry of visible) {
+                            const t = new Date(entry.created_at);
+                            const hourKey = t.toLocaleTimeString([], { hour: '2-digit' });
+                            const last = groups[groups.length - 1];
+                            if (last && last.label === hourKey) {
+                                last.items.push(entry);
+                            } else {
+                                groups.push({ label: hourKey, items: [entry] });
+                            }
+                        }
+                        return groups.map((group, gi) => (
+                            <Box key={gi}>
+                                {gi > 0 && <Divider sx={{ my: 1, borderColor: `${palette.rule}80` }} />}
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ display: 'block', mb: 0.5, mt: gi > 0 ? 1 : 0, fontSize: '11px', opacity: 0.6 }}
+                                >
+                                    {group.label}
+                                </Typography>
+                                {group.items.map((entry) => (
+                                    <EntryCard key={entry.id} entry={entry} />
+                                ))}
+                            </Box>
+                        ));
+                    })()}
                 </Box>
 
             </Box>
