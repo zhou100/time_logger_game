@@ -21,15 +21,6 @@
 
 ---
 
-### Move Endpoint Should Update local_date
-**What:** When an entry is moved between days, the move endpoint updates `created_at` / `recorded_at` but leaves `local_date` pointing at the original day. Search date filters and "Open day" deep-links then resolve to the wrong day.
-**Why:** Codex adversarial review flagged that the search feature exposes this pre-existing bug more visibly — the new "Open day" links on /search rely on `local_date` being accurate.
-**Effort:** XS (human: ~30 min / CC: ~10 min) — one line in the move endpoint + a regression test.
-**Priority:** P2
-**Context:** Deferred from past-record-search ship (2026-04-10). Pre-existing bug in a file this branch doesn't touch; fix in a standalone PR.
-
----
-
 ### Category Filter Legacy Mapping
 **What:** Verify whether the DB still holds legacy `IDEA` / `THOUGHT` category rows, and if so, make the `category=` search filter accept either the legacy or the new normalized name.
 **Why:** Codex flagged that `category=EXPERIMENT` / `REFLECTION` may silently hide old records if the DB still has pre-rename values, since the filter matches the raw column.
@@ -100,6 +91,9 @@
 ---
 
 ## Completed
+
+### ~~Move Endpoint Should Update local_date~~ — 2026-04-11
+Moving an entry now updates `local_date` alongside `created_at` / `recorded_at`, invalidates source and target audit dates, and has regression coverage for moving to an empty target day.
 
 ### ~~Notifications Table Cleanup~~ — 2026-04-09
 Worker loop now prunes notification rows older than 24h every hour. Added `ix_notifications_created_at` index for efficient deletes.

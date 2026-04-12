@@ -200,7 +200,7 @@ async def test_move_entry_updates_local_date_for_empty_target_day(app):
     entry.created_at = datetime(2026, 4, 5, 18, 30, tzinfo=timezone.utc)
     entry.recorded_at = entry.created_at
     entry.local_date = old_day
-    _override_deps(app, entry)
+    db = _override_deps(app, entry)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.patch(f"/entries/{entry.id}", json={"date": "2026-04-08"})
@@ -210,3 +210,9 @@ async def test_move_entry_updates_local_date_for_empty_target_day(app):
     assert entry.created_at == datetime(2026, 4, 8, 12, 0, tzinfo=timezone.utc)
     assert entry.recorded_at == datetime(2026, 4, 8, 12, 0, tzinfo=timezone.utc)
     assert resp.json()["local_date"] == "2026-04-08"
+
+    stale_query = db.execute.await_args_list[1].args[0]
+    rendered_query = str(stale_query.compile(compile_kwargs={"literal_binds": True}))
+    assert "audit_results.audit_date IN" in rendered_query
+    assert "'2026-04-05'" in rendered_query
+    assert "'2026-04-08'" in rendered_query

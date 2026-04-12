@@ -76,13 +76,13 @@ const DatePickerPopover: React.FC<Props> = ({
         >
             {/* Month header */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                <IconButton size="small" onClick={() => shiftMonth(-1)}>
+                <IconButton size="small" onClick={() => shiftMonth(-1)} aria-label="Previous month">
                     <ChevronLeftIcon fontSize="small" />
                 </IconButton>
                 <Typography variant="body2" fontWeight={600}>
                     {MONTHS[viewMonth]} {viewYear}
                 </Typography>
-                <IconButton size="small" onClick={() => shiftMonth(1)} disabled={!canGoNext}>
+                <IconButton size="small" onClick={() => shiftMonth(1)} disabled={!canGoNext} aria-label="Next month">
                     <ChevronRightIcon fontSize="small" />
                 </IconButton>
             </Box>
