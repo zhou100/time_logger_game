@@ -235,6 +235,13 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
         updateEntry.mutate({ entryId: entry.id, data: { categories: updatedCategories } });
     }, [categories, entry.id, updateEntry]);
 
+    const handleSingleSave = useCallback(() => {
+        if (singleText !== (entry.transcript ?? '')) {
+            updateEntry.mutate({ entryId: entry.id, data: { transcript: singleText } });
+        }
+        setEditingSingle(false);
+    }, [entry.id, entry.transcript, singleText, updateEntry]);
+
     const handleMoreClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
         setMenuAnchor(e.currentTarget);
     }, []);
@@ -286,8 +293,9 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
                                 autoFocus
                                 value={singleText}
                                 onChange={(e) => setSingleText(e.target.value)}
-                                onBlur={() => setEditingSingle(false)}
+                                onBlur={handleSingleSave}
                                 onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSingleSave(); }
                                     if (e.key === 'Escape') setEditingSingle(false);
                                 }}
                                 InputProps={{
