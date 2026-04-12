@@ -2,14 +2,16 @@ import React, { useRef, useState } from 'react';
 import {
     Alert,
     Box,
-    Chip,
     Dialog,
     DialogActions,
     DialogContent,
     DialogContentText,
     DialogTitle,
     IconButton,
+    Menu,
     MenuItem,
+    ListItemIcon,
+    ListItemText,
     Select,
     Snackbar,
     TextField,
@@ -20,6 +22,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
@@ -78,6 +81,9 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     const [moveAnchor, setMoveAnchor] = useState<HTMLElement | null>(null);
     const [reclassifyError, setReclassifyError] = useState(false);
 
+    // "..." menu state
+    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+
     const deleteEntry = useDeleteEntry();
     const updateEntry = useUpdateEntry();
     const reclassifyEntry = useReclassifyEntry();
@@ -107,7 +113,6 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
 
     const handleEditSave = () => {
         if (editingIndex === null) return;
-        // Preserve all classifications — only update the one being edited
         const updatedCategories = categories.map((c, i) =>
             i === editingIndex
                 ? { id: c.id, text: editText, category: editCategory, estimated_minutes: c.estimated_minutes }
@@ -127,7 +132,6 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
 
     const handleDeleteLine = (index: number) => {
         if (categories.length <= 1) {
-            // Last line — would delete the whole audio recording. Confirm first.
             setConfirmLastLineDelete(true);
             return;
         }
@@ -137,17 +141,16 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
         updateEntry.mutate({ entryId: entry.id, data: { categories: remaining } });
     };
 
-    const borderStyle = `1px solid ${palette.rule}`;
-
     return (
         <>
-            <Box sx={{ mb: 1.5, pb: 1.5, borderBottom: borderStyle, '&:last-child': { borderBottom: 'none', mb: 0, pb: 0 } }}>
+            <Box sx={{ py: 1.5, px: 0.5 }}>
                 {snippetText ? (
-                    <Typography variant="body2" sx={{ lineHeight: 1.6, color: 'text.primary' }}>
+                    <Typography variant="body2" sx={{ lineHeight: 1.4, color: 'text.primary' }}>
                         {renderHighlightedText(snippetText, highlightTerm)}
                     </Typography>
                 ) : hasCats ? categories.map((catItem, i) => {
                     const isEditingThis = editingIndex === i;
+                    const dotColor = CATEGORY_COLORS[catItem.category] ?? palette.textMuted;
 
                     if (isEditingThis) {
                         return (
@@ -184,39 +187,30 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
 
                     return (
                         <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: i < categories.length - 1 ? 0.75 : 0 }}>
-                            <Chip
-                                label={catItem.category}
-                                size="small"
+                            {/* Color dot instead of outlined chip */}
+                            <Box
                                 sx={{
-                                    fontSize: '0.65rem',
-                                    height: 18,
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    bgcolor: dotColor,
                                     flexShrink: 0,
-                                    borderColor: CATEGORY_COLORS[catItem.category] ?? palette.textMuted,
-                                    color: CATEGORY_COLORS[catItem.category] ?? palette.textMuted,
-                                    bgcolor: `${CATEGORY_COLORS[catItem.category] ?? palette.textMuted}0F`,
+                                    mt: '6px',
                                 }}
-                                variant="outlined"
+                                title={catItem.category}
                             />
-                            <Typography variant="body2" sx={{ lineHeight: 1.5, flex: 1 }}>
+                            <Typography variant="body2" sx={{ lineHeight: 1.4, flex: 1 }}>
                                 {renderHighlightedText(catItem.text ?? entry.transcript, highlightTerm)}
                             </Typography>
-                            {!readOnly && (
-                                <>
-                                    <IconButton size="small" onClick={() => handleEditStart(i)} sx={{ p: 0.25, flexShrink: 0 }}>
-                                        <EditIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                                    </IconButton>
-                                    <IconButton size="small" onClick={() => handleDeleteLine(i)} sx={{ p: 0.25, flexShrink: 0 }} title="Delete this line">
-                                        <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                                    </IconButton>
-                                </>
-                            )}
                         </Box>
                     );
                 }) : (
-                    <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+                    <Typography variant="body2" sx={{ lineHeight: 1.4 }}>
                         {renderHighlightedText(entry.transcript, highlightTerm)}
                     </Typography>
                 )}
+
+                {/* Footer: time + hidden actions via "..." menu */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -225,33 +219,55 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
                         {footerExtra}
                     </Box>
                     {!readOnly && (
-                        <Box sx={{ display: 'flex', gap: 0.25 }}>
+                        <>
                             <IconButton
                                 size="small"
-                                onClick={() => setConfirmReclassify(true)}
-                                sx={{ p: 0.25 }}
-                                disabled={reclassifyEntry.isPending}
-                                title="Re-classify with AI"
+                                onClick={(e) => setMenuAnchor(e.currentTarget)}
+                                sx={{ p: 0.25, opacity: 0.4, '&:hover': { opacity: 1 } }}
+                                aria-label="entry actions"
                             >
-                                <AutorenewIcon sx={{
-                                    fontSize: 14,
-                                    color: 'text.secondary',
-                                    ...(reclassifyEntry.isPending && { animation: 'spin 1s linear infinite', '@keyframes spin': { '100%': { transform: 'rotate(360deg)' } } }),
-                                }} />
+                                <MoreHorizIcon sx={{ fontSize: 16 }} />
                             </IconButton>
-                            <IconButton
-                                ref={moveRef}
-                                size="small"
-                                onClick={() => setMoveAnchor(moveRef.current)}
-                                sx={{ p: 0.25 }}
-                                disabled={moveEntry.isPending}
+                            <Menu
+                                anchorEl={menuAnchor}
+                                open={Boolean(menuAnchor)}
+                                onClose={() => setMenuAnchor(null)}
+                                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                             >
-                                <DriveFileMoveIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => setConfirmDelete(true)} sx={{ p: 0.25 }}>
-                                <DeleteIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                            </IconButton>
-                        </Box>
+                                {hasCats && categories.length === 1 && (
+                                    <MenuItem onClick={() => { setMenuAnchor(null); handleEditStart(0); }}>
+                                        <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+                                        <ListItemText>Edit</ListItemText>
+                                    </MenuItem>
+                                )}
+                                {hasCats && categories.length > 1 && categories.map((catItem, i) => (
+                                    <MenuItem key={i} onClick={() => { setMenuAnchor(null); handleEditStart(i); }}>
+                                        <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+                                        <ListItemText>Edit line {i + 1}</ListItemText>
+                                    </MenuItem>
+                                ))}
+                                <MenuItem
+                                    onClick={() => { setMenuAnchor(null); setConfirmReclassify(true); }}
+                                    disabled={reclassifyEntry.isPending}
+                                >
+                                    <ListItemIcon><AutorenewIcon fontSize="small" /></ListItemIcon>
+                                    <ListItemText>Re-classify</ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    ref={moveRef}
+                                    onClick={() => { setMenuAnchor(null); setMoveAnchor(moveRef.current); }}
+                                    disabled={moveEntry.isPending}
+                                >
+                                    <ListItemIcon><DriveFileMoveIcon fontSize="small" /></ListItemIcon>
+                                    <ListItemText>Move to date</ListItemText>
+                                </MenuItem>
+                                <MenuItem onClick={() => { setMenuAnchor(null); setConfirmDelete(true); }}>
+                                    <ListItemIcon><DeleteIcon fontSize="small" sx={{ color: palette.error }} /></ListItemIcon>
+                                    <ListItemText sx={{ color: palette.error }}>Delete</ListItemText>
+                                </MenuItem>
+                            </Menu>
+                        </>
                     )}
                 </Box>
             </Box>
