@@ -42,6 +42,15 @@
 
 ## P3 — Low Priority
 
+### Single-Item API for Past Week Detail
+**What:** Add `GET /api/v1/entries/audit/weekly/:audit_date` that returns one `WeeklyAuditHistoryItem`. Update `PastWeekDetailPage` to call it instead of fetching all 50 history items and filtering client-side.
+**Why:** Current approach fetches the entire history list to display one review. Works fine at single-digit review counts, but grows linearly. At 100+ weeks it's wasted bandwidth and latency.
+**Effort:** S (human: ~1 hour / CC: ~10 min) — one new endpoint + one frontend fetch change.
+**Priority:** P3
+**Context:** Deferred from CEO review of Day/Week separation (2026-04-12). Not blocking because current volume is ~3 reviews.
+
+---
+
 ### Strip Malformed `?date=` URL Param on Fallback
 **What:** When `/?date=banana` or `/?date=9999-12-31` loads, the RecordingPage correctly falls back to today's data but leaves the invalid param in the address bar. Extend the URL-sync `useEffect` to call `setSearchParams` and delete the bad param whenever `sanitizeDateParam` returns null.
 **Why:** If a user copies and shares a malformed deep-link, the recipient sees today's data under a URL that implies a different date. Cosmetic mismatch between address bar and rendered state. Data correctness is already intact (the original HIGH finding from adversarial review — "bad param reaches backend" — is fully fixed).

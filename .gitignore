@@ -16,3 +16,5 @@ supervisord.conf
 # windsurf rules
 # .windsurfrules
 .gstack/
+ceo-plans/
+codex-skills/

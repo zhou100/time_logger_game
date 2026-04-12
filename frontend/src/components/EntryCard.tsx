@@ -195,6 +195,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [confirmReclassify, setConfirmReclassify] = useState(false);
     const [reclassifyError, setReclassifyError] = useState(false);
+    const [saveError, setSaveError] = useState(false);
     const [moveNotice, setMoveNotice] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
 
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -233,12 +234,18 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
             category: c.category,
             estimated_minutes: c.estimated_minutes,
         }));
-        updateEntry.mutate({ entryId: entry.id, data: { categories: updatedCategories } });
+        updateEntry.mutate(
+            { entryId: entry.id, data: { categories: updatedCategories } },
+            { onError: () => setSaveError(true) },
+        );
     }, [categories, entry.id, updateEntry]);
 
     const handleSingleSave = useCallback(() => {
         if (singleText !== (entry.transcript ?? '')) {
-            updateEntry.mutate({ entryId: entry.id, data: { transcript: singleText } });
+            updateEntry.mutate(
+                { entryId: entry.id, data: { transcript: singleText } },
+                { onError: () => setSaveError(true) },
+            );
         }
         setEditingSingle(false);
     }, [entry.id, entry.transcript, singleText, updateEntry]);
@@ -396,7 +403,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
             <DatePickerPopover
                 anchorEl={moveAnchor}
                 onClose={() => setMoveAnchor(null)}
-                selectedDate={entry.created_at.split('T')[0]}
+                selectedDate={entry.local_date ?? entry.created_at.split('T')[0]}
                 activeDates={activeDates}
                 maxDate={today}
                 onSelect={handleMoveSelect}
@@ -443,6 +450,12 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
             <Snackbar open={reclassifyError} autoHideDuration={4000} onClose={() => setReclassifyError(false)}>
                 <Alert severity="error" onClose={() => setReclassifyError(false)} variant="filled" sx={{ width: '100%' }}>
                     Re-classify failed — please try again
+                </Alert>
+            </Snackbar>
+
+            <Snackbar open={saveError} autoHideDuration={4000} onClose={() => setSaveError(false)}>
+                <Alert severity="error" onClose={() => setSaveError(false)} variant="filled" sx={{ width: '100%' }}>
+                    Save failed — please try again
                 </Alert>
             </Snackbar>
 

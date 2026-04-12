@@ -843,14 +843,14 @@ async def generate_weekly_audit(
     """
     today_utc = datetime.now(timezone.utc).date()
 
-    # Check cache
+    # Calendar week: Monday of current week — used as the stable cache key
+    week_start_date = _current_week_start(today_utc)
+
+    # Check cache (keyed by week_start, not today)
     if not body.regenerate:
-        cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
+        cached = await _get_cached_audit(db, current_user.id, week_start_date, "weekly")
         if cached is not None:
             return cached
-
-    # Calendar week: Monday of current week
-    week_start_date = _current_week_start(today_utc)
 
     result = await db.execute(
         select(Entry)
@@ -1037,7 +1037,7 @@ Write the letter now."""
     now_iso = datetime.now(timezone.utc).isoformat()
 
     await _save_audit(
-        db, current_user.id, today_utc, "weekly",
+        db, current_user.id, week_start_date, "weekly",
         len(entries), breakdown, audit_text, report_json=report_json,
     )
 
@@ -1061,7 +1061,7 @@ Write the letter now."""
                     if k in key or key in k:
                         existing = pt
                         break
-            evidence_entry = {"audit_date": today_utc.isoformat(), "snippet": snippet}
+            evidence_entry = {"audit_date": week_start_date.isoformat(), "snippet": snippet}
             if existing is not None:
                 existing.last_seen = today_utc
                 existing.occurrences = (existing.occurrences or 0) + 1
@@ -1143,9 +1143,9 @@ async def get_weekly_audit_history(
 
     items = []
     for a in audits:
-        # Week ran from (audit_date - 6 days) through audit_date
-        week_start = a.audit_date - timedelta(days=6)
-        week_label = f"Week of {week_start.strftime('%b %d, %Y')}"
+        # audit_date is now the Monday (week_start)
+        week_end = a.audit_date + timedelta(days=6)
+        week_label = f"{a.audit_date.strftime('%b %d')} – {week_end.strftime('%b %d')}"
         breakdown = json.loads(a.breakdown_json) if a.breakdown_json else {}
         items.append(WeeklyAuditHistoryItem(
             audit_date=a.audit_date.isoformat(),
@@ -1491,10 +1491,12 @@ async def _get_cached_audit(
     days_covered = None
     report_json_parsed = None
     if audit_type == "weekly":
-        week_start_d = _current_week_start(cached.audit_date)
-        week_end = cached.audit_date.isoformat()
-        week_start = week_start_d.isoformat()
-        days_covered = (cached.audit_date - week_start_d).days + 1
+        # audit_date is now the Monday (week_start), compute end as today or Sunday
+        week_start = cached.audit_date.isoformat()
+        today_utc = datetime.now(timezone.utc).date()
+        week_end_d = min(cached.audit_date + timedelta(days=6), today_utc)
+        week_end = week_end_d.isoformat()
+        days_covered = (week_end_d - cached.audit_date).days + 1
         if cached.report_json:
             try:
                 report_json_parsed = json.loads(cached.report_json)
