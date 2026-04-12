@@ -3,29 +3,25 @@ import { useSearchParams } from 'react-router-dom';
 import {
     Alert,
     Box,
-    Button,
     Chip,
     CircularProgress,
     Container,
     IconButton,
     Typography,
 } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import CloseIcon from '@mui/icons-material/Close';
 import RecordButton from '../components/RecordButton';
 import EntryCard from '../components/EntryCard';
 import DatePickerPopover from '../components/DatePickerPopover';
+import DayWeekTabs from '../components/DayWeekTabs';
 import { useEntries, useEntryStatus, ENTRIES_KEY } from '../hooks/useEntries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUpload } from '../hooks/useUpload';
 import { useRealtimeNotifications } from '../hooks/useRealtimeChannel';
 import { entriesApi } from '../services/api';
-import { AuditResponse } from '../types/api';
-import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
+import { palette } from '../theme';
 import Logger from '../utils/logger';
 
 
@@ -104,12 +100,6 @@ const RecordingPage: React.FC = () => {
     const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | undefined>();
 
-    // Audit state
-    const [auditLoading, setAuditLoading] = useState(false);
-    const [auditResult, setAuditResult] = useState<AuditResponse | null>(null);
-    const [auditError, setAuditError] = useState<string | undefined>();
-
-
     const { data: entryStatus } = useEntryStatus(pendingEntryId);
 
     // When status polling detects completion, refresh the entries list
@@ -146,60 +136,16 @@ const RecordingPage: React.FC = () => {
         [upload]
     );
 
-    const handleGenerateAudit = useCallback(async (regenerate = false) => {
-        setAuditLoading(true);
-        setAuditError(undefined);
-        if (regenerate) setAuditResult(null);
-        try {
-            const result = await entriesApi.generateAudit(selectedDate, regenerate);
-            setAuditResult(result);
-        } catch (err) {
-            setAuditError(err instanceof Error ? err.message : 'Audit generation failed');
-        } finally {
-            setAuditLoading(false);
-        }
-    }, [selectedDate]);
-
-
     const entries = entriesData?.items ?? [];
-    const activityBreakdown = entriesData?.activity_breakdown ?? {};
-    const captureCounts = entriesData?.capture_counts ?? {};
-    const hasActivityBreakdown = Object.keys(activityBreakdown).length > 0;
-    const hasCaptureCounts = Object.keys(captureCounts).length > 0;
-
-    // Audit panel visibility
-    const [auditVisible, setAuditVisible] = useState(false);
-
-    // Reset audit when date changes
-    useEffect(() => {
-        setAuditResult(null);
-        setAuditError(undefined);
-        setAuditVisible(false);
-    }, [selectedDate]);
-
-    // Load cached audit silently (don't auto-show)
-    useEffect(() => {
-        if (entries.length > 0 && !auditResult && !auditLoading) {
-            handleGenerateAudit(false);
-        }
-    }, [entries.length, selectedDate]); // eslint-disable-line
-
-    const handleShowAudit = useCallback(() => {
-        setAuditVisible(true);
-        if (!auditResult && !auditLoading) {
-            handleGenerateAudit(false);
-        }
-    }, [auditResult, auditLoading, handleGenerateAudit]);
 
     return (
         <Container maxWidth="md">
             <Box sx={{ mt: { xs: 2, md: 4 }, mb: 8 }}>
-                <Typography variant="h1" component="h1" gutterBottom sx={{ mb: 1, display: { xs: 'none', md: 'block' } }}>
-                    Debrief
-                </Typography>
+                {/* ── Day / Week tabs ──────────────────────────────────── */}
+                <DayWeekTabs active="day" />
 
-                {/* ── Hero zone: centered date + record ───────────────────── */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: { xs: 2, md: 0 }, pb: 1.5, gap: 0.75 }}>
+                {/* ── Hero zone: centered date + record ───────────────── */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 2, pb: 1.5, gap: 0.75 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <IconButton size="small" onClick={() => shiftDate(-1)} aria-label="Previous day">
                             <ChevronLeftIcon />
@@ -241,7 +187,7 @@ const RecordingPage: React.FC = () => {
                     onSelect={updateSelectedDate}
                 />
 
-                {/* ── Processing feedback ─────────────────────────────────── */}
+                {/* ── Processing feedback ─────────────────────────────── */}
                 {isProcessing && (
                     <Box sx={{ mb: 2, textAlign: 'center' }}>
                         <Chip
@@ -265,144 +211,10 @@ const RecordingPage: React.FC = () => {
                     </Typography>
                 )}
 
-                {/* ── Chip breakdown ──────────────────────────────────────── */}
-                {(hasActivityBreakdown || hasCaptureCounts) && (
-                    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
-                        {hasActivityBreakdown && Object.entries(activityBreakdown)
-                            .sort(([, a], [, b]) => b - a)
-                            .map(([cat, pct]) => (
-                                <Chip
-                                    key={cat}
-                                    label={`${CATEGORY_LABELS[cat] ?? cat} ${pct}%`}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{
-                                        fontWeight: 600,
-                                        fontVariantNumeric: 'tabular-nums',
-                                        fontSize: '0.7rem',
-                                        borderColor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}4D`,
-                                        color: CATEGORY_COLORS[cat] ?? palette.textMuted,
-                                        bgcolor: `${CATEGORY_COLORS[cat] ?? palette.textMuted}0A`,
-                                        borderRadius: '12px',
-                                    }}
-                                />
-                            ))}
-                        {hasCaptureCounts && Object.entries(captureCounts).map(([cat, count]) => (
-                            <Chip
-                                key={`cap-${cat}`}
-                                label={`${count} ${CATEGORY_LABELS[cat] ?? cat}${count > 1 ? 's' : ''}`}
-                                size="small"
-                                variant="outlined"
-                                sx={{
-                                    fontSize: '0.7rem',
-                                    borderColor: palette.rule,
-                                    color: palette.textMuted,
-                                    borderRadius: '12px',
-                                }}
-                            />
-                        ))}
-                    </Box>
-                )}
-
-                {/* ── Daily Debrief toggle ────────────────────────────────── */}
-                {!auditVisible && entries.length > 0 && (
-                    <Button
-                        fullWidth
-                        variant="outlined"
-                        onClick={handleShowAudit}
-                        startIcon={auditLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
-                        disabled={auditLoading}
-                        sx={{
-                            mb: 1.5,
-                            py: 1.5,
-                            borderColor: palette.rule,
-                            color: palette.textMuted,
-                            bgcolor: 'background.paper',
-                            '&:hover': { borderColor: `${palette.accent}4D`, color: palette.accent },
-                        }}
-                    >
-                        Daily Debrief
-                    </Button>
-                )}
-
-                {/* ── Daily Debrief expanded card ─────────────────────────── */}
-                {auditVisible && (
-                    <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, bgcolor: 'background.paper', mb: 1.5 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                            <Typography variant="overline" color="text.secondary">
-                                Daily Debrief
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                <IconButton
-                                    size="small"
-                                    onClick={() => handleGenerateAudit(true)}
-                                    disabled={auditLoading || entries.length === 0}
-                                    title="Regenerate"
-                                    sx={{ border: `1px solid ${palette.rule}`, borderRadius: '4px', width: 28, height: 28 }}
-                                >
-                                    {auditLoading ? <CircularProgress size={14} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
-                                </IconButton>
-                                <IconButton
-                                    size="small"
-                                    onClick={() => setAuditVisible(false)}
-                                    title="Hide"
-                                    sx={{ border: `1px solid ${palette.rule}`, borderRadius: '4px', width: 28, height: 28 }}
-                                >
-                                    <CloseIcon sx={{ fontSize: 16 }} />
-                                </IconButton>
-                            </Box>
-                        </Box>
-
-                        {auditError && (
-                            <Alert severity="error" sx={{ mb: 1 }}>{auditError}</Alert>
-                        )}
-
-                        {auditResult === null && !auditLoading && !auditError && (
-                            <Typography variant="body2" color="text.secondary">
-                                Generating your daily debrief...
-                            </Typography>
-                        )}
-
-                        {auditResult?.message && !auditResult.audit_text && (
-                            <Typography variant="body2" color="text.secondary">
-                                {auditResult.message}
-                            </Typography>
-                        )}
-
-                        {auditResult?.audit_text && (
-                            <Box
-                                sx={{
-                                    borderLeft: `2px solid ${palette.accent}`,
-                                    pl: 2,
-                                    py: 1,
-                                    bgcolor: 'background.paper',
-                                    borderRadius: '0 8px 8px 0',
-                                }}
-                            >
-                                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                                    Your AI Coach says:
-                                </Typography>
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                                    {auditResult.audit_text}
-                                </Typography>
-                                {auditResult.generated_at && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-                                        Based on {auditResult.entries} entries · {new Date(auditResult.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </Typography>
-                                )}
-                            </Box>
-                        )}
-                    </Box>
-                )}
-
-                {/* ── Entries (primary card) ──────────────────────────────── */}
-                <Box sx={{ p: 3, borderRadius: '8px', border: `1px solid ${palette.rule}`, borderColor: `${palette.accent}26`, bgcolor: 'background.paper' }}>
-                    <Typography variant="overline" color="text.secondary" display="block" gutterBottom>
-                        {isToday ? "Today's" : formatDateLabel(selectedDate)} Entries {entries.length > 0 && `— ${entries.length}`}
-                    </Typography>
-
+                {/* ── Entry timeline ──────────────────────────────────── */}
+                <Box sx={{ px: { xs: 0, sm: 1 } }}>
                     {entries.length === 0 ? (
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                             {isToday ? 'Record your day to see entries here.' : 'No entries recorded on this day.'}
                         </Typography>
                     ) : (
