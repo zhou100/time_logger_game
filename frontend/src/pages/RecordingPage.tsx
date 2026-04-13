@@ -134,7 +134,7 @@ const RecordingPage: React.FC = () => {
                 setUploadError(err instanceof Error ? err.message : 'Upload failed');
             }
         },
-        [upload]
+        [upload, selectedDate]
     );
 
     const entries = entriesData?.items ?? [];
@@ -238,7 +238,7 @@ const RecordingPage: React.FC = () => {
                             }
                         }
                         return groups.map((group, gi) => (
-                            <Box key={gi}>
+                            <Box key={group.label}>
                                 {gi > 0 && <Divider sx={{ my: 1, borderColor: `${palette.rule}80` }} />}
                                 <Typography
                                     variant="caption"

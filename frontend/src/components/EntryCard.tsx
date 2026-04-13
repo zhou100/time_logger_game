@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Box,
@@ -217,7 +217,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, readOnly = false, highligh
         queryFn: () => entriesApi.getActiveDates(),
         staleTime: 5 * 60_000,
     });
-    const activeDates = new Set(activeDatesRaw);
+    const activeDates = useMemo(() => new Set(activeDatesRaw), [activeDatesRaw]);
 
     const today = (() => {
         const d = new Date();

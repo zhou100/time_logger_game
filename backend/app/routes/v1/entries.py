@@ -822,7 +822,7 @@ async def get_weekly_audit(
     """Return cached weekly report for current calendar week, or 204 if none."""
     today_utc = datetime.now(timezone.utc).date()
     week_start = _current_week_start(today_utc)
-    cached = await _get_cached_audit(db, current_user.id, today_utc, "weekly")
+    cached = await _get_cached_audit(db, current_user.id, week_start, "weekly")
     if cached is not None:
         return cached
     return Response(status_code=204)
