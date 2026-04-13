@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1.0] - 2026-04-13
+
+### Changed
+- Day page stripped to pure capture: record button, date nav, entry list. No analysis.
+- Week page redesigned as scannable insight view: key insight at top, category breakdown, recurring themes, open loops.
+- Per-line tap-to-edit replaces modal editing. Tap any classification line to edit inline.
+- Visible "..." button replaces long-press for entry actions (move, delete, re-classify). 44px touch targets.
+- Past weekly reviews moved to dedicated `/weeks` page with drill-down detail.
+- Weekly audit cache now keyed by Monday (week_start) instead of today, preventing duplicate rows across the same week.
+
+### Fixed
+- Moving an entry to a new date now updates `local_date` (not just `created_at`), so the Day page shows the entry on the correct day.
+- Both source and target day audit caches are invalidated when moving an entry.
+- GET `/audit/weekly` now uses `week_start` cache key, matching the POST endpoint.
+- Stale `selectedDate` closure in recording upload callback.
+- Save error feedback: failed edits and moves now show a snackbar instead of failing silently.
+- Date picker for move-to-date uses `local_date` instead of `created_at`.
+
 ## [0.3.0.0] - 2026-04-10
 
 ### Added

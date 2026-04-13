@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Box,
@@ -15,7 +15,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { capturesApi, entriesApi } from '../services/api';
-import { AuditResponse, Capture, Theme, WeeklyReportJson } from '../types/api';
+import { AuditResponse, Capture, Theme } from '../types/api';
 import DayWeekTabs from '../components/DayWeekTabs';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
 
@@ -231,6 +231,14 @@ const WeeklyReportPage: React.FC = () => {
         }
     }, [result, loadThemes]);
 
+    // Auto-generate on first load (lazy generation per design doc)
+    const autoTriggered = useRef(false);
+    useEffect(() => {
+        if (autoTriggered.current || result !== null || loading || error) return;
+        autoTriggered.current = true;
+        handleGenerate();
+    }, [result, loading, error, handleGenerate]);
+
     const report = result?.report_json;
 
     // Key insight: prefer draft_status_update (concise), fall back to audit_text
@@ -286,7 +294,7 @@ const WeeklyReportPage: React.FC = () => {
                             color: palette.textPrimary,
                         }}
                     >
-                        {keyInsight.length > 300 ? keyInsight.slice(0, 300).trimEnd() + '…' : keyInsight}
+                        {keyInsight}
                     </Typography>
                 )}
 
