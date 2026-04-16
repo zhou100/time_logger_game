@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5.0] - 2026-04-16
+
+### Added
+- `/thoughts` page ("Thought Garden v1"): a weekly view of REFLECTION captures. Shows this week's reflections as "Gems" and prior 3 weeks grouped as "Recent Reflections". Each row links back to its source day.
+- `?week_start=YYYY-MM-DD` URL param on `/thoughts` for deep-linking any Monday's week. Invalid values are silently stripped and fall back to the current Monday.
+- Compact "Thought Gems" card on `/week` that links into `/thoughts?week_start=<selectedWeek>` so the weekly review loop surfaces the reflection archive for the week you're reading.
+
 ## [0.3.4.0] - 2026-04-16
 
 ### Fixed
