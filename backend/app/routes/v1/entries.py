@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from openai import AsyncOpenAI
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select, func, or_, and_, case
+from sqlalchemy import select, func, or_, and_, case, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1164,10 +1164,13 @@ async def get_available_weeks(
     """Return calendar weeks with 3+ entries for the current user, newest first."""
     today_utc = datetime.now(timezone.utc).date()
 
-    # Group entries by ISO week (Monday-based) using date_trunc
-    week_col = func.date_trunc(
-        "week",
-        func.coalesce(Entry.local_date, func.date(Entry.created_at)),
+    # Group entries by ISO week (Monday-based) using date_trunc, cast to date
+    week_col = cast(
+        func.date_trunc(
+            "week",
+            func.coalesce(Entry.local_date, func.date(Entry.created_at)),
+        ),
+        Date,
     ).label("week_monday")
 
     result = await db.execute(
