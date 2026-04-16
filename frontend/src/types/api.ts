@@ -134,15 +134,6 @@ export interface Theme {
     streak?: boolean[];
 }
 
-export interface WeeklyAuditHistoryItem {
-    audit_date: string;
-    entries: number;
-    breakdown: Record<string, number>;
-    audit_text: string | null;
-    generated_at: string | null;
-    week_label: string;
-}
-
 export interface AvailableWeek {
     week_start: string;
     week_end: string;

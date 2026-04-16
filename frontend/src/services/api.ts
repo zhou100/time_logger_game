@@ -10,7 +10,6 @@ import {
     EntryListResponse,
     CategoryItem,
     AuditResponse,
-    WeeklyAuditHistoryItem,
     AvailableWeek,
     Capture,
     CaptureCategory,
@@ -282,13 +281,6 @@ export const entriesApi = {
             const res = await api.get<AvailableWeek[]>(`/v1/entries/audit/weekly/available-weeks`, {
                 params: { limit },
             });
-            return res.data;
-        } catch (e) { throw handleError(e as AxiosError); }
-    },
-
-    async getWeeklyAuditHistory(limit = 10): Promise<WeeklyAuditHistoryItem[]> {
-        try {
-            const res = await api.get<WeeklyAuditHistoryItem[]>(`/v1/entries/audit/weekly/history?limit=${limit}`);
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },
