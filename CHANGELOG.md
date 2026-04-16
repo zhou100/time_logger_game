@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4.0] - 2026-04-16
+
+### Fixed
+- Weekly reports now show the full multi-paragraph AI coach letter instead of only the short draft status update.
+- Weekly report rendering preserves paragraph breaks and still falls back to the draft status update when no coach letter is available.
+
 ## [0.3.3.0] - 2026-04-16
 
 ### Added
