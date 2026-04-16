@@ -16,6 +16,7 @@ Audit:          POST /entries/audit
 import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
@@ -961,49 +962,79 @@ async def generate_weekly_audit(
 
     open_loops_text = "\n".join(f"- {t}" for t in open_loops) if open_loops else "(none)"
 
-    # Stage 1 — THINKING (gpt-5.4-mini): structured analysis + theme extraction in JSON
-    thinking_prompt = f"""You are an analytical AI time coach. Analyze the user's week and produce STRUCTURED JSON only.
+    # Stage 1 — THINKING (gpt-5.4): structured analysis + theme extraction in JSON
+    thinking_prompt = f"""You are an analytical AI time coach.
 
-Naval's framework: EARNING (money/work) | LEARNING (knowledge) | RELAXING (recharge) | FAMILY (relationships).
+Analyze the user's week and produce STRUCTURED JSON only.
 
-Prior recurring themes from past weeks (use these for continuity — extend or contrast with new patterns):
+Naval's framework:
+EARNING (money/work) | LEARNING (knowledge) | RELAXING (recharge) | FAMILY (relationships)
+
+Prior recurring themes (for continuity):
 {prior_themes_text}
 
-This week's activity breakdown: {activity_summary}
-Follow-up items captured: {capture_summary}
+This week's activity summary:
+{activity_summary}
 
-Open TODOs (still unresolved from this week):
+Follow-up items:
+{capture_summary}
+
+Open TODOs:
 {open_loops_text}
 
 Daily activities:
 {day_text}
 
-Respond with ONLY a valid JSON object, no prose, no code fence:
+---
+
+INTERNAL SCORING RULES (do not output):
+- Score each day 0–5 across EARNING, LEARNING, RELAXING, FAMILY
+- Balance = variance across the 4 categories (lower is better)
+- Best day = high total score + low imbalance
+- Worst day = low total score OR extreme imbalance
+
+---
+
+THEME RULES:
+- Reuse exact title if the same pattern continues
+- Only create new theme if it cannot map to an existing one
+- Themes must represent recurring behavior, not one-off events
+- Max 3 themes
+
+---
+
+OUTPUT REQUIREMENTS:
+- Be specific, not generic
+- "uncomfortable_truth" must be concrete and slightly uncomfortable
+- "next_week_action" must be specific and measurable
+
+---
+
+Respond with ONLY a valid JSON object:
+
 {{
-  "best_day": "string — which day showed the best balance and why",
-  "worst_day": "string — which day was most off-balance and why",
-  "patterns": ["3-5 short pattern observations"],
-  "uncomfortable_truth": "the most honest thing the data says",
-  "naval_balance": "one sentence on the EARNING/LEARNING/RELAXING/FAMILY mix",
-  "next_week_action": "one specific actionable change",
+  "best_day": "...",
+  "worst_day": "...",
+  "patterns": ["..."],
+  "uncomfortable_truth": "...",
+  "naval_balance": "...",
+  "next_week_action": "...",
   "themes": [
     {{
-      "title": "short title (under 60 chars)",
-      "description": "1-2 sentence explanation grounded in this week's data",
-      "polarity": "positive | negative | neutral",
-      "category": "EARNING | LEARNING | RELAXING | FAMILY | other"
+      "title": "...",
+      "description": "...",
+      "polarity": "positive|negative|neutral",
+      "category": "EARNING|LEARNING|RELAXING|FAMILY|other"
     }}
   ]
-}}
-
-For themes: extract 1-4 patterns worth tracking long-term. Prefer extending a prior theme (use the same title) if it continues. Skip themes if nothing notable repeats."""
+}}"""
 
     try:
         thinking_response = await asyncio.wait_for(
             _get_openai().chat.completions.create(
-                model="gpt-5.4-mini",
+                model="gpt-5.4",
                 messages=[{"role": "user", "content": thinking_prompt}],
-                temperature=0.4,
+                temperature=0.3,
                 response_format={"type": "json_object"},
             ),
             timeout=30.0,
@@ -1023,30 +1054,80 @@ For themes: extract 1-4 patterns worth tracking long-term. Prefer extending a pr
             audit_text=None, generated_at=None, message="Weekly review generation failed",
         )
 
-    # Stage 2 — WRITING (gpt-5.4-nano): turn the analysis into a prose letter
-    writing_prompt = f"""You are an opinionated, honest AI time coach. Turn this structured analysis into a 3-4 paragraph weekly review letter (under 400 words).
+    # Stage 2 — WRITING (gpt-5.4-mini): turn the analysis into a prose letter
+    analysis_json_str = json.dumps(analysis, ensure_ascii=False, indent=2)
+    writing_prompt = f"""You are an opinionated, honest AI time coach.
 
-Tone: direct, slightly provocative, like a coach who respects the user enough to be honest. Reference ONLY what's in the analysis.
-IMPORTANT: Respond in the same language as the daily activities below. If Chinese, write Chinese. If English, write English. Never switch languages.
+Your job is to convert structured analysis into a weekly review letter.
+
+---
+
+STRICT RULES:
+- Use ONLY facts explicitly present in the Analysis JSON
+- Do NOT infer, speculate, or add new information
+- Treat the Analysis JSON as the single source of truth
+- Do NOT introduce new patterns or reinterpret conclusions
+
+---
+
+LANGUAGE:
+- Detect dominant language from Original daily activities
+- If mostly Chinese → write in Chinese
+- Otherwise → write in English
+- Do NOT mix languages
+
+---
+
+MANDATORY CONTENT:
+- You MUST include the "uncomfortable_truth" clearly (verbatim or nearly verbatim)
+- You MUST include "next_week_action" clearly at the end
+
+---
+
+STRUCTURE (MANDATORY):
+
+Paragraph 1:
+- Overall weekly pattern (use patterns + naval_balance)
+
+Paragraph 2:
+- What is working
+
+Paragraph 3:
+- What is not working (center on uncomfortable_truth, be direct)
+
+Paragraph 4:
+- One concrete behavior change (next_week_action)
+
+---
+
+STYLE:
+- Direct, slightly provocative
+- Respectful but not soft
+- No fluff, no generic advice
+
+---
 
 Analysis JSON:
-{json.dumps(analysis, ensure_ascii=False, indent=2)}
+{analysis_json_str}
 
 Original daily activities (for language detection only):
 {day_text[:500]}
 
-Write the letter now."""
+Write the letter."""
 
-    try:
-        writing_response = await asyncio.wait_for(
+    async def _run_writing(prompt: str) -> str:
+        response = await asyncio.wait_for(
             _get_openai().chat.completions.create(
-                model="gpt-5.4-nano",
-                messages=[{"role": "user", "content": writing_prompt}],
-                temperature=0.7,
+                model="gpt-5.4-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.6,
             ),
             timeout=20.0,
         )
-        audit_text = writing_response.choices[0].message.content
+        return (response.choices[0].message.content or "").strip()
+
+    try:
+        audit_text = await _run_writing(writing_prompt)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Weekly review timed out. Try again.")
     except Exception as exc:
@@ -1055,6 +1136,23 @@ Write the letter now."""
             entries=len(entries), breakdown=breakdown, approximate=approximate,
             audit_text=None, generated_at=None, message="Weekly review generation failed",
         )
+
+    # Stage 2 check — lightweight validator (gpt-5.4-nano). Rewrites once if checks fail.
+    check_issues = await _check_weekly_letter(audit_text, analysis)
+    if check_issues:
+        logger.info(f"Weekly letter failed validation, rewriting once. Issues: {check_issues}")
+        rewrite_prompt = (
+            writing_prompt
+            + "\n\n---\n\nPREVIOUS ATTEMPT FAILED THESE CHECKS — FIX ALL OF THEM:\n"
+            + "\n".join(f"- {issue}" for issue in check_issues)
+            + "\n\nRewrite the letter from scratch, following every rule above."
+        )
+        try:
+            audit_text = await _run_writing(rewrite_prompt)
+        except asyncio.TimeoutError:
+            logger.warning("Weekly letter rewrite timed out; keeping original draft.")
+        except Exception as exc:
+            logger.warning(f"Weekly letter rewrite failed ({exc}); keeping original draft.")
 
     # Build structured 4-section report from analysis + DB data
     report_json = {
@@ -1217,52 +1315,6 @@ async def get_available_weeks(
             has_report=monday in has_report_dates,
         ))
     return weeks
-
-
-class WeeklyAuditHistoryItem(BaseModel):
-    audit_date: str
-    entries: int
-    breakdown: Dict[str, float]
-    audit_text: Optional[str]
-    generated_at: Optional[str]
-    week_label: str  # e.g. "Week of Mar 23, 2026"
-
-
-@router.get("/audit/weekly/history", response_model=List[WeeklyAuditHistoryItem])
-async def get_weekly_audit_history(
-    limit: int = Query(default=10, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Return past weekly audit results for the current user, newest first."""
-    result = await db.execute(
-        select(AuditResult)
-        .where(
-            AuditResult.user_id == current_user.id,
-            AuditResult.audit_type == "weekly",
-            AuditResult.is_stale.is_(False),
-            AuditResult.audit_text.isnot(None),
-        )
-        .order_by(AuditResult.audit_date.desc())
-        .limit(limit)
-    )
-    audits = result.scalars().all()
-
-    items = []
-    for a in audits:
-        # audit_date is now the Monday of the week (after migration)
-        week_label = f"Week of {a.audit_date.strftime('%b %d, %Y')}"
-        breakdown = json.loads(a.breakdown_json) if a.breakdown_json else {}
-        items.append(WeeklyAuditHistoryItem(
-            audit_date=a.audit_date.isoformat(),
-            entries=a.entries_count,
-            breakdown=breakdown,
-            audit_text=a.audit_text,
-            generated_at=a.generated_at.isoformat() if a.generated_at else None,
-            week_label=week_label,
-        ))
-
-    return items
 
 
 # ── Themes ────────────────────────────────────────────────────────────────────
@@ -1480,6 +1532,79 @@ def _compute_capture_counts(
         if normalized in CAPTURE_CATEGORIES:
             counts[normalized] = counts.get(normalized, 0) + 1
     return counts
+
+
+async def _check_weekly_letter(letter: str, analysis: Dict[str, Any]) -> List[str]:
+    """Lightweight validator for the Stage 2 letter. Returns a list of failure reasons (empty = pass).
+
+    Deterministic checks: paragraph count, presence of uncomfortable_truth and next_week_action.
+    LLM check (gpt-5.4-nano): flag claims not grounded in the analysis JSON. Best-effort — if the
+    check call itself fails, we skip it rather than block letter delivery.
+    """
+    issues: List[str] = []
+    text = (letter or "").strip()
+    if not text:
+        return ["Letter is empty."]
+
+    # 1) Exactly 4 paragraphs (blocks separated by blank lines)
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if len(paragraphs) != 4:
+        issues.append(f"Letter must have exactly 4 paragraphs; found {len(paragraphs)}.")
+
+    def _fuzzy_contains(haystack: str, needle: str, min_ratio: float = 0.5) -> bool:
+        """Cheap fuzzy containment: share enough non-trivial word tokens."""
+        if not needle:
+            return True
+        needle_tokens = [t for t in re.findall(r"\w+", needle.lower()) if len(t) > 2]
+        if not needle_tokens:
+            return needle.strip().lower() in haystack.lower()
+        hay_tokens = set(re.findall(r"\w+", haystack.lower()))
+        overlap = sum(1 for t in needle_tokens if t in hay_tokens)
+        return overlap / len(needle_tokens) >= min_ratio
+
+    uncomfortable = (analysis.get("uncomfortable_truth") or "").strip()
+    if uncomfortable and not _fuzzy_contains(text, uncomfortable):
+        issues.append("Letter must include the uncomfortable_truth (verbatim or nearly so).")
+
+    next_action = (analysis.get("next_week_action") or "").strip()
+    if next_action and not _fuzzy_contains(text, next_action):
+        issues.append("Letter must include the next_week_action clearly at the end.")
+
+    # 2) LLM groundedness check (gpt-5.4-nano). Best-effort: on failure, skip silently.
+    try:
+        analysis_json_str = json.dumps(analysis, ensure_ascii=False, indent=2)
+        check_prompt = (
+            "You are a strict fact-checker. Compare a weekly review LETTER against an ANALYSIS JSON. "
+            "Respond with ONLY a JSON object: {\"grounded\": true|false, \"reason\": \"...\"}. "
+            "Set grounded=false ONLY if the letter introduces concrete claims (people, numbers, events, "
+            "conclusions) that are not supported by the ANALYSIS JSON. Minor paraphrasing is fine.\n\n"
+            f"ANALYSIS JSON:\n{analysis_json_str}\n\nLETTER:\n{text}"
+        )
+        check_response = await asyncio.wait_for(
+            _get_openai().chat.completions.create(
+                model="gpt-5.4-nano",
+                messages=[{"role": "user", "content": check_prompt}],
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            ),
+            timeout=10.0,
+        )
+        raw = check_response.choices[0].message.content or "{}"
+        parsed = json.loads(raw) if raw else {}
+        grounded = parsed.get("grounded")
+        is_ungrounded = (
+            grounded is False
+            or (isinstance(grounded, str) and grounded.strip().lower() in ("false", "no", "0"))
+        )
+        if is_ungrounded:
+            reason = (parsed.get("reason") or "letter includes claims not in the analysis").strip()
+            issues.append(f"Letter contains information not in the analysis JSON: {reason}")
+    except (asyncio.TimeoutError, json.JSONDecodeError) as exc:
+        logger.info(f"Weekly letter groundedness check skipped: {exc}")
+    except Exception as exc:
+        logger.info(f"Weekly letter groundedness check failed, skipping: {exc}")
+
+    return issues
 
 
 async def _generate_audit_text(
