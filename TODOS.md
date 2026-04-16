@@ -90,7 +90,57 @@
 
 ---
 
+### /week Portal Restructure — `/week/tasks` and `/week/patterns` Subpages
+**What:** Split Open Loops and Themes out of the inline `/week` layout into their own subpages (`/week/tasks`, `/week/patterns`), with `/week` becoming a card-based portal that routes into subpages. Full plan in [docs/designs/thoughts-tab.md](docs/designs/thoughts-tab.md).
+**Why:** The original thoughts-tab plan proposed this portal restructure. CEO review 2026-04-16 reduced v1 to Thought Garden only because `/week/tasks` and `/week/patterns` are 80% reorganizing content that already works inline on `/week`. Revisit only if the inline sections become hard to scan.
+**Pros:** Cleaner IA if `/week` becomes overwhelming. Makes room for richer per-surface filtering (Active/Pinned/Resolved for themes, Open/Done/Dismissed for tasks).
+**Cons:** Adds indirection tax — one more click between weekly review and the thing you want to look at. Runs against the 2026-04-10 "fold into Week, simplify" decision unless Week has genuinely grown past its scannable budget.
+**Trigger to revisit:** inline Open Loops consistently exceeds ~8 items, or inline Themes section forces scroll past 1.5 viewports on mobile, or you find yourself wishing for a filter view.
+**Effort:** M (human: ~2-3 days / CC: ~2-3 hours) — two new pages + route + card rewrite of `/week`.
+**Priority:** P3
+**Context:** Deferred from thoughts-tab CEO review 2026-04-16. Ship `/thoughts` first (reduced v1). See [docs/designs/thoughts-tab.md](docs/designs/thoughts-tab.md) for the full vision.
+
+---
+
+### Thought Garden AI Sections — "Questions I Keep Asking" and "Tensions"
+**What:** Add two AI-generated sections to `/thoughts`: "Questions I Keep Asking" (repeated unresolved questions surfaced from REFLECTION captures) and "Tensions" (repeated conflicts or tradeoffs). Every insight must cite its source reflections; no source, no insight.
+**Why:** Plan's core bet for Thought Garden — help users notice patterns in their own thinking they wouldn't otherwise catch. CEO review 2026-04-16 deferred these from v1 because they need REFLECTION volume to produce meaningful signal; thin output on a small dataset poisons trust in the feature.
+**Pros:** The genuinely "magical" part of Thought Garden. Makes the page worth returning to even in slow weeks.
+**Cons:** Cold-start embarrassment risk — with <50 REFLECTIONs, outputs will be weak or hallucinated. Needs prompt engineering, eval set, and citation plumbing.
+**Trigger to revisit:** 2+ months of sustained REFLECTION capture (rough target: 50+ REFLECTION captures across 3+ weeks) AND v1 Thought Garden shows click-through (you're actually rereading).
+**Rules:** AI-generated insights must cite source reflections. No source, no insight. Insights should invite rereading, not diagnose.
+**Effort:** M (human: ~3 days / CC: ~2 hours) — prompt design, citation UI, eval cases, fallback to "not enough data yet" copy.
+**Priority:** P3
+**Context:** Deferred from thoughts-tab CEO review 2026-04-16. Ship Gems + Recent Reflections first. See [docs/designs/thoughts-tab.md](docs/designs/thoughts-tab.md) "Subpage 1: Thought Garden" for the full vision.
+
+---
+
+### Server-Side Date Filter for `/v1/captures/`
+**What:** Add `?since=YYYY-MM-DD` (and optionally `?until=`) to `GET /v1/captures/` so `/thoughts` can fetch just the 3-4 weeks it renders, instead of the user's entire REFLECTION history.
+**Why:** `/thoughts` currently fetches every REFLECTION the user has ever made and filters by `source_date` client-side. Fine at <500 REFLECTIONs. At 2k+, the payload crosses ~400KB and stalls on mobile 4G. One `where()` clause, zero migrations.
+**Effort:** XS (human: ~20 min / CC: ~5 min) — one query param, one filter, one test.
+**Priority:** P3
+**Trigger to revisit:** any user crosses ~500 REFLECTIONs, or /thoughts payload shows up in slow-request logs.
+**Context:** Deferred from thoughts-tab eng review 2026-04-16. Not v1-blocking because current volume is <100 REFLECTIONs total.
+
+---
+
+### Pin / "Gem" Affordance for Reflections
+**What:** Let the user mark a REFLECTION as a "gem" — a reflection worth revisiting. Gems bubble to the top of `/thoughts` Gems section. Lightest extension of existing capture editing; no new table unless necessary.
+**Why:** V1 Thought Garden shows the most recent REFLECTIONs. If the user finds themselves wanting to mark specific ones as "return to this," the pin affordance closes that loop without inventing a new concept.
+**Pros:** Low concept tax (reuses the "status" or a boolean flag on captures). Builds on existing edit patterns.
+**Cons:** Adds capture-surface interaction; touches the voice-first religion if the UI isn't quiet. Only worth building if rereading behavior is real.
+**Trigger to revisit:** after 2-4 weeks of using v1 Thought Garden, you notice you want to mark specific reflections for return.
+**Effort:** S (human: ~3 hours / CC: ~30 min) — one boolean column on captures or reuse status, one icon toggle, one filter tweak.
+**Priority:** P3
+**Context:** Deferred from thoughts-tab CEO review 2026-04-16. Ship Gems-as-recency first.
+
+---
+
 ## Completed
+
+### ~~Thought Garden v1 (/thoughts)~~ — v0.3.5.0 (2026-04-16)
+New `/thoughts` page that shows this week's REFLECTIONs as "Gems" and prior 3 weeks as grouped "Recent Reflections". `?week_start=YYYY-MM-DD` deep-links. Thought Gems card on `/week` binds to the selected week. 13 frontend tests cover URL handling, Monday-boundary filtering, null-safety, and source-day links. Zero backend changes; reuses `capturesApi.list({ category: 'REFLECTION' })`.
 
 ### ~~Move Endpoint Should Update local_date~~ — 2026-04-11
 Moving an entry now updates `local_date` alongside `created_at` / `recorded_at`, invalidates source and target audit dates, and has regression coverage for moving to an empty target day.

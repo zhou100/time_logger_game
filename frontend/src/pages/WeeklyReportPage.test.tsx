@@ -84,6 +84,104 @@ describe('WeeklyReportPage', () => {
     expect(screen.queryByText('Short uncomfortable truth only.')).not.toBeInTheDocument();
   });
 
+  it('renders a Thought Gems card linking to /thoughts for the selected week', async () => {
+    (entriesApi.getAvailableWeeks as jest.Mock).mockResolvedValue([
+      {
+        week_start: '2026-04-13',
+        week_end: '2026-04-19',
+        entry_count: 22,
+        has_report: true,
+      },
+      {
+        week_start: '2026-04-06',
+        week_end: '2026-04-12',
+        entry_count: 41,
+        has_report: true,
+      },
+    ]);
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 22,
+      breakdown: {},
+      approximate: false,
+      audit_text: null,
+      report_json: null,
+      generated_at: '2026-04-19T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-13',
+      week_end: '2026-04-19',
+      days_covered: 7,
+    });
+
+    renderWeeklyReportPage();
+
+    const link = await screen.findByRole('link', { name: /thought gems/i });
+    expect(link).toHaveAttribute('href', '/thoughts?week_start=2026-04-13');
+  });
+
+  it('keeps themes, open loops, and coach letter visible alongside the Thought Gems card', async () => {
+    (capturesApi.list as jest.Mock).mockResolvedValue([
+      {
+        id: 'loop-1',
+        entry_id: 'e-loop-1',
+        category: 'TODO',
+        display_text: 'ship weekly letter validator',
+        status: 'open',
+        edited: false,
+        source_date: '2026-04-10',
+        classified_at: '2026-04-10T09:00:00Z',
+      },
+    ]);
+    (entriesApi.listThemes as jest.Mock).mockResolvedValue([
+      {
+        id: 'theme-1',
+        title: 'deep-work mornings',
+        description: 'protect the first block before admin',
+        polarity: 'positive',
+        category: null,
+        first_seen: '2026-04-06',
+        last_seen: '2026-04-12',
+        occurrences: 3,
+        status: 'active',
+        user_note: null,
+        evidence: [],
+      },
+    ]);
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: 'A grounded weekly letter that survives regressions.',
+      report_json: {
+        time_breakdown: {
+          activity: { LEARNING: 40, EARNING: 30 },
+          captures: { TODO: 2 },
+          best_day: null,
+          worst_day: null,
+          naval_balance: null,
+        },
+        open_loops: [],
+        recurring_themes: [],
+        draft_status_update: 'fallback',
+      },
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+    });
+
+    renderWeeklyReportPage();
+
+    expect(
+      await screen.findByText(/grounded weekly letter that survives regressions/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText('deep-work mornings')).toBeInTheDocument();
+    expect(screen.getByText('ship weekly letter validator')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /thought gems/i })
+    ).toBeInTheDocument();
+  });
+
   it('falls back to the draft status update when no coach letter exists', async () => {
     (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
       entries: 41,

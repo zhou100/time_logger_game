@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
     Alert,
     Box,
@@ -11,6 +12,7 @@ import {
     SelectChangeEvent,
     Typography,
 } from '@mui/material';
+import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -408,6 +410,41 @@ const WeeklyReportPage: React.FC = () => {
                         activity={report.time_breakdown.activity || {}}
                         captures={report.time_breakdown.captures || {}}
                     />
+                )}
+
+                {/* ── Thought Gems (link into /thoughts) ─────────────── */}
+                {selectedWeek && (
+                    <Box
+                        component={RouterLink}
+                        to={`/thoughts?week_start=${encodeURIComponent(selectedWeek)}`}
+                        aria-label="Thought Gems"
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            mb: 3,
+                            p: 1.5,
+                            border: `1px solid ${palette.rule}`,
+                            borderRadius: '10px',
+                            bgcolor: 'background.paper',
+                            textDecoration: 'none',
+                            color: palette.textPrimary,
+                            '&:hover': { borderColor: palette.textMuted },
+                        }}
+                    >
+                        <LocalFloristIcon sx={{ fontSize: 18, color: palette.accent, flexShrink: 0 }} />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                                Thought Gems
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                Reflections worth rereading from this week.
+                            </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                            Open &rsaquo;
+                        </Typography>
+                    </Box>
                 )}
 
                 {/* ── Recurring Themes ────────────────────────────────── */}
