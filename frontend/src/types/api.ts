@@ -143,6 +143,13 @@ export interface WeeklyAuditHistoryItem {
     week_label: string;
 }
 
+export interface AvailableWeek {
+    week_start: string;
+    week_end: string;
+    entry_count: number;
+    has_report: boolean;
+}
+
 // ── Captures (Capture Inbox) ──────────────────────────────────────────────────
 
 export type CaptureStatus = 'open' | 'done' | 'dismissed';

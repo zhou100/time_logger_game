@@ -7,10 +7,10 @@ ffmpeg/
 .env.example
 
 # Development tools and files
-install_ffmpeg.ps1  
-test_audio.wav  
-record_test_audio.py  
-supervisord.conf  
+install_ffmpeg.ps1
+test_audio.wav
+record_test_audio.py
+supervisord.conf
 
 
 # windsurf rules
