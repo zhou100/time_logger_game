@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5.1] - 2026-04-16
+
+### Fixed
+- Weekly report header keeps the Generate/Regenerate action aligned with the week selector on mobile, with constrained text overflow and a 44px touch target.
+
 ## [0.3.5.0] - 2026-04-16
 
 ### Added

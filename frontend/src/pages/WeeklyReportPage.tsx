@@ -334,36 +334,54 @@ const WeeklyReportPage: React.FC = () => {
                 <DayWeekTabs active="week" />
 
                 {/* ── Week selector + generate ───────────────────────── */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    {weeksLoading ? (
-                        <Typography variant="overline" color="text.secondary">Loading weeks...</Typography>
-                    ) : weeks.length > 0 ? (
-                        <Select
-                            value={selectedWeek || ''}
-                            onChange={handleWeekChange}
-                            size="small"
-                            variant="standard"
-                            disableUnderline
-                            sx={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                letterSpacing: '0.08em',
-                                textTransform: 'uppercase',
-                                color: palette.textMuted,
-                                '& .MuiSelect-select': { py: 0.25, pr: 3 },
-                            }}
-                        >
-                            {weeks.map((w) => (
-                                <MenuItem key={w.week_start} value={w.week_start}>
-                                    {fmtDate(w.week_start)} {'\u2013'} {fmtDate(w.week_end)}
-                                    {' \u00b7 '}{w.entry_count} entries
-                                    {isCurrentWeek(w.week_start) ? ' (this week)' : ''}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    ) : (
-                        <Typography variant="overline" color="text.secondary">No weeks with 3+ entries</Typography>
-                    )}
+                <Box
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: { xs: 1.25, sm: 2 },
+                        mb: 2,
+                        minWidth: 0,
+                    }}
+                >
+                    <Box sx={{ minWidth: 0, flex: '1 1 auto' }}>
+                        {weeksLoading ? (
+                            <Typography variant="overline" color="text.secondary">Loading weeks...</Typography>
+                        ) : weeks.length > 0 ? (
+                            <Select
+                                value={selectedWeek || ''}
+                                onChange={handleWeekChange}
+                                size="small"
+                                variant="standard"
+                                disableUnderline
+                                sx={{
+                                    maxWidth: '100%',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    letterSpacing: '0.08em',
+                                    textTransform: 'uppercase',
+                                    color: palette.textMuted,
+                                    '& .MuiSelect-select': {
+                                        py: 0.25,
+                                        pr: 3,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                    },
+                                }}
+                            >
+                                {weeks.map((w) => (
+                                    <MenuItem key={w.week_start} value={w.week_start}>
+                                        {fmtDate(w.week_start)} {'\u2013'} {fmtDate(w.week_end)}
+                                        {' \u00b7 '}{w.entry_count} entries
+                                        {isCurrentWeek(w.week_start) ? ' (this week)' : ''}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        ) : (
+                            <Typography variant="overline" color="text.secondary">No weeks with 3+ entries</Typography>
+                        )}
+                    </Box>
 
                     <Button
                         variant="outlined"
@@ -371,6 +389,12 @@ const WeeklyReportPage: React.FC = () => {
                         startIcon={loading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
                         onClick={handleRegenerate}
                         disabled={loading || !selectedWeek}
+                        sx={{
+                            flex: '0 0 auto',
+                            minHeight: 44,
+                            px: { xs: 1.25, sm: 1.5 },
+                            whiteSpace: 'nowrap',
+                        }}
                     >
                         {result ? 'Regenerate' : 'Generate'}
                     </Button>
