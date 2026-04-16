@@ -7,6 +7,9 @@ import {
     Container,
     Divider,
     IconButton,
+    MenuItem,
+    Select,
+    SelectChangeEvent,
     Typography,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -15,9 +18,25 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { capturesApi, entriesApi } from '../services/api';
-import { AuditResponse, Capture, Theme } from '../types/api';
+import { AuditResponse, AvailableWeek, Capture, Theme } from '../types/api';
 import DayWeekTabs from '../components/DayWeekTabs';
 import { CATEGORY_COLORS, CATEGORY_LABELS, palette } from '../theme';
+
+/* ── Helpers ───────────────────────────────────────────────────────────────── */
+
+/** Format "2026-04-07" -> "Apr 7" */
+const fmtDate = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+/** True if the given Monday falls in the current calendar week. */
+const isCurrentWeek = (weekStart: string) => {
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    return weekStart === monday.toISOString().slice(0, 10);
+};
 
 /* ── Category Breakdown bar ────────────────────────────────────────────────── */
 const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: Record<string, number> }> = ({ activity, captures }) => {
@@ -172,6 +191,12 @@ const WeeklyReportPage: React.FC = () => {
     const [result, setResult] = useState<AuditResponse | null>(null);
     const [error, setError] = useState<string | undefined>();
 
+    // Week selector state
+    const [weeks, setWeeks] = useState<AvailableWeek[]>([]);
+    const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+    const [weeksLoading, setWeeksLoading] = useState(true);
+    const activeRequestRef = useRef(0);
+
     // Open loops (live from captures API)
     const [openLoops, setOpenLoops] = useState<Capture[]>([]);
     const loadOpenLoops = useCallback(() => {
@@ -207,41 +232,75 @@ const WeeklyReportPage: React.FC = () => {
         } catch { /* noop */ }
     }, []);
 
-    const formatRange = (start?: string, end?: string) => {
-        if (!start || !end) return '';
-        const fmt = (s: string) => {
-            const [y, m, d] = s.split('-').map(Number);
-            return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-        };
-        return `${fmt(start)} \u2013 ${fmt(end)}`;
-    };
-
-    const handleGenerate = useCallback(async () => {
-        const shouldRegenerate = result !== null;
+    // ── Load week report (GET cache first, POST generate if needed) ──────────
+    const loadWeekReport = useCallback(async (weekStart: string, forceRegenerate = false) => {
+        const requestId = ++activeRequestRef.current;
         setLoading(true);
         setError(undefined);
+        setResult(null);
+
         try {
-            const res = await entriesApi.generateWeeklyAudit(shouldRegenerate);
+            if (!forceRegenerate) {
+                const cached = await entriesApi.getWeeklyAudit(weekStart);
+                if (requestId !== activeRequestRef.current) return;
+                if (cached) {
+                    setResult(cached);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // No cache (or regenerating) -- generate
+            const res = await entriesApi.generateWeeklyAudit(weekStart, forceRegenerate);
+            if (requestId !== activeRequestRef.current) return;
             setResult(res);
             loadThemes();
+
+            // Refresh available weeks (generation may set has_report)
+            entriesApi.getAvailableWeeks().then((w) => {
+                if (requestId === activeRequestRef.current) setWeeks(w);
+            }).catch(() => {});
         } catch (err) {
+            if (requestId !== activeRequestRef.current) return;
             setError(err instanceof Error ? err.message : 'Weekly review failed');
         } finally {
-            setLoading(false);
+            if (requestId === activeRequestRef.current) setLoading(false);
         }
-    }, [result, loadThemes]);
+    }, [loadThemes]);
 
-    // Auto-generate on first load (lazy generation per design doc)
-    const autoTriggered = useRef(false);
+    // ── Fetch available weeks on mount ───────────────────────────────────────
     useEffect(() => {
-        if (autoTriggered.current || result !== null || loading || error) return;
-        autoTriggered.current = true;
-        handleGenerate();
-    }, [result, loading, error, handleGenerate]);
+        let cancelled = false;
+        setWeeksLoading(true);
+        entriesApi.getAvailableWeeks().then((w) => {
+            if (cancelled) return;
+            setWeeks(w);
+            if (w.length > 0) {
+                setSelectedWeek(w[0].week_start);
+            }
+            setWeeksLoading(false);
+        }).catch(() => {
+            if (!cancelled) setWeeksLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Auto-load report when selected week changes ──────────────────────────
+    useEffect(() => {
+        if (selectedWeek) {
+            loadWeekReport(selectedWeek);
+        }
+    }, [selectedWeek, loadWeekReport]);
+
+    const handleWeekChange = (e: SelectChangeEvent<string>) => {
+        setSelectedWeek(e.target.value);
+    };
+
+    const handleRegenerate = useCallback(() => {
+        if (selectedWeek) loadWeekReport(selectedWeek, true);
+    }, [selectedWeek, loadWeekReport]);
 
     const report = result?.report_json;
-
-    // Key insight: prefer draft_status_update (concise), fall back to audit_text
     const keyInsight = report?.draft_status_update || result?.audit_text || null;
 
     return (
@@ -250,19 +309,44 @@ const WeeklyReportPage: React.FC = () => {
                 {/* ── Day / Week tabs ────────────────────────────────── */}
                 <DayWeekTabs active="week" />
 
-                {/* ── Week header + generate ─────────────────────────── */}
+                {/* ── Week selector + generate ───────────────────────── */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="overline" color="text.secondary">
-                        This Week
-                        {(result?.week_start && result?.week_end) &&
-                            ` · ${formatRange(result.week_start, result.week_end)}`}
-                    </Typography>
+                    {weeksLoading ? (
+                        <Typography variant="overline" color="text.secondary">Loading weeks...</Typography>
+                    ) : weeks.length > 0 ? (
+                        <Select
+                            value={selectedWeek || ''}
+                            onChange={handleWeekChange}
+                            size="small"
+                            variant="standard"
+                            disableUnderline
+                            sx={{
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                letterSpacing: '0.08em',
+                                textTransform: 'uppercase',
+                                color: palette.textMuted,
+                                '& .MuiSelect-select': { py: 0.25, pr: 3 },
+                            }}
+                        >
+                            {weeks.map((w) => (
+                                <MenuItem key={w.week_start} value={w.week_start}>
+                                    {fmtDate(w.week_start)} {'\u2013'} {fmtDate(w.week_end)}
+                                    {' \u00b7 '}{w.entry_count} entries
+                                    {isCurrentWeek(w.week_start) ? ' (this week)' : ''}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    ) : (
+                        <Typography variant="overline" color="text.secondary">No weeks with 3+ entries</Typography>
+                    )}
+
                     <Button
                         variant="outlined"
                         size="small"
                         startIcon={loading ? <CircularProgress size={14} /> : <AutoAwesomeIcon fontSize="small" />}
-                        onClick={handleGenerate}
-                        disabled={loading}
+                        onClick={handleRegenerate}
+                        disabled={loading || !selectedWeek}
                     >
                         {result ? 'Regenerate' : 'Generate'}
                     </Button>
@@ -270,10 +354,20 @@ const WeeklyReportPage: React.FC = () => {
 
                 {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-                {/* ── Empty state ────────────────────────────────────── */}
-                {result === null && !loading && !error && (
+                {/* ── Loading state ──────────────────────────────────── */}
+                {loading && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6 }}>
+                        <CircularProgress size={28} sx={{ mb: 2 }} />
+                        <Typography variant="body2" color="text.secondary">
+                            Generating weekly report...
+                        </Typography>
+                    </Box>
+                )}
+
+                {/* ── Empty state (no weeks available) ──────────────── */}
+                {weeks.length === 0 && !weeksLoading && !loading && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center', py: 4 }}>
-                        Generate an honest weekly review to see patterns, breakdowns, and open loops.
+                        Record throughout the week to get your first report. Needs 3+ entries in a week.
                     </Typography>
                 )}
 

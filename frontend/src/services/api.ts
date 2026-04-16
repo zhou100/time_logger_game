@@ -11,6 +11,7 @@ import {
     CategoryItem,
     AuditResponse,
     WeeklyAuditHistoryItem,
+    AvailableWeek,
     Capture,
     CaptureCategory,
     CaptureStatus,
@@ -258,9 +259,29 @@ export const entriesApi = {
         } catch (e) { throw handleError(e as AxiosError); }
     },
 
-    async generateWeeklyAudit(regenerate = false): Promise<AuditResponse> {
+    async getWeeklyAudit(weekStart: string): Promise<AuditResponse | null> {
         try {
-            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly', { regenerate });
+            const res = await api.get<AuditResponse>(`/v1/entries/audit/weekly`, {
+                params: { week_start: weekStart },
+                validateStatus: (s) => s === 200 || s === 204,
+            });
+            if (res.status === 204) return null;
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async generateWeeklyAudit(weekStart: string, regenerate = false): Promise<AuditResponse> {
+        try {
+            const res = await api.post<AuditResponse>('/v1/entries/audit/weekly', { week_start: weekStart, regenerate });
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async getAvailableWeeks(limit = 20): Promise<AvailableWeek[]> {
+        try {
+            const res = await api.get<AvailableWeek[]>(`/v1/entries/audit/weekly/available-weeks`, {
+                params: { limit },
+            });
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
     },

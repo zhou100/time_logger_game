@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from openai import AsyncOpenAI
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select, func, or_, and_, case
+from sqlalchemy import select, func, or_, and_, case, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -272,10 +272,12 @@ async def submit_entry(
     await db.flush()
 
     # Invalidate cached audits for this local date (new entry may change breakdown)
+    # Invalidate both daily (keyed on exact date) and weekly (keyed on Monday)
+    weekly_monday = _current_week_start(entry_local_date)
     stale_result = await db.execute(
         select(AuditResult).where(
             AuditResult.user_id == current_user.id,
-            AuditResult.audit_date == entry_local_date,
+            AuditResult.audit_date.in_([entry_local_date, weekly_monday]),
             AuditResult.is_stale.is_(False),
         )
     )
@@ -630,9 +632,12 @@ async def update_entry(
                 await db.delete(c)
         await db.flush()
 
-    # Invalidate cached audits for both source and target dates. Moving an
-    # entry changes the old day's totals and the new day's totals.
-    audit_dates = {original_audit_date, entry.local_date or entry.created_at.date()}
+    # Invalidate cached audits for both source and target dates (daily + weekly).
+    # Moving an entry changes the old day's totals and the new day's totals.
+    entry_date = entry.local_date or entry.created_at.date()
+    audit_dates = {original_audit_date, entry_date,
+                   _current_week_start(original_audit_date),
+                   _current_week_start(entry_date)}
     stale_result = await db.execute(
         select(AuditResult).where(
             AuditResult.user_id == current_user.id,
@@ -719,11 +724,13 @@ async def reclassify_entry(
         )
 
     # Invalidate cached audits for this date (categories may have changed)
+    # Invalidate both daily (keyed on exact date) and weekly (keyed on Monday)
     audit_date = entry.local_date or entry.created_at.date()
+    weekly_monday = _current_week_start(audit_date)
     stale_result = await db.execute(
         select(AuditResult).where(
             AuditResult.user_id == current_user.id,
-            AuditResult.audit_date == audit_date,
+            AuditResult.audit_date.in_([audit_date, weekly_monday]),
             AuditResult.is_stale.is_(False),
         )
     )
@@ -807,22 +814,36 @@ async def generate_audit(
 
 class WeeklyAuditRequest(BaseModel):
     regenerate: bool = False
+    week_start: Optional[str] = None  # YYYY-MM-DD, auto-normalized to Monday
 
 
-def _current_week_start(today: "date") -> "date":
-    """Monday of the current calendar week."""
+def _current_week_start(today) -> "date":
+    """Monday of the calendar week containing *today*."""
+    from datetime import date as _date
+    if isinstance(today, str):
+        today = _date.fromisoformat(today)
     return today - timedelta(days=today.weekday())
 
 
 @router.get("/audit/weekly")
 async def get_weekly_audit(
+    week_start: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return cached weekly report for current calendar week, or 204 if none."""
+    """Return cached weekly report for a given week, or 204 if none."""
     today_utc = datetime.now(timezone.utc).date()
-    week_start = _current_week_start(today_utc)
-    cached = await _get_cached_audit(db, current_user.id, week_start, "weekly")
+    if week_start:
+        try:
+            from datetime import date as _date
+            target_monday = _current_week_start(_date.fromisoformat(week_start))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid week_start date format. Use YYYY-MM-DD.")
+        if target_monday > today_utc:
+            raise HTTPException(status_code=400, detail="Cannot query a future week.")
+    else:
+        target_monday = _current_week_start(today_utc)
+    cached = await _get_cached_audit(db, current_user.id, target_monday, "weekly")
     if cached is not None:
         return cached
     return Response(status_code=204)
@@ -840,13 +861,28 @@ async def generate_weekly_audit(
     Calendar-week aligned (Monday–Sunday). Produces both prose audit_text
     and structured report_json with 4 sections: time_breakdown, open_loops,
     recurring_themes, draft_status_update.
+
+    Accepts optional week_start (YYYY-MM-DD) to target a specific week.
+    Defaults to the current calendar week.
     """
     today_utc = datetime.now(timezone.utc).date()
 
-    # Calendar week: Monday of current week — used as the stable cache key
-    week_start_date = _current_week_start(today_utc)
+    # Determine target week
+    if body.week_start:
+        try:
+            from datetime import date as _date
+            week_start_date = _current_week_start(_date.fromisoformat(body.week_start))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid week_start date format. Use YYYY-MM-DD.")
+        if week_start_date > today_utc:
+            raise HTTPException(status_code=400, detail="Cannot generate report for a future week.")
+    else:
+        week_start_date = _current_week_start(today_utc)
 
-    # Check cache (keyed by week_start, not today)
+    # week_end: full 7 days for past weeks, up-to-today for current week
+    week_end_date = min(week_start_date + timedelta(days=6), today_utc)
+
+    # Check cache (keyed on Monday)
     if not body.regenerate:
         cached = await _get_cached_audit(db, current_user.id, week_start_date, "weekly")
         if cached is not None:
@@ -859,7 +895,7 @@ async def generate_weekly_audit(
         .where(
             Entry.user_id == current_user.id,
             func.coalesce(Entry.local_date, func.date(Entry.created_at)) >= week_start_date,
-            func.coalesce(Entry.local_date, func.date(Entry.created_at)) <= today_utc,
+            func.coalesce(Entry.local_date, func.date(Entry.created_at)) <= week_end_date,
             Job.status == JobStatus.DONE,
         )
         .order_by(Entry.created_at.asc())
@@ -872,7 +908,7 @@ async def generate_weekly_audit(
             audit_text=None, generated_at=None,
             message="Record more this week for a useful report. Need at least 3 entries.",
             week_start=week_start_date.isoformat(),
-            week_end=today_utc.isoformat(),
+            week_end=week_end_date.isoformat(),
         )
 
     all_classifications = [c for e in entries for c in e.classifications]
@@ -1106,10 +1142,81 @@ Write the letter now."""
         report_json=report_json,
         generated_at=now_iso,
         week_start=week_start_date.isoformat(),
-        week_end=today_utc.isoformat(),
-        days_covered=(today_utc - week_start_date).days + 1,
+        week_end=week_end_date.isoformat(),
+        days_covered=(week_end_date - week_start_date).days + 1,
         new_themes=new_theme_payloads,
     )
+
+
+class AvailableWeek(BaseModel):
+    week_start: str
+    week_end: str
+    entry_count: int
+    has_report: bool
+
+
+@router.get("/audit/weekly/available-weeks", response_model=List[AvailableWeek])
+async def get_available_weeks(
+    limit: int = Query(default=20, ge=1, le=52),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return calendar weeks with 3+ entries for the current user, newest first."""
+    today_utc = datetime.now(timezone.utc).date()
+
+    # Group entries by ISO week (Monday-based) using date_trunc, cast to date
+    week_col = cast(
+        func.date_trunc(
+            "week",
+            func.coalesce(Entry.local_date, func.date(Entry.created_at)),
+        ),
+        Date,
+    ).label("week_monday")
+
+    result = await db.execute(
+        select(
+            week_col,
+            func.count(Entry.id).label("cnt"),
+        )
+        .join(Job, Job.entry_id == Entry.id)
+        .where(
+            Entry.user_id == current_user.id,
+            Job.status == JobStatus.DONE,
+        )
+        .group_by(week_col)
+        .having(func.count(Entry.id) >= 3)
+        .order_by(week_col.desc())
+        .limit(limit)
+    )
+    week_rows = result.all()
+
+    if not week_rows:
+        return []
+
+    # Batch-check which weeks have a non-stale report
+    monday_dates = [row.week_monday.date() if hasattr(row.week_monday, 'date') else row.week_monday for row in week_rows]
+    report_result = await db.execute(
+        select(AuditResult.audit_date).where(
+            AuditResult.user_id == current_user.id,
+            AuditResult.audit_type == "weekly",
+            AuditResult.audit_date.in_(monday_dates),
+            AuditResult.is_stale.is_(False),
+            AuditResult.audit_text.isnot(None),
+        )
+    )
+    has_report_dates = {row[0] for row in report_result.all()}
+
+    weeks = []
+    for row in week_rows:
+        monday = row.week_monday.date() if hasattr(row.week_monday, 'date') else row.week_monday
+        week_end = min(monday + timedelta(days=6), today_utc)
+        weeks.append(AvailableWeek(
+            week_start=monday.isoformat(),
+            week_end=week_end.isoformat(),
+            entry_count=row.cnt,
+            has_report=monday in has_report_dates,
+        ))
+    return weeks
 
 
 class WeeklyAuditHistoryItem(BaseModel):
@@ -1143,9 +1250,8 @@ async def get_weekly_audit_history(
 
     items = []
     for a in audits:
-        # audit_date is now the Monday (week_start)
-        week_end = a.audit_date + timedelta(days=6)
-        week_label = f"{a.audit_date.strftime('%b %d')} – {week_end.strftime('%b %d')}"
+        # audit_date is now the Monday of the week (after migration)
+        week_label = f"Week of {a.audit_date.strftime('%b %d, %Y')}"
         breakdown = json.loads(a.breakdown_json) if a.breakdown_json else {}
         items.append(WeeklyAuditHistoryItem(
             audit_date=a.audit_date.isoformat(),
@@ -1491,12 +1597,13 @@ async def _get_cached_audit(
     days_covered = None
     report_json_parsed = None
     if audit_type == "weekly":
-        # audit_date is now the Monday (week_start), compute end as today or Sunday
-        week_start = cached.audit_date.isoformat()
+        # audit_date is now the Monday of the week (post-migration)
         today_utc = datetime.now(timezone.utc).date()
-        week_end_d = min(cached.audit_date + timedelta(days=6), today_utc)
+        week_start_d = cached.audit_date
+        week_end_d = min(week_start_d + timedelta(days=6), today_utc)
         week_end = week_end_d.isoformat()
-        days_covered = (week_end_d - cached.audit_date).days + 1
+        week_start = week_start_d.isoformat()
+        days_covered = (week_end_d - week_start_d).days + 1
         if cached.report_json:
             try:
                 report_json_parsed = json.loads(cached.report_json)

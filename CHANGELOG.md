@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2.0] - 2026-04-15
+
+### Added
+- Week selector dropdown on `/week` page lets you navigate to any past week with 3+ entries
+- New `GET /audit/weekly/available-weeks` endpoint returns qualifying weeks with entry counts
+- Weekly reports auto-generate on page load (lazy generation) instead of requiring manual click
+
+### Changed
+- `GET /audit/weekly` and `POST /audit/weekly` now accept `week_start` parameter to target any week
+- Weekly audit cache invalidation covers both daily and weekly keys when entries change
+
+### Fixed
+- `date_trunc` result cast to Date for reliable `has_report` join in available-weeks query
+
 ## [0.3.1.0] - 2026-04-13
 
 ### Changed
