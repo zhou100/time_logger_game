@@ -5,18 +5,15 @@ import {
     Button,
     CircularProgress,
     Container,
-    Divider,
     IconButton,
     MenuItem,
     Select,
     SelectChangeEvent,
     Typography,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { capturesApi, entriesApi } from '../services/api';
 import { AuditResponse, AvailableWeek, Capture, Theme } from '../types/api';
 import DayWeekTabs from '../components/DayWeekTabs';
@@ -186,7 +183,6 @@ const OpenLoops: React.FC<{
 
 /* ── Main page ─────────────────────────────────────────────────────────────── */
 const WeeklyReportPage: React.FC = () => {
-    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<AuditResponse | null>(null);
     const [error, setError] = useState<string | undefined>();
@@ -405,33 +401,6 @@ const WeeklyReportPage: React.FC = () => {
 
                 {/* ── Open Loops ──────────────────────────────────────── */}
                 <OpenLoops loops={openLoops} onDone={markLoopDone} onDismiss={dismissLoop} />
-
-                {/* ── Past Weeks entry ────────────────────────────────── */}
-                <Divider sx={{ my: 2, borderColor: `${palette.rule}60` }} />
-                <Box
-                    onClick={() => navigate('/weeks')}
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        py: 1.5,
-                        cursor: 'pointer',
-                        borderRadius: '4px',
-                        mx: -0.5,
-                        px: 0.5,
-                        WebkitTapHighlightColor: 'transparent',
-                        transition: 'background-color 0.1s',
-                        '&:active': { bgcolor: `${palette.rule}20` },
-                        '@media (hover: hover)': {
-                            '&:hover': { bgcolor: `${palette.rule}15` },
-                        },
-                    }}
-                >
-                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        Past weeks
-                    </Typography>
-                    <ChevronRightIcon sx={{ fontSize: 18, color: palette.textMuted, opacity: 0.5 }} />
-                </Box>
             </Box>
         </Container>
     );

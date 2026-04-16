@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3.0] - 2026-04-16
+
+### Added
+- Two-stage LLM pipeline for weekly reports with dedicated thinking (analysis) and writing (letter) stages
+- Lightweight validator stage checks the weekly letter for paragraph structure, required content, and groundedness against the analysis JSON; rewrites once if checks fail
+- Internal scoring rubric in Stage 1 (EARNING/LEARNING/RELAXING/FAMILY daily scoring, balance variance) and theme reuse rules (max 3 themes)
+
+### Changed
+- Stage 1 (thinking) uses `gpt-5.4` at temp 0.3 for sharper analysis
+- Stage 2 (writing) uses `gpt-5.4-mini` at temp 0.6 with explicit structure/style rules (4 paragraphs, plain language, mandatory content)
+- Weekly letter no longer enforces a 400-word cap; model is trusted to use the length the week warrants
+
+### Removed
+- Past Weeks navigation pages and `GET /audit/weekly/history` endpoint now that the week selector dropdown replaces them
+
 ## [0.3.2.0] - 2026-04-15
 
 ### Added
