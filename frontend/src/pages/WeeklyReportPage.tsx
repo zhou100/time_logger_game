@@ -35,6 +35,32 @@ const isCurrentWeek = (weekStart: string) => {
     return weekStart === monday.toISOString().slice(0, 10);
 };
 
+const splitParagraphs = (text: string) =>
+    text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+const CoachLetter: React.FC<{ text: string }> = ({ text }) => {
+    const paragraphs = splitParagraphs(text);
+
+    return (
+        <Box sx={{ mb: 3 }}>
+            {paragraphs.map((paragraph, index) => (
+                <Typography
+                    key={`${index}-${paragraph.slice(0, 24)}`}
+                    variant="body1"
+                    sx={{
+                        mb: index === paragraphs.length - 1 ? 0 : 1.5,
+                        lineHeight: 1.7,
+                        fontSize: '15px',
+                        color: palette.textPrimary,
+                    }}
+                >
+                    {paragraph}
+                </Typography>
+            ))}
+        </Box>
+    );
+};
+
 /* ── Category Breakdown bar ────────────────────────────────────────────────── */
 const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: Record<string, number> }> = ({ activity, captures }) => {
     const sorted = Object.entries(activity).sort(([, a], [, b]) => b - a);
@@ -297,7 +323,7 @@ const WeeklyReportPage: React.FC = () => {
     }, [selectedWeek, loadWeekReport]);
 
     const report = result?.report_json;
-    const keyInsight = report?.draft_status_update || result?.audit_text || null;
+    const coachLetter = result?.audit_text || report?.draft_status_update || null;
 
     return (
         <Container maxWidth="sm">
@@ -367,26 +393,14 @@ const WeeklyReportPage: React.FC = () => {
                     </Typography>
                 )}
 
-                {result?.message && !keyInsight && (
+                {result?.message && !coachLetter && (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                         {result.message}
                     </Typography>
                 )}
 
-                {/* ── Key Insight (top summary, no label) ───────────── */}
-                {keyInsight && (
-                    <Typography
-                        variant="body1"
-                        sx={{
-                            mb: 3,
-                            lineHeight: 1.7,
-                            fontSize: '15px',
-                            color: palette.textPrimary,
-                        }}
-                    >
-                        {keyInsight}
-                    </Typography>
-                )}
+                {/* ── AI Coach letter (top summary, no label) ───────── */}
+                {coachLetter && <CoachLetter text={coachLetter} />}
 
                 {/* ── Category Breakdown ──────────────────────────────── */}
                 {report && (
