@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
     Alert,
@@ -16,6 +16,7 @@ import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import UndoIcon from '@mui/icons-material/Undo';
 import { capturesApi, entriesApi } from '../services/api';
 import { AuditResponse, AvailableWeek, Capture, Theme } from '../types/api';
 import DayWeekTabs from '../components/DayWeekTabs';
@@ -35,6 +36,26 @@ const isCurrentWeek = (weekStart: string) => {
     const monday = new Date(today);
     monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
     return weekStart === monday.toISOString().slice(0, 10);
+};
+
+/** Add N days to a YYYY-MM-DD date (local), returning YYYY-MM-DD. */
+const addDays = (dateStr: string, days: number) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+};
+
+/** YYYY-MM-DD portion of an ISO timestamp interpreted in the user's local tz. */
+const isoToLocalDate = (iso: string) => {
+    const dt = new Date(iso);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
 };
 
 const splitParagraphs = (text: string) =>
@@ -109,60 +130,79 @@ const CategoryBreakdown: React.FC<{ activity: Record<string, number>; captures: 
     );
 };
 
-/* ── Recurring Themes (lightweight insight list) ──────────────────────────── */
-const RecurringThemes: React.FC<{ themes: Theme[]; onDismiss: (t: Theme) => void }> = ({ themes, onDismiss }) => {
+/* ── Recurring Themes teaser (hero quote + "N more") ──────────────────────── */
+const polarityColor = (p: string) =>
+    p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.textMuted;
+
+const RecurringThemesTeaser: React.FC<{ themes: Theme[] }> = ({ themes }) => {
     if (themes.length === 0) return null;
 
-    const polarityColor = (p: string) =>
-        p === 'positive' ? palette.success : p === 'negative' ? palette.error : palette.textMuted;
+    const hero = themes[0];
+    const moreCount = themes.length - 1;
+    const heroQuote = hero.description?.trim() || hero.title;
 
     return (
-        <Box sx={{ mb: 3 }}>
-            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                Recurring Themes
-            </Typography>
-            {themes.slice(0, 8).map((t) => (
+        <Box
+            component={RouterLink}
+            to="/themes"
+            aria-label="Open recurring themes"
+            sx={{
+                display: 'block',
+                mb: 3,
+                p: { xs: 2, md: 2.5 },
+                border: `1px solid ${palette.rule}`,
+                borderRadius: '12px',
+                bgcolor: 'background.paper',
+                textDecoration: 'none',
+                color: palette.textPrimary,
+                transition: 'border-color 0.15s ease',
+                '&:hover': { borderColor: palette.textMuted },
+            }}
+        >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
                 <Box
-                    key={t.id}
                     sx={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 1,
-                        py: 1,
-                        borderBottom: `1px solid ${palette.rule}40`,
-                        '&:last-child': { borderBottom: 'none' },
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        bgcolor: polarityColor(hero.polarity),
+                        flexShrink: 0,
                     }}
-                >
-                    <Box
-                        sx={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: '50%',
-                            bgcolor: polarityColor(t.polarity),
-                            flexShrink: 0,
-                            mt: '7px',
-                        }}
-                    />
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.4 }}>
-                            {t.title}
-                        </Typography>
-                        {t.description && (
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, display: 'block' }}>
-                                {t.description}
-                            </Typography>
-                        )}
-                    </Box>
-                    <IconButton
-                        size="small"
-                        onClick={() => onDismiss(t)}
-                        sx={{ p: 0.25, flexShrink: 0, color: palette.textMuted, opacity: 0.35, '&:hover': { opacity: 0.8 } }}
-                        aria-label="dismiss theme"
-                    >
-                        <CloseIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                </Box>
-            ))}
+                />
+                <Typography variant="overline" color="text.secondary">
+                    Recurring Themes
+                </Typography>
+            </Box>
+            <Typography
+                sx={{
+                    fontFamily: '"DM Serif Display", "Noto Serif SC", serif',
+                    fontStyle: 'italic',
+                    fontSize: { xs: '1.15rem', md: '1.3rem' },
+                    lineHeight: 1.4,
+                    color: palette.textPrimary,
+                    position: 'relative',
+                    pl: 2,
+                    '&::before': {
+                        content: '"\\201C"',
+                        position: 'absolute',
+                        left: -2,
+                        top: -8,
+                        fontSize: '2.2rem',
+                        color: palette.accentSoft,
+                        lineHeight: 1,
+                    },
+                }}
+            >
+                {heroQuote}
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.25 }}>
+                <Typography variant="caption" color="text.secondary">
+                    {moreCount > 0 ? `+${moreCount} more thread${moreCount > 1 ? 's' : ''}` : 'See all threads'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    Open &rsaquo;
+                </Typography>
+            </Box>
         </Box>
     );
 };
@@ -209,6 +249,68 @@ const OpenLoops: React.FC<{
     );
 };
 
+/* ── Closed this week ─────────────────────────────────────────────────────── */
+const ClosedLoops: React.FC<{
+    loops: Capture[];
+    onUndo: (id: string) => void;
+}> = ({ loops, onUndo }) => {
+    if (loops.length === 0) return null;
+
+    return (
+        <Box sx={{ mb: 3 }}>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Closed this week · {loops.length}
+            </Typography>
+            {loops.map((c) => {
+                const isDone = c.status === 'done';
+                return (
+                    <Box
+                        key={c.id}
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            py: 0.75,
+                            borderBottom: `1px solid ${palette.rule}30`,
+                            '&:last-child': { borderBottom: 'none' },
+                        }}
+                    >
+                        <CheckIcon
+                            sx={{
+                                fontSize: 14,
+                                flexShrink: 0,
+                                color: isDone ? palette.success : palette.textMuted,
+                                opacity: isDone ? 0.85 : 0.4,
+                            }}
+                        />
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                flex: 1,
+                                minWidth: 0,
+                                lineHeight: 1.4,
+                                color: palette.textMuted,
+                                textDecoration: 'line-through',
+                                textDecorationColor: `${palette.textMuted}80`,
+                            }}
+                        >
+                            {c.display_text || '(no text)'}
+                        </Typography>
+                        <IconButton
+                            size="small"
+                            onClick={() => onUndo(c.id)}
+                            aria-label="reopen loop"
+                            sx={{ color: palette.textMuted, opacity: 0.4, p: 0.5, '&:hover': { opacity: 0.85 } }}
+                        >
+                            <UndoIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                    </Box>
+                );
+            })}
+        </Box>
+    );
+};
+
 /* ── Main page ─────────────────────────────────────────────────────────────── */
 const WeeklyReportPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
@@ -228,17 +330,42 @@ const WeeklyReportPage: React.FC = () => {
     }, []);
     useEffect(() => { loadOpenLoops(); }, [loadOpenLoops]);
 
+    // Closed loops across all time — filtered to the selected week via resolved_at below.
+    const [closedTodos, setClosedTodos] = useState<Capture[]>([]);
+    const loadClosedTodos = useCallback(() => {
+        capturesApi.list({ category: 'TODO', status: 'all' })
+            .then((rows) => setClosedTodos(rows.filter((c) => c.status !== 'open' && c.resolved_at)))
+            .catch(() => {});
+    }, []);
+    useEffect(() => { loadClosedTodos(); }, [loadClosedTodos]);
+
+    // Reflections — used to show a pulled-quote gem preview on the Thought Gems card.
+    const [reflections, setReflections] = useState<Capture[]>([]);
+    useEffect(() => {
+        capturesApi.list({ category: 'REFLECTION', status: 'all' }).then(setReflections).catch(() => {});
+    }, []);
+
     const markLoopDone = useCallback(async (id: string) => {
         try {
-            await capturesApi.patch(id, { status: 'done' });
+            const updated = await capturesApi.patch(id, { status: 'done' });
             setOpenLoops((prev) => prev.filter((c) => c.id !== id));
+            setClosedTodos((prev) => [updated, ...prev.filter((c) => c.id !== id)]);
         } catch { /* noop */ }
     }, []);
 
     const dismissLoop = useCallback(async (id: string) => {
         try {
-            await capturesApi.patch(id, { status: 'dismissed' });
+            const updated = await capturesApi.patch(id, { status: 'dismissed' });
             setOpenLoops((prev) => prev.filter((c) => c.id !== id));
+            setClosedTodos((prev) => [updated, ...prev.filter((c) => c.id !== id)]);
+        } catch { /* noop */ }
+    }, []);
+
+    const undoLoop = useCallback(async (id: string) => {
+        try {
+            const updated = await capturesApi.patch(id, { status: 'open' });
+            setClosedTodos((prev) => prev.filter((c) => c.id !== id));
+            setOpenLoops((prev) => [updated, ...prev.filter((c) => c.id !== id)]);
         } catch { /* noop */ }
     }, []);
 
@@ -248,13 +375,6 @@ const WeeklyReportPage: React.FC = () => {
         entriesApi.listThemes().then(setThemes).catch(() => {});
     }, []);
     useEffect(() => { loadThemes(); }, [loadThemes]);
-
-    const dismissTheme = useCallback(async (theme: Theme) => {
-        try {
-            await entriesApi.updateTheme(theme.id, { status: 'dismissed' });
-            setThemes((prev) => prev.filter((t) => t.id !== theme.id));
-        } catch { /* noop */ }
-    }, []);
 
     // ── Load week report (GET cache first, POST generate if needed) ──────────
     const loadWeekReport = useCallback(async (weekStart: string, forceRegenerate = false) => {
@@ -326,6 +446,27 @@ const WeeklyReportPage: React.FC = () => {
 
     const report = result?.report_json;
     const coachLetter = result?.audit_text || report?.draft_status_update || null;
+
+    const weekEndStr = selectedWeek ? addDays(selectedWeek, 6) : null;
+
+    const closedThisWeek = useMemo(() => {
+        if (!selectedWeek || !weekEndStr) return [];
+        return closedTodos
+            .filter((c) => {
+                if (!c.resolved_at) return false;
+                const d = isoToLocalDate(c.resolved_at);
+                return d >= selectedWeek && d <= weekEndStr;
+            })
+            .sort((a, b) => (b.resolved_at! > a.resolved_at! ? 1 : -1));
+    }, [closedTodos, selectedWeek, weekEndStr]);
+
+    const gemPreview = useMemo(() => {
+        if (!selectedWeek || !weekEndStr) return null;
+        const inWeek = reflections
+            .filter((c) => c.source_date && c.source_date >= selectedWeek && c.source_date <= weekEndStr)
+            .sort((a, b) => (b.source_date! > a.source_date! ? 1 : -1));
+        return { top: inWeek[0] ?? null, count: inWeek.length };
+    }, [reflections, selectedWeek, weekEndStr]);
 
     return (
         <Container maxWidth="sm">
@@ -436,46 +577,82 @@ const WeeklyReportPage: React.FC = () => {
                     />
                 )}
 
-                {/* ── Thought Gems (link into /thoughts) ─────────────── */}
-                {selectedWeek && (
+                {/* ── Thought Gems (pulled-quote preview) ───────────── */}
+                {selectedWeek && gemPreview && (
                     <Box
                         component={RouterLink}
                         to={`/thoughts?week_start=${encodeURIComponent(selectedWeek)}`}
                         aria-label="Thought Gems"
                         sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
+                            display: 'block',
                             mb: 3,
-                            p: 1.5,
+                            p: { xs: 2, md: 2.5 },
                             border: `1px solid ${palette.rule}`,
-                            borderRadius: '10px',
+                            borderRadius: '12px',
                             bgcolor: 'background.paper',
                             textDecoration: 'none',
                             color: palette.textPrimary,
+                            transition: 'border-color 0.15s ease',
                             '&:hover': { borderColor: palette.textMuted },
                         }}
                     >
-                        <LocalFloristIcon sx={{ fontSize: 18, color: palette.accent, flexShrink: 0 }} />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+                            <LocalFloristIcon sx={{ fontSize: 14, color: palette.accent }} />
+                            <Typography variant="overline" color="text.secondary">
                                 Thought Gems
                             </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                Reflections worth rereading from this week.
-                            </Typography>
                         </Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                            Open &rsaquo;
-                        </Typography>
+                        {gemPreview.top ? (
+                            <>
+                                <Typography
+                                    sx={{
+                                        fontFamily: '"DM Serif Display", "Noto Serif SC", serif',
+                                        fontStyle: 'italic',
+                                        fontSize: { xs: '1.15rem', md: '1.3rem' },
+                                        lineHeight: 1.4,
+                                        color: palette.textPrimary,
+                                        position: 'relative',
+                                        pl: 2,
+                                        '&::before': {
+                                            content: '"\\201C"',
+                                            position: 'absolute',
+                                            left: -2,
+                                            top: -8,
+                                            fontSize: '2.2rem',
+                                            color: palette.accentSoft,
+                                            lineHeight: 1,
+                                        },
+                                    }}
+                                >
+                                    {gemPreview.top.display_text || '(no text)'}
+                                </Typography>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.25 }}>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {gemPreview.count > 1
+                                            ? `+${gemPreview.count - 1} more gem${gemPreview.count - 1 > 1 ? 's' : ''}`
+                                            : 'See all reflections'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Open &rsaquo;
+                                    </Typography>
+                                </Box>
+                            </>
+                        ) : (
+                            <Typography variant="body2" color="text.secondary">
+                                No reflections this week yet.
+                            </Typography>
+                        )}
                     </Box>
                 )}
 
-                {/* ── Recurring Themes ────────────────────────────────── */}
-                <RecurringThemes themes={themes} onDismiss={dismissTheme} />
+                {/* ── Recurring Themes teaser ─────────────────────────── */}
+                <RecurringThemesTeaser themes={themes} />
 
                 {/* ── Open Loops ──────────────────────────────────────── */}
                 <OpenLoops loops={openLoops} onDone={markLoopDone} onDismiss={dismissLoop} />
+
+                {/* ── Closed this week ────────────────────────────────── */}
+                <ClosedLoops loops={closedThisWeek} onUndo={undoLoop} />
             </Box>
         </Container>
     );

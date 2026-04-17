@@ -11,6 +11,7 @@ import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import WeeklyReportPage from './pages/WeeklyReportPage';
 import ThoughtGardenPage from './pages/ThoughtGardenPage';
+import ThemesPage from './pages/ThemesPage';
 import NavBar from './components/NavBar';
 import InstallBanner from './components/InstallBanner';
 import { Box } from '@mui/material';
@@ -43,6 +44,7 @@ function App() {
                 <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
                 <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
                 <Route path="/thoughts" element={<ProtectedRoute><ThoughtGardenPage /></ProtectedRoute>} />
+                <Route path="/themes" element={<ProtectedRoute><ThemesPage /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>

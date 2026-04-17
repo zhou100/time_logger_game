@@ -27,6 +27,7 @@ const mockReflections: Capture[] = [
     edited: false,
     source_date: '2026-04-14',
     classified_at: '2026-04-14T09:00:00Z',
+    resolved_at: null,
   },
   {
     id: '2',
@@ -37,6 +38,7 @@ const mockReflections: Capture[] = [
     edited: false,
     source_date: '2026-04-15',
     classified_at: '2026-04-15T10:00:00Z',
+    resolved_at: null,
   },
   {
     id: '3',
@@ -47,6 +49,7 @@ const mockReflections: Capture[] = [
     edited: false,
     source_date: '2026-04-07',
     classified_at: '2026-04-07T09:00:00Z',
+    resolved_at: null,
   },
   {
     id: '4',
@@ -57,6 +60,7 @@ const mockReflections: Capture[] = [
     edited: false,
     source_date: null,
     classified_at: '2026-04-10T09:00:00Z',
+    resolved_at: null,
   },
 ];
 
@@ -156,6 +160,7 @@ describe('ThoughtGardenPage', () => {
       edited: false,
       source_date: '2026-04-13',
       classified_at: '2026-04-13T09:00:00Z',
+    resolved_at: null,
     };
     (capturesApi.list as jest.Mock).mockResolvedValue([monday]);
     renderPage('/thoughts?week_start=2026-04-13');
@@ -173,6 +178,7 @@ describe('ThoughtGardenPage', () => {
       edited: false,
       source_date: '2026-04-19',
       classified_at: '2026-04-19T09:00:00Z',
+    resolved_at: null,
     };
     (capturesApi.list as jest.Mock).mockResolvedValue([sunday]);
     renderPage('/thoughts?week_start=2026-04-13');
@@ -190,6 +196,7 @@ describe('ThoughtGardenPage', () => {
       edited: false,
       source_date: '2026-04-12',
       classified_at: '2026-04-12T09:00:00Z',
+    resolved_at: null,
     };
     (capturesApi.list as jest.Mock).mockResolvedValue([priorSunday]);
     renderPage('/thoughts?week_start=2026-04-13');
@@ -214,6 +221,7 @@ describe('ThoughtGardenPage', () => {
       edited: false,
       source_date: '2026-04-20',
       classified_at: '2026-04-20T09:00:00Z',
+    resolved_at: null,
     };
     (capturesApi.list as jest.Mock).mockResolvedValue([nextMon]);
     renderPage('/thoughts?week_start=2026-04-13');
