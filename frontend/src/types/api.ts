@@ -155,6 +155,7 @@ export interface Capture {
     edited: boolean;
     source_date: string | null;
     classified_at: string | null;
+    resolved_at: string | null;
 }
 
 // ── Error ─────────────────────────────────────────────────────────────────────
