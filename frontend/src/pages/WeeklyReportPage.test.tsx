@@ -119,18 +119,24 @@ describe('WeeklyReportPage', () => {
   });
 
   it('keeps themes, open loops, and coach letter visible alongside the Thought Gems card', async () => {
-    (capturesApi.list as jest.Mock).mockResolvedValue([
-      {
-        id: 'loop-1',
-        entry_id: 'e-loop-1',
-        category: 'TODO',
-        display_text: 'ship weekly letter validator',
-        status: 'open',
-        edited: false,
-        source_date: '2026-04-10',
-        classified_at: '2026-04-10T09:00:00Z',
-      },
-    ]);
+    (capturesApi.list as jest.Mock).mockImplementation((opts?: { category?: string; status?: string }) => {
+      if (opts?.category === 'TODO' && opts?.status === 'open') {
+        return Promise.resolve([
+          {
+            id: 'loop-1',
+            entry_id: 'e-loop-1',
+            category: 'TODO',
+            display_text: 'ship weekly letter validator',
+            status: 'open',
+            edited: false,
+            source_date: '2026-04-10',
+            classified_at: '2026-04-10T09:00:00Z',
+            resolved_at: null,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
     (entriesApi.listThemes as jest.Mock).mockResolvedValue([
       {
         id: 'theme-1',
@@ -175,7 +181,9 @@ describe('WeeklyReportPage', () => {
     expect(
       await screen.findByText(/grounded weekly letter that survives regressions/i)
     ).toBeInTheDocument();
-    expect(screen.getByText('deep-work mornings')).toBeInTheDocument();
+    // Hero theme teaser shows the description as a pulled quote; full title lives on /themes.
+    expect(screen.getByText('protect the first block before admin')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open recurring themes/i })).toHaveAttribute('href', '/themes');
     expect(screen.getByText('ship weekly letter validator')).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: /thought gems/i })
