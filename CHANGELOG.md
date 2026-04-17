@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6.0] - 2026-04-16
+
+### Added
+- **Closed this week** on the weekly report: resolved TODOs from the selected week render as strikethrough rows with an undo button, giving users a visible sense of progress alongside open loops.
+- `resolved_at` timestamp on captures (new Alembic migration `o4p5q6r7s8t9`): stamped when a capture transitions out of `open` and cleared on reopen. Backfilled from `classified_at` for existing non-open rows so historical captures light up the "Closed this week" section immediately.
+- Dedicated `/themes` subpage showing the full recurring-themes list (polarity dot, title, description, occurrence count, dismiss button) with a back link to `/week`.
+
+### Changed
+- Weekly report's Recurring Themes shrunk to a hero teaser: one pulled quote from the top theme plus "+N more threads" linking to `/themes`. Frees screen real estate without hiding the signal.
+- Thought Gems card now previews the top reflection from the selected week as a DM Serif Display pulled quote with opening quote mark and footer count, replacing the generic label. Still deep-links to `/thoughts?week_start=<week>`.
+- `PATCH /api/v1/captures/{id}` stamps `resolved_at` on status transition out of `open` and clears it on reopen; `CaptureItem` response now includes `resolved_at`.
+
 ## [0.3.5.1] - 2026-04-16
 
 ### Fixed
