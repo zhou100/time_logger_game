@@ -8,6 +8,7 @@ column on classifications directly.
 """
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -41,6 +42,7 @@ class CaptureItem(BaseModel):
     edited: bool                     # true iff edited_text is not null
     source_date: Optional[str]       # YYYY-MM-DD of source entry's local_date
     classified_at: Optional[str]
+    resolved_at: Optional[str]       # ISO timestamp; null iff status == open
 
 
 class CapturePatchRequest(BaseModel):
@@ -60,6 +62,7 @@ def _to_item(c: EntryClassification, entry: Entry) -> CaptureItem:
         edited=c.edited_text is not None,
         source_date=entry.local_date.isoformat() if entry.local_date else None,
         classified_at=c.classified_at.isoformat() if c.classified_at else None,
+        resolved_at=c.resolved_at.isoformat() if c.resolved_at else None,
     )
 
 
@@ -147,6 +150,10 @@ async def patch_capture(
     capture, entry = row
 
     if body.status is not None:
+        if body.status != capture.status:
+            capture.resolved_at = (
+                datetime.now(timezone.utc) if body.status != "open" else None
+            )
         capture.status = body.status
     if body.edited_text is not None:
         # Empty string clears the edit; None is a no-op (handled above).

@@ -36,6 +36,8 @@ class EntryClassification(Base):
     # User-refined text that overrides extracted_text for display (null = use extracted_text)
     edited_text = Column(Text, nullable=True)
     classified_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Stamped when status transitions out of "open"; cleared if reopened. Drives "closed this week".
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     entry = relationship("Entry", back_populates="classifications")
 

@@ -33,6 +33,7 @@ def _make_capture(category="TODO", text="buy milk", status="open", edited=None, 
     c.edited_text = edited
     c.status = status
     c.classified_at = datetime.now(timezone.utc)
+    c.resolved_at = None if status == "open" else datetime.now(timezone.utc)
     c.user_override = False
     return c
 
