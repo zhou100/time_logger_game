@@ -15,6 +15,8 @@ import {
     CaptureCategory,
     CaptureStatus,
     Theme,
+    CoachingPreferences,
+    CoachingPreferencesPatch,
 } from '../types/api';
 import AuthService from './auth';
 import Logger from '../utils/logger';
@@ -312,6 +314,62 @@ export const entriesApi = {
             const res = await api.get<string[]>('/v1/entries/active-dates');
             return res.data;
         } catch (e) { throw handleError(e as AxiosError); }
+    },
+};
+
+// ── Coaching preferences API ──────────────────────────────────────────────────
+
+/**
+ * Validation error from PATCH /users/me/preferences.
+ * `fields` maps field name → message so the form can show inline hints.
+ */
+export class PreferencesValidationError extends Error {
+    fields: Record<string, string>;
+    constructor(fields: Record<string, string>, generalMessage = 'Validation error') {
+        super(generalMessage);
+        this.name = 'PreferencesValidationError';
+        this.fields = fields;
+    }
+}
+
+function _extractFieldErrors(detail: unknown): Record<string, string> {
+    const fields: Record<string, string> = {};
+    if (Array.isArray(detail)) {
+        for (const item of detail) {
+            if (item && typeof item === 'object' && 'loc' in item && 'msg' in item) {
+                const loc = (item as any).loc as unknown[];
+                // FastAPI loc is ['body', 'field_name', ...]; take first non-'body' segment
+                const field = loc.find(
+                    (l) => typeof l === 'string' && l !== 'body'
+                ) as string | undefined;
+                if (field) fields[field] = String((item as any).msg);
+            }
+        }
+    }
+    return fields;
+}
+
+export const preferencesApi = {
+    async get(): Promise<CoachingPreferences> {
+        try {
+            const res = await api.get<CoachingPreferences>('/v1/users/me/preferences');
+            return res.data;
+        } catch (e) { throw handleError(e as AxiosError); }
+    },
+
+    async patch(body: CoachingPreferencesPatch): Promise<CoachingPreferences> {
+        try {
+            const res = await api.patch<CoachingPreferences>('/v1/users/me/preferences', body);
+            return res.data;
+        } catch (err) {
+            const ax = err as AxiosError;
+            if (ax.response?.status === 422) {
+                const data = ax.response?.data as any;
+                const fields = _extractFieldErrors(data?.detail);
+                throw new PreferencesValidationError(fields, 'Some preferences are invalid.');
+            }
+            throw handleError(ax);
+        }
     },
 };
 

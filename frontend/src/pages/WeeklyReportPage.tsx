@@ -566,6 +566,34 @@ const WeeklyReportPage: React.FC = () => {
                     </Typography>
                 )}
 
+                {/* ── Stale-prefs banner (coaching prefs changed since cache) ── */}
+                {result?.prefs_stale && coachLetter && (
+                    <Alert
+                        severity="info"
+                        sx={{ mb: 2 }}
+                        action={
+                            <Button
+                                color="inherit"
+                                size="small"
+                                onClick={handleRegenerate}
+                                disabled={loading}
+                            >
+                                Regenerate
+                            </Button>
+                        }
+                    >
+                        Your coaching preferences changed after this report was generated.{' '}
+                        <Box
+                            component={RouterLink}
+                            to="/settings"
+                            sx={{ color: 'inherit', textDecoration: 'underline' }}
+                        >
+                            Open settings
+                        </Box>{' '}
+                        or regenerate to apply them.
+                    </Alert>
+                )}
+
                 {/* ── AI Coach letter (top summary, no label) ───────── */}
                 {coachLetter && <CoachLetter text={coachLetter} />}
 
