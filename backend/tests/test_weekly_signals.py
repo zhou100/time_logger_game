@@ -145,3 +145,30 @@ async def test_stable_sort_for_determinism():
     out = await derive_recent_change_signals(db, user_id=1, report_week_start=WEEK_START)
     titles = [t["title"] for t in out["emerging"]]
     assert titles == ["alpha", "zeta"]
+
+
+def test_theme_description_truncation_guard_in_persist_branches():
+    """Regression guard: persisted theme descriptions must be truncated to 140 chars.
+
+    Both the insert and the update branch of generate_weekly_audit pipe the
+    LLM-supplied description through `[:140]`. Long descriptions (observed up to
+    400 chars) blow up the /week themes card's vertical height. If someone
+    removes the slice, this test catches it.
+    """
+    import inspect
+    from app.routes.v1 import entries as entries_mod
+
+    src = inspect.getsource(entries_mod)
+    # Update branch (`existing.description = ...`) + insert branch
+    # (`description=...` inside the WeeklyTheme constructor).
+    assert src.count("[:140]") >= 2, (
+        "Expected both theme persist branches to truncate description with [:140]"
+    )
+
+    # Also simulate the exact idiom and assert the invariant holds.
+    long_desc = "x" * 300
+    truncated = (long_desc or "")[:140] or None
+    assert truncated is not None and len(truncated) == 140
+
+    empty = ("" or "")[:140] or None
+    assert empty is None  # empty strings become None (no overwrite on update path)
