@@ -61,9 +61,42 @@ const isoToLocalDate = (iso: string) => {
 const splitParagraphs = (text: string) =>
     text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
 
-const CoachLetter: React.FC<{ text: string }> = ({ text }) => {
-    const paragraphs = splitParagraphs(text);
+const countBulletLines = (text: string) =>
+    (text.match(/^\s*[-*]\s+/gm) || []).length;
 
+const splitBullets = (text: string): string[] =>
+    text
+        .split(/\n/)
+        .map((l) => l.replace(/^\s*[-*]\s+/, '').trim())
+        .filter(Boolean);
+
+const CoachLetter: React.FC<{ text: string }> = ({ text }) => {
+    const isBulletFormat = countBulletLines(text) >= 2;
+
+    if (isBulletFormat) {
+        const bullets = splitBullets(text);
+        return (
+            <Box component="ul" sx={{ mb: 3, pl: 2.5, my: 0 }}>
+                {bullets.map((b, i) => (
+                    <Typography
+                        key={`${i}-${b.slice(0, 24)}`}
+                        component="li"
+                        variant="body1"
+                        sx={{
+                            mb: i === bullets.length - 1 ? 0 : 1,
+                            lineHeight: 1.7,
+                            fontSize: '15px',
+                            color: palette.textPrimary,
+                        }}
+                    >
+                        {b}
+                    </Typography>
+                ))}
+            </Box>
+        );
+    }
+
+    const paragraphs = splitParagraphs(text);
     return (
         <Box sx={{ mb: 3 }}>
             {paragraphs.map((paragraph, index) => (
@@ -151,6 +184,7 @@ const RecurringThemesTeaser: React.FC<{ themes: Theme[] }> = ({ themes }) => {
                 mb: 3,
                 p: { xs: 2, md: 2.5 },
                 border: `1px solid ${palette.rule}`,
+                borderLeft: `3px solid ${polarityColor(hero.polarity)}`,
                 borderRadius: '12px',
                 bgcolor: 'background.paper',
                 textDecoration: 'none',
@@ -159,38 +193,17 @@ const RecurringThemesTeaser: React.FC<{ themes: Theme[] }> = ({ themes }) => {
                 '&:hover': { borderColor: palette.textMuted },
             }}
         >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
-                <Box
-                    sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: polarityColor(hero.polarity),
-                        flexShrink: 0,
-                    }}
-                />
-                <Typography variant="overline" color="text.secondary">
-                    Recurring Themes
-                </Typography>
-            </Box>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Recurring Themes
+            </Typography>
             <Typography
+                variant="body1"
                 sx={{
-                    fontFamily: '"DM Serif Display", "Noto Serif SC", serif',
                     fontStyle: 'italic',
-                    fontSize: { xs: '1.15rem', md: '1.3rem' },
-                    lineHeight: 1.4,
+                    fontWeight: 400,
+                    fontSize: '15px',
+                    lineHeight: 1.7,
                     color: palette.textPrimary,
-                    position: 'relative',
-                    pl: 2,
-                    '&::before': {
-                        content: '"\\201C"',
-                        position: 'absolute',
-                        left: -2,
-                        top: -8,
-                        fontSize: '2.2rem',
-                        color: palette.accentSoft,
-                        lineHeight: 1,
-                    },
                 }}
             >
                 {heroQuote}
@@ -616,6 +629,7 @@ const WeeklyReportPage: React.FC = () => {
                             mb: 3,
                             p: { xs: 2, md: 2.5 },
                             border: `1px solid ${palette.rule}`,
+                            borderLeft: `3px solid ${palette.accentSoft}`,
                             borderRadius: '12px',
                             bgcolor: 'background.paper',
                             textDecoration: 'none',
@@ -624,7 +638,7 @@ const WeeklyReportPage: React.FC = () => {
                             '&:hover': { borderColor: palette.textMuted },
                         }}
                     >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
                             <LocalFloristIcon sx={{ fontSize: 14, color: palette.accent }} />
                             <Typography variant="overline" color="text.secondary">
                                 Thought Gems
@@ -633,23 +647,13 @@ const WeeklyReportPage: React.FC = () => {
                         {gemPreview.top ? (
                             <>
                                 <Typography
+                                    variant="body1"
                                     sx={{
-                                        fontFamily: '"DM Serif Display", "Noto Serif SC", serif',
                                         fontStyle: 'italic',
-                                        fontSize: { xs: '1.15rem', md: '1.3rem' },
-                                        lineHeight: 1.4,
+                                        fontWeight: 400,
+                                        fontSize: '15px',
+                                        lineHeight: 1.7,
                                         color: palette.textPrimary,
-                                        position: 'relative',
-                                        pl: 2,
-                                        '&::before': {
-                                            content: '"\\201C"',
-                                            position: 'absolute',
-                                            left: -2,
-                                            top: -8,
-                                            fontSize: '2.2rem',
-                                            color: palette.accentSoft,
-                                            lineHeight: 1,
-                                        },
                                     }}
                                 >
                                     {gemPreview.top.display_text || '(no text)'}
