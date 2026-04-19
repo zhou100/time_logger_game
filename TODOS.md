@@ -137,7 +137,34 @@
 
 ---
 
+### "What We Noticed About You" Read-Only Card
+**What:** Render a small card on `/week` (or settings) showing the user's top 3 active themes + recent-change signals (emerging / fading / new friction) + current coaching preferences. Read-only first; editable later.
+**Why:** Trust signal — lets a user see what the system "knows" about them, without building a full personality.md surface. Cheap once the personality-aware weekly prompt (see below) is in production.
+**Pros:** Reuses everything from the personality-aware weekly prompt (Approach B from `ceo-plans/2026-04-10-personality-md-direction.md`). No new storage. Concrete answer to "what does it know about me?".
+**Cons:** New surface on `/week` could erode the voice-first religion if it grows beyond a small card. Keep tiny or skip.
+**Trigger to revisit:** after personality-aware weekly prompt has been running for 2+ weeks AND you (or a real user) find yourself asking "what does it know about me?".
+**Effort:** M (human: ~2-3 days / CC: ~1-2 hours) — pure read view over `weekly_themes` + `coaching_preferences`.
+**Priority:** P3
+**Context:** Deferred from personality.md CEO review (2026-04-17). Approach C in that review. Don't pre-build a trust UI before the underlying mechanism has earned trust.
+
+---
+
+### Pause Personalization Toggle
+**What:** Add a single boolean to `coaching_preferences` (e.g., `personalization_paused`). When true, the weekly prompt skips injecting prefs + recent-change signals (themes still flow through as today). Stored prefs are not deleted.
+**Why:** Trust escape hatch if the personalized weekly version ever feels off. Cheaper than per-user opt-out flows once you have multiple real users.
+**Pros:** XS effort. Doesn't lose prefs when toggled. Maps cleanly to the same form section that hosts the prefs.
+**Cons:** YAGNI for solo + early users — env-var kill switch is enough today.
+**Trigger to revisit:** when you onboard a second real user, OR if the personalized weekly ever feels off and you reach for a toggle that doesn't exist.
+**Effort:** XS (human: ~30 min / CC: ~10 min) — one bool in JSONB, one checkbox, one prompt branch.
+**Priority:** P3
+**Context:** Deferred from personality.md CEO review (2026-04-17). Solo + one user → env-var kill switch beats a UI toggle.
+
+---
+
 ## Completed
+
+### ~~Personality.md v1 (coaching preferences)~~ — v0.3.7.0 (2026-04-18)
+Per-user `coaching_preferences` JSONB on `users` (Alembic `p5q6r7s8t9u0`): tone, pacing, language_lock, avoid_topics. Strict write validation (NFKC + zero-width strip + EN/ZH prompt-injection blocklist + 60-char/10-topic caps); forgiving read normalizer (unknown enums → field defaults; malformed shape → full defaults). `GET`/`PATCH /api/v1/users/me/preferences` with omit/null/value PATCH semantics. New `/settings` page with selectors + chip editor + per-field 422 helper text + Reset. Weekly audit Stage-1 + Stage-2 inject prefs and recent-change signals (`emerging` / `fading` / `new_friction` from `weekly_signals.py`, computed relative to `week_start`). `language_lock=zh|en` hard-overrides Stage-2 detection; avoid-topics downgrade prescriptive advice. `prefs_stale` banner on `/week` with Regenerate + deep link. Server-side `applied_prefs` echo. `COACHING_PERSONALIZATION_ENABLED` env-var kill switch (default true). 70 backend + 20 frontend tests; 50/50 frontend suite green, tsc clean.
 
 ### ~~Thought Garden v1 (/thoughts)~~ — v0.3.5.0 (2026-04-16)
 New `/thoughts` page that shows this week's REFLECTIONs as "Gems" and prior 3 weeks as grouped "Recent Reflections". `?week_start=YYYY-MM-DD` deep-links. Thought Gems card on `/week` binds to the selected week. 13 frontend tests cover URL handling, Monday-boundary filtering, null-safety, and source-day links. Zero backend changes; reuses `capturesApi.list({ category: 'REFLECTION' })`.
