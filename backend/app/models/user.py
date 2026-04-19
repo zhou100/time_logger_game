@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, select
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -14,6 +15,10 @@ class User(Base):
     auth_provider = Column(String(20), default="email")  # "email" | "google" | "supabase"
     # Supabase Auth user UUID — set when using Supabase Auth
     supabase_id = Column(String, unique=True, nullable=True, index=True)
+
+    # Coaching personalization (used in weekly audit prompt). NULL == defaults.
+    coaching_preferences = Column(JSONB, nullable=True)
+    coaching_preferences_updated_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     entries = relationship("Entry", back_populates="user", cascade="all, delete-orphan")
