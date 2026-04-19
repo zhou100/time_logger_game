@@ -269,6 +269,106 @@ describe('WeeklyReportPage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the coach letter as a bulleted list when audit_text is in bullet format', async () => {
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: [
+        '- Pattern: fragmented focus with late starts.',
+        '- Working: you shipped the validator on Tuesday.',
+        '- Not working: too much time in meetings, not enough deep work.',
+        '- Next: block Monday morning for the weekly letter refactor.',
+      ].join('\n'),
+      report_json: null,
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+    });
+
+    renderWeeklyReportPage();
+
+    // All 4 bullets render as list items; leading dashes are stripped.
+    const items = await screen.findAllByRole('listitem');
+    const coachItems = items.filter((li) =>
+      /Pattern:|Working:|Not working:|Next:/.test(li.textContent || '')
+    );
+    expect(coachItems.length).toBe(4);
+    expect(coachItems[0].textContent).toMatch(/^Pattern: fragmented focus/);
+    expect(coachItems[0].textContent).not.toMatch(/^- /);
+    expect(coachItems[3].textContent).toMatch(/^Next: block Monday morning/);
+  });
+
+  it('keeps paragraph rendering (back-compat) when audit_text has no bullet markers', async () => {
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: [
+        'Paragraph one: classic prose letter.',
+        'Paragraph two: a second block of prose.',
+      ].join('\n\n'),
+      report_json: null,
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+    });
+
+    renderWeeklyReportPage();
+
+    expect(await screen.findByText(/paragraph one: classic prose/i)).toBeInTheDocument();
+    expect(screen.getByText(/paragraph two: a second block/i)).toBeInTheDocument();
+    // Prose falls back to paragraph rendering; no coach-letter list items.
+    const items = screen.queryAllByRole('listitem');
+    const coachItems = items.filter((li) => /Paragraph one:/.test(li.textContent || ''));
+    expect(coachItems.length).toBe(0);
+  });
+
+  it('renders the Recurring Themes teaser with DM Sans italic, not DM Serif Display', async () => {
+    (entriesApi.listThemes as jest.Mock).mockResolvedValue([
+      {
+        id: 'theme-1',
+        title: 'deep-work mornings',
+        description: 'protect the first block before admin',
+        polarity: 'positive',
+        category: null,
+        first_seen: '2026-04-06',
+        last_seen: '2026-04-12',
+        occurrences: 3,
+        status: 'active',
+        user_note: null,
+        evidence: [],
+      },
+    ]);
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: '- Pattern: clean week.\n- Working: focus.\n- Not working: nothing.\n- Next: keep going.',
+      report_json: null,
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+    });
+
+    renderWeeklyReportPage();
+
+    const quote = await screen.findByText('protect the first block before admin');
+    // Typography regression: the giant \u201C ornament glyph must not leak into
+    // the visible quote text (it used to render via ::before pseudo on the old card).
+    expect(quote.textContent || '').not.toMatch(/\u201C/);
+    // Teaser link uses the polarity color on its left border. The themes card
+    // link is a single container, so querying by role works for the whole card.
+    const link = screen.getByRole('link', { name: /open recurring themes/i });
+    expect(link).toHaveAttribute('href', '/themes');
+  });
+
   it('falls back to the draft status update when no coach letter exists', async () => {
     (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
       entries: 41,
