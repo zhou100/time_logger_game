@@ -1205,18 +1205,15 @@ MANDATORY CONTENT:
 ---
 
 STRUCTURE (MANDATORY):
+Produce EXACTLY 4 bullet lines, each on its own line, starting with "- ":
 
-Paragraph 1:
-- Overall weekly pattern (use patterns + naval_balance)
+- Pattern: <one sentence on overall weekly pattern using patterns + naval_balance>
+- Working: <one sentence on what_is_working>
+- Not working: <one sentence centered on uncomfortable_truth; be direct>
+- Next: <one sentence on next_week_action — a concrete behavior change>
 
-Paragraph 2:
-- What is working
-
-Paragraph 3:
-- What is not working (center on uncomfortable_truth, be direct)
-
-Paragraph 4:
-- One concrete behavior change (next_week_action)
+Each bullet is ONE SENTENCE. No sub-bullets. No preamble or postscript.
+Use the same language as the Analysis JSON content (if analysis is in Chinese, write bullets in Chinese; if English, English).
 
 ---
 
@@ -1319,7 +1316,7 @@ Write the letter."""
             if existing is not None:
                 existing.last_seen = today_utc
                 existing.occurrences = (existing.occurrences or 0) + 1
-                existing.description = t.get("description") or existing.description
+                existing.description = (t.get("description") or "")[:140] or existing.description
                 existing.polarity = t.get("polarity") or existing.polarity
                 existing.category = t.get("category") or existing.category
                 ev = list(existing.evidence or [])
@@ -1334,7 +1331,7 @@ Write the letter."""
                 theme = WeeklyTheme(
                     user_id=current_user.id,
                     title=title[:200],
-                    description=t.get("description"),
+                    description=(t.get("description") or "")[:140] or None,
                     polarity=(t.get("polarity") or "neutral")[:20],
                     category=(t.get("category") or None),
                     first_seen=today_utc,
@@ -1654,19 +1651,20 @@ def _compute_capture_counts(
     return counts
 
 
-def _paragraph_dominant_lock_violations(
-    paragraphs: List[str], lock: str
+def _block_dominant_lock_violations(
+    blocks: List[str], lock: str, block_name: str = "paragraph"
 ) -> List[str]:
-    """Per-paragraph dominant-script check for language_lock.
+    """Per-block dominant-script check for language_lock.
 
-    `en` lock fails if any paragraph has >40% CJK code points.
-    `zh` lock fails if any paragraph has >60% Latin code points (Chinese
+    Works for paragraphs or bullets — caller passes block_name for error text.
+    `en` lock fails if any block has >40% CJK code points.
+    `zh` lock fails if any block has >60% Latin code points (Chinese
     reports tolerate more loanwords). `auto` returns no violations.
     """
     if lock not in ("en", "zh"):
         return []
     issues: List[str] = []
-    for idx, p in enumerate(paragraphs, start=1):
+    for idx, p in enumerate(blocks, start=1):
         cjk = sum(1 for ch in p if "\u4E00" <= ch <= "\u9FFF")
         latin = sum(1 for ch in p if ("a" <= ch.lower() <= "z"))
         scriptic = cjk + latin
@@ -1674,11 +1672,11 @@ def _paragraph_dominant_lock_violations(
             continue
         if lock == "en" and (cjk / scriptic) > 0.40:
             issues.append(
-                f"language_lock=en: paragraph {idx} has too much CJK ({cjk}/{scriptic} script chars)."
+                f"language_lock=en: {block_name} {idx} has too much CJK ({cjk}/{scriptic} script chars)."
             )
         elif lock == "zh" and (latin / scriptic) > 0.60:
             issues.append(
-                f"language_lock=zh: paragraph {idx} has too much Latin ({latin}/{scriptic} script chars)."
+                f"language_lock=zh: {block_name} {idx} has too much Latin ({latin}/{scriptic} script chars)."
             )
     return issues
 
@@ -1733,17 +1731,18 @@ async def _check_weekly_letter(letter: str, analysis: Dict[str, Any]) -> List[st
     if not text:
         return ["Letter is empty."]
 
-    # 1) Exactly 4 paragraphs (blocks separated by blank lines)
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-    if len(paragraphs) != 4:
-        issues.append(f"Letter must have exactly 4 paragraphs; found {len(paragraphs)}.")
+    # 1) Exactly 4 bullets (lines starting with "- " or "* ", tolerant of indent)
+    _BULLET_RE = re.compile(r"^\s*[-*]\s+(.+?)\s*$", re.MULTILINE)
+    bullets = _BULLET_RE.findall(text)
+    if len(bullets) != 4:
+        issues.append(f"Letter must have exactly 4 bullets; found {len(bullets)}.")
 
     # 1b) Personalization checks driven by analysis.applied_prefs
     applied_prefs = analysis.get("applied_prefs") or {}
     if isinstance(applied_prefs, dict):
         lock = applied_prefs.get("language_lock") or "auto"
         if isinstance(lock, str):
-            issues.extend(_paragraph_dominant_lock_violations(paragraphs, lock))
+            issues.extend(_block_dominant_lock_violations(bullets, lock, block_name="bullet"))
         avoid = applied_prefs.get("avoid_topics") or []
         if isinstance(avoid, list):
             issues.extend(_avoid_topic_advice_violations(text, [str(t) for t in avoid]))
