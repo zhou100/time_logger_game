@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8.0] - 2026-04-19
+
+### Changed
+- **Weekly coach letter is now a 4-bullet briefing** instead of 4 paragraphs. Stage-2 prompt produces exactly `- Pattern / - Working / - Not working / - Next`, each one sentence, in the same language as the Stage-1 analysis. Frontend `CoachLetter` auto-detects bullets (`- ` or `* ` at line start, 2+ occurrences) and renders `<ul>`; paragraph format still renders for cached older reports (back-compat).
+- **Validator swapped from paragraph-count to bullet-count.** `_check_weekly_letter` requires exactly 4 bullets, still runs the uncomfortable_truth + next_week_action fuzzy containment checks at letter scope, and now applies the per-block CJK/Latin language-lock check against bullets (not paragraphs). Rewrite-once loop unchanged.
+- **`/week` quote-card typography aligned to DESIGN.md.** Both the Recurring Themes teaser and the Thought Gems preview dropped `DM Serif Display` italic + responsive 1.15–1.3rem sizing + decorative `\u201C` glyph. Now DM Sans italic, 15px (body1), weight 400, `lineHeight: 1.7`, with a 3px left accent bar whose color carries the card's voice (polarity for themes, `accentSoft` for gems).
+- **Recurring theme `description` hard-truncated to 140 characters** at both the insert and update persist branches in `generate_weekly_audit`. Long LLM outputs no longer blow up the themes card's vertical height. Prompt already asks for THEME (≤4 words) + one-sentence description; truncate is the server-side backstop.
+
+### Refactored
+- `_paragraph_dominant_lock_violations` → `_block_dominant_lock_violations(blocks, lock, block_name="paragraph")`. Same per-block dominant-script thresholds (CJK > 40% flags `en` lock; Latin > 60% flags `zh` lock); caller passes `block_name` so error messages say `paragraph N` or `bullet N` as appropriate. Default argument preserves prior error strings for callers that still pass paragraphs.
+
 ## [0.3.7.0] - 2026-04-18
 
 ### Added
