@@ -42,6 +42,30 @@
 
 ## P3 — Low Priority
 
+### Extract Shared `QuoteCard` Component on `/week`
+**What:** Once the `feat/personality-md` weekly-letter-polish ships, `RecurringThemesTeaser` and the `ThoughtGems` teaser will both be near-identical card components differing only by left-bar color and content source. Extract a shared `QuoteCard({leftBarColor, label, body, linkHref, linkLabel})` on the next `WeeklyReportPage.tsx` touch.
+**Why:** Prevents visual drift between the two teasers. DESIGN.md's "AI Coach letters" left-bar + surface + hairline pattern is reused three times on `/week` — keeping the two teasers in one component means future spec changes happen in one place.
+**Pros:** Easier theming, one place to tune spec, prevents drift.
+**Cons:** Small extra abstraction. Not worth doing pre-emptively — wait until both teasers ship with the new spec so the shared shape is visible.
+**Effort:** XS (human: ~20 min / CC: ~5 min).
+**Priority:** P3
+**Depends on:** `feat/personality-md` shipping first.
+**Context:** Surfaced during 2026-04-19 `/plan-design-review` of weekly-letter-polish (ceo-plans/2026-04-19-weekly-letter-polish.md).
+
+---
+
+### Visual-Regression Test for `/week` Typography
+**What:** Add an RTL test to `frontend/src/pages/WeeklyReportPage.test.tsx` asserting the ThoughtGems quote and RecurringThemes description both have `fontFamily` matching `/DM Sans/` and NOT `/DM Serif Display/`, plus `fontStyle: italic`.
+**Why:** The weekly-letter-polish fix explicitly resolves a DESIGN.md typography violation (DM Serif Display at body size). Without a guard test, the next person touching WeeklyReportPage.tsx could re-introduce the serif without knowing, and we'd only find out in manual design review.
+**Pros:** Catches the regression class explicitly. Fast test, no new infra.
+**Cons:** Couples test to font-family string; if DESIGN.md ever switches body sans (unlikely), the test updates.
+**Effort:** XS (human: ~15 min / CC: ~10 min).
+**Priority:** P3
+**Depends on:** `feat/personality-md` shipping first (so the tokens to test against exist).
+**Context:** Surfaced during 2026-04-19 `/plan-design-review`. Mirrors the pattern of guarding DESIGN.md violations with tests, similar to how the stale-prefs banner already has test coverage.
+
+---
+
 ### Strip Malformed `?date=` URL Param on Fallback
 **What:** When `/?date=banana` or `/?date=9999-12-31` loads, the RecordingPage correctly falls back to today's data but leaves the invalid param in the address bar. Extend the URL-sync `useEffect` to call `setSearchParams` and delete the bad param whenever `sanitizeDateParam` returns null.
 **Why:** If a user copies and shares a malformed deep-link, the recipient sees today's data under a URL that implies a different date. Cosmetic mismatch between address bar and rendered state. Data correctness is already intact (the original HIGH finding from adversarial review — "bad param reaches backend" — is fully fixed).
