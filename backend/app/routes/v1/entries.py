@@ -16,6 +16,7 @@ Audit:          POST /entries/audit
 import asyncio
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -35,14 +36,24 @@ from ...models.user import User
 from ...models.jobs import Job, JobStatus
 from ...models.audit_result import AuditResult
 from ...models.weekly_theme import WeeklyTheme
+from ...schemas.coaching_preferences import (
+    default_prefs_dict,
+    normalize_stored_prefs,
+)
 from ...services import queue as queue_svc
 from ...services import storage as storage_svc
+from ...services.weekly_signals import derive_recent_change_signals
 from ...settings import settings
 from ...services.categorization import categorize_text
 from ...utils.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/entries", tags=["entries"])
+
+
+def _personalization_enabled() -> bool:
+    """Read at call-time so tests can monkeypatch the env."""
+    return os.getenv("COACHING_PERSONALIZATION_ENABLED", "true").lower() == "true"
 
 _openai: AsyncOpenAI | None = None
 
@@ -171,6 +182,8 @@ class AuditResponse(BaseModel):
     week_end: Optional[str] = None
     days_covered: Optional[int] = None
     new_themes: Optional[List[Dict[str, Any]]] = None
+    # True when the user changed coaching preferences after this report was generated.
+    prefs_stale: bool = False
 
 
 def _entry_item_from_entry(entry: Entry) -> EntryItem:
@@ -844,7 +857,7 @@ async def get_weekly_audit(
             raise HTTPException(status_code=400, detail="Cannot query a future week.")
     else:
         target_monday = _current_week_start(today_utc)
-    cached = await _get_cached_audit(db, current_user.id, target_monday, "weekly")
+    cached = await _get_cached_audit(db, current_user.id, target_monday, "weekly", user=current_user)
     if cached is not None:
         return cached
     return Response(status_code=204)
@@ -885,7 +898,7 @@ async def generate_weekly_audit(
 
     # Check cache (keyed on Monday)
     if not body.regenerate:
-        cached = await _get_cached_audit(db, current_user.id, week_start_date, "weekly")
+        cached = await _get_cached_audit(db, current_user.id, week_start_date, "weekly", user=current_user)
         if cached is not None:
             return cached
 
@@ -962,6 +975,69 @@ async def generate_weekly_audit(
 
     open_loops_text = "\n".join(f"- {t}" for t in open_loops) if open_loops else "(none)"
 
+    # Coaching personalization (kill-switchable). When off, prefs/signals are
+    # absent from the prompt AND not echoed into the analysis JSON, leaving the
+    # original v1 pipeline intact.
+    personalization_on = _personalization_enabled()
+    if personalization_on:
+        prefs = (
+            normalize_stored_prefs(current_user.coaching_preferences)
+            if current_user.coaching_preferences is not None
+            else default_prefs_dict()
+        )
+        signals = await derive_recent_change_signals(
+            db, current_user.id, week_start_date
+        )
+    else:
+        prefs = None
+        signals = None
+
+    def _signals_lines(items: List[Dict[str, Any]]) -> str:
+        if not items:
+            return "  (none)"
+        return "\n".join(
+            f"  - {it['title']}"
+            + (f" — {it['description']}" if it.get("description") else "")
+            for it in items
+        )
+
+    if personalization_on:
+        avoid_csv = ", ".join(prefs["avoid_topics"]) or "(none)"
+        prefs_block = f"""USER COACHING PREFERENCES:
+- Tone: {prefs['tone']}    # warm = supportive; direct = blunt; playful = light
+- Pacing: {prefs['pacing']}    # actionable = concrete next steps; reflective = open questions; both = mix
+- Language lock: {prefs['language_lock']}    # auto = detect; zh = always Chinese; en = always English
+- Avoid topics (advice forbidden, naming as facts is fine): {avoid_csv}
+
+RECENT CHANGE SIGNALS (derived from weekly_themes, relative to this week's start):
+- Emerging (first_seen ≤ 7d before week start):
+{_signals_lines(signals['emerging'])}
+- Fading (status=active, last_seen ≥ 14d before week start):
+{_signals_lines(signals['fading'])}
+- New friction (negative polarity, first_seen ≤ 7d before week start):
+{_signals_lines(signals['new_friction'])}
+
+PERSONALIZATION RULES:
+1. If a planned suggestion touches an avoid_topic, downgrade it to a single open question.
+   Naming an avoid_topic as a category fact is allowed; giving advice on it is not.
+2. Emerging theme → suggest one small reinforcement.
+   Fading theme → suggest closure or letting go.
+   New friction wins precedence over emerging when the same theme qualifies for both.
+3. Frame `next_week_action` to match `pacing` (actionable / reflective / both).
+   If the relevant theme has occurrences < 3, prefix the suggestion with
+   "I'm noticing X — is that right?" before the action.
+4. Honor `language_lock` strictly. If set to zh or en, write the entire output in
+   that language regardless of input language mix. Stage-1 thinks in JSON only;
+   the lock binds Stage-2 writing.
+5. Echo what you applied into the analysis JSON under `applied_prefs` and the
+   signals you considered under `signals`. Stage-2 will use these as facts.
+
+---
+
+"""
+    else:
+        prefs_block = ""
+
     # Stage 1 — THINKING (gpt-5.4): structured analysis + theme extraction in JSON
     thinking_prompt = f"""You are an analytical AI time coach.
 
@@ -987,7 +1063,7 @@ Daily activities:
 
 ---
 
-INTERNAL SCORING RULES (do not output):
+{prefs_block}INTERNAL SCORING RULES (do not output):
 - Score each day 0–5 across EARNING, LEARNING, RELAXING, FAMILY
 - Balance = variance across the 4 categories (lower is better)
 - Best day = high total score + low imbalance
@@ -1019,6 +1095,8 @@ Respond with ONLY a valid JSON object:
   "uncomfortable_truth": "...",
   "naval_balance": "...",
   "next_week_action": "...",
+  "applied_prefs": {{ "tone": "...", "pacing": "...", "language_lock": "...", "avoid_topics": ["..."] }},
+  "signals": {{ "emerging": [...], "fading": [...], "new_friction": [...] }},
   "themes": [
     {{
       "title": "...",
@@ -1054,8 +1132,51 @@ Respond with ONLY a valid JSON object:
             audit_text=None, generated_at=None, message="Weekly review generation failed",
         )
 
+    # Server-side echo of prefs + signals into analysis. The LLM is asked to do
+    # this in its prompt, but we overwrite to guarantee Stage-2 grounding even
+    # if the model omits them. When personalization is off, both keys are
+    # absent from analysis (so Stage-2 sees the original v1 shape).
+    if personalization_on:
+        analysis["applied_prefs"] = {
+            "tone": prefs["tone"],
+            "pacing": prefs["pacing"],
+            "language_lock": prefs["language_lock"],
+            "avoid_topics": list(prefs["avoid_topics"]),
+        }
+        analysis["signals"] = {
+            "emerging": [
+                {"id": s["id"], "title": s["title"]} for s in signals["emerging"]
+            ],
+            "fading": [
+                {"id": s["id"], "title": s["title"]} for s in signals["fading"]
+            ],
+            "new_friction": [
+                {"id": s["id"], "title": s["title"]} for s in signals["new_friction"]
+            ],
+        }
+
     # Stage 2 — WRITING (gpt-5.4-mini): turn the analysis into a prose letter
     analysis_json_str = json.dumps(analysis, ensure_ascii=False, indent=2)
+
+    # Language directive resolved from analysis.applied_prefs (Stage-2 grounding)
+    if personalization_on and prefs["language_lock"] != "auto":
+        lock = prefs["language_lock"]
+        language_block = (
+            f"LANGUAGE (LOCKED via applied_prefs.language_lock = {lock!r}):\n"
+            + (
+                "- Write the entire letter in Chinese.\n"
+                if lock == "zh"
+                else "- Write the entire letter in English.\n"
+            )
+            + "- Do NOT mix languages, even if the activities mix them."
+        )
+    else:
+        language_block = """LANGUAGE:
+- Detect dominant language from Original daily activities
+- If mostly Chinese → write in Chinese
+- Otherwise → write in English
+- Do NOT mix languages"""
+
     writing_prompt = f"""You are an opinionated, honest AI time coach.
 
 Your job is to convert structured analysis into a weekly review letter.
@@ -1067,14 +1188,13 @@ STRICT RULES:
 - Do NOT infer, speculate, or add new information
 - Treat the Analysis JSON as the single source of truth
 - Do NOT introduce new patterns or reinterpret conclusions
+- The Analysis JSON shows `applied_prefs.avoid_topics`. Do not give advice
+  on those topics. Naming them as facts (e.g. category breakdown) is allowed,
+  giving advice is not.
 
 ---
 
-LANGUAGE:
-- Detect dominant language from Original daily activities
-- If mostly Chinese → write in Chinese
-- Otherwise → write in English
-- Do NOT mix languages
+{language_block}
 
 ---
 
@@ -1534,10 +1654,77 @@ def _compute_capture_counts(
     return counts
 
 
+def _paragraph_dominant_lock_violations(
+    paragraphs: List[str], lock: str
+) -> List[str]:
+    """Per-paragraph dominant-script check for language_lock.
+
+    `en` lock fails if any paragraph has >40% CJK code points.
+    `zh` lock fails if any paragraph has >60% Latin code points (Chinese
+    reports tolerate more loanwords). `auto` returns no violations.
+    """
+    if lock not in ("en", "zh"):
+        return []
+    issues: List[str] = []
+    for idx, p in enumerate(paragraphs, start=1):
+        cjk = sum(1 for ch in p if "\u4E00" <= ch <= "\u9FFF")
+        latin = sum(1 for ch in p if ("a" <= ch.lower() <= "z"))
+        scriptic = cjk + latin
+        if scriptic == 0:
+            continue
+        if lock == "en" and (cjk / scriptic) > 0.40:
+            issues.append(
+                f"language_lock=en: paragraph {idx} has too much CJK ({cjk}/{scriptic} script chars)."
+            )
+        elif lock == "zh" and (latin / scriptic) > 0.60:
+            issues.append(
+                f"language_lock=zh: paragraph {idx} has too much Latin ({latin}/{scriptic} script chars)."
+            )
+    return issues
+
+
+_ADVICE_PATTERNS = re.compile(
+    r"\b(you should|you need to|try to|consider|make sure|start (?:doing|to)|stop (?:doing|to))\b",
+    re.IGNORECASE,
+)
+
+
+def _avoid_topic_advice_violations(
+    text: str, avoid_topics: List[str]
+) -> List[str]:
+    """Soft check: flag if imperative-advice patterns appear within ~50 chars
+    of an avoid_topic word-boundary mention. Best-effort, prompt rule is the
+    real guarantee.
+    """
+    if not avoid_topics:
+        return []
+    issues: List[str] = []
+    haystack = text
+    hits = 0
+    for topic in avoid_topics:
+        topic = topic.strip()
+        if not topic:
+            continue
+        try:
+            pat = re.compile(r"\b" + re.escape(topic) + r"\b", re.IGNORECASE)
+        except re.error:
+            continue
+        for m in pat.finditer(haystack):
+            window = haystack[max(0, m.start() - 50): m.end() + 50]
+            if _ADVICE_PATTERNS.search(window):
+                hits += 1
+    if hits >= 2:
+        issues.append(
+            f"Letter gives advice on {hits} avoid_topic mention(s); rephrase as questions or omit."
+        )
+    return issues
+
+
 async def _check_weekly_letter(letter: str, analysis: Dict[str, Any]) -> List[str]:
     """Lightweight validator for the Stage 2 letter. Returns a list of failure reasons (empty = pass).
 
-    Deterministic checks: paragraph count, presence of uncomfortable_truth and next_week_action.
+    Deterministic checks: paragraph count, presence of uncomfortable_truth and next_week_action,
+    language-lock paragraph-dominant script, and a soft check on avoid_topic advice.
     LLM check (gpt-5.4-nano): flag claims not grounded in the analysis JSON. Best-effort — if the
     check call itself fails, we skip it rather than block letter delivery.
     """
@@ -1550,6 +1737,16 @@ async def _check_weekly_letter(letter: str, analysis: Dict[str, Any]) -> List[st
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if len(paragraphs) != 4:
         issues.append(f"Letter must have exactly 4 paragraphs; found {len(paragraphs)}.")
+
+    # 1b) Personalization checks driven by analysis.applied_prefs
+    applied_prefs = analysis.get("applied_prefs") or {}
+    if isinstance(applied_prefs, dict):
+        lock = applied_prefs.get("language_lock") or "auto"
+        if isinstance(lock, str):
+            issues.extend(_paragraph_dominant_lock_violations(paragraphs, lock))
+        avoid = applied_prefs.get("avoid_topics") or []
+        if isinstance(avoid, list):
+            issues.extend(_avoid_topic_advice_violations(text, [str(t) for t in avoid]))
 
     def _fuzzy_contains(haystack: str, needle: str, min_ratio: float = 0.5) -> bool:
         """Cheap fuzzy containment: share enough non-trivial word tokens."""
@@ -1702,8 +1899,14 @@ Activities recorded today:
 
 async def _get_cached_audit(
     db: AsyncSession, user_id: int, audit_date, audit_type: str,
+    user: Optional[User] = None,
 ) -> Optional[AuditResponse]:
-    """Return cached AuditResponse if fresh, else None."""
+    """Return cached AuditResponse if fresh, else None.
+
+    When `user` is provided and personalization is on, the response includes
+    `prefs_stale=True` if the user's coaching_preferences_updated_at is newer
+    than the cached audit's generated_at.
+    """
     result = await db.execute(
         select(AuditResult).where(
             AuditResult.user_id == user_id,
@@ -1734,6 +1937,18 @@ async def _get_cached_audit(
                 report_json_parsed = json.loads(cached.report_json)
             except json.JSONDecodeError:
                 pass
+
+    prefs_stale = False
+    if (
+        audit_type == "weekly"
+        and user is not None
+        and _personalization_enabled()
+        and user.coaching_preferences_updated_at is not None
+        and cached.generated_at is not None
+    ):
+        # Both columns are timezone-aware (TIMESTAMPTZ in PG)
+        prefs_stale = user.coaching_preferences_updated_at > cached.generated_at
+
     return AuditResponse(
         entries=cached.entries_count,
         breakdown=breakdown,
@@ -1745,6 +1960,7 @@ async def _get_cached_audit(
         week_start=week_start,
         week_end=week_end,
         days_covered=days_covered,
+        prefs_stale=prefs_stale,
     )
 
 

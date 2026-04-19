@@ -18,3 +18,5 @@ supervisord.conf
 .gstack/
 ceo-plans/
 codex-skills/
+
+.context/

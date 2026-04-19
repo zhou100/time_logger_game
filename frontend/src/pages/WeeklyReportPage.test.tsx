@@ -190,6 +190,85 @@ describe('WeeklyReportPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the stale-prefs banner with a Regenerate button when prefs_stale=true', async () => {
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: 'Cached letter from before the user changed coaching prefs.',
+      report_json: null,
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+      prefs_stale: true,
+    });
+    (entriesApi.generateWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: 'Fresh letter under new coaching prefs.',
+      report_json: null,
+      generated_at: '2026-04-13T12:00:00Z',
+      cached: false,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+      prefs_stale: false,
+    });
+
+    renderWeeklyReportPage();
+
+    // Cached letter and the stale banner both visible.
+    expect(
+      await screen.findByText(/cached letter from before/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/your coaching preferences changed after this report was generated/i)
+    ).toBeInTheDocument();
+    // The banner deep-links to /settings.
+    expect(screen.getByRole('link', { name: /open settings/i })).toHaveAttribute(
+      'href',
+      '/settings'
+    );
+
+    // Two "Regenerate" buttons exist now: the toolbar one and the one inside the banner.
+    // Click the banner's Regenerate (action button) and verify it calls generateWeeklyAudit
+    // with regenerate=true.
+    const regenButtons = screen.getAllByRole('button', { name: /regenerate/i });
+    // The banner action button is the last one rendered in the DOM order.
+    const bannerRegen = regenButtons[regenButtons.length - 1];
+    bannerRegen.click();
+
+    await waitFor(() => {
+      expect(entriesApi.generateWeeklyAudit).toHaveBeenCalledWith('2026-04-06', true);
+    });
+  });
+
+  it('does not render the stale-prefs banner when prefs_stale is false or absent', async () => {
+    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+      entries: 41,
+      breakdown: {},
+      approximate: false,
+      audit_text: 'Fresh letter.',
+      report_json: null,
+      generated_at: '2026-04-12T12:00:00Z',
+      cached: true,
+      week_start: '2026-04-06',
+      week_end: '2026-04-12',
+      days_covered: 7,
+      // prefs_stale absent
+    });
+
+    renderWeeklyReportPage();
+
+    expect(await screen.findByText('Fresh letter.')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/your coaching preferences changed after this report was generated/i)
+    ).not.toBeInTheDocument();
+  });
+
   it('falls back to the draft status update when no coach letter exists', async () => {
     (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
       entries: 41,

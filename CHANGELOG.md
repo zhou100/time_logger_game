@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7.0] - 2026-04-18
+
+### Added
+- **Per-user coaching preferences** (`personality.md` v1): tone (warm/direct/playful), pacing (actionable/reflective/both), language lock (auto/zh/en), and up to 10 avoid-topics steer the weekly audit prompt. Stored in a new `users.coaching_preferences` JSONB column (Alembic migration `p5q6r7s8t9u0`); NULL = defaults, no backfill.
+- `GET` / `PATCH /api/v1/users/me/preferences` with strict write validation (NFKC normalize, zero-width strip, prompt-injection blocklist for EN+ZH, 60-char per-topic / 10-topic caps) and forgiving read normalization (unknown enums fall back to per-field defaults; malformed top-level shape falls back to full defaults). PATCH semantics: omit a field to keep, set `null` to reset, send a value to override.
+- `/settings` page on the web app with tone/pacing/language selectors, chip-based avoid-topics editor (Enter-to-add, case-insensitive dedup), per-field 422 helper text, and a Reset-to-defaults button. Reachable from the avatar menu.
+- `prefs_stale` banner on `/week`: when the cached weekly report was generated under an older version of your preferences, the page surfaces an inline alert with a Regenerate button and a deep link to `/settings`.
+- **Recent-change signals** service (`weekly_signals.py`) deriving `emerging` / `fading` / `new_friction` theme buckets relative to the report's `week_start` (not today, so historical regenerates stay stable). Fed into the prompt so the weekly letter can name what's actually changing.
+- Server-side `applied_prefs` echo in the analysis JSON — what the LLM was told to apply, surfaced for verification and future "what does it know about me?" UIs.
+
+### Changed
+- Weekly audit prompt (Stage-1 + Stage-2) now injects `USER COACHING PREFERENCES` and recent-change signals when personalization is on. Language lock, when set to `zh` or `en`, hard-overrides Stage-2 language detection. Avoid-topics downgrade prescriptive advice to a single open question; naming as a category fact is still allowed.
+- `AuditResponse` includes `prefs_stale: bool` (default `false`).
+
+### Operations
+- New env var `COACHING_PERSONALIZATION_ENABLED` (default `true`) — kill-switch read at call-time so tests can monkeypatch. When off, the weekly prompt skips the prefs and signals blocks.
+
 ## [0.3.6.0] - 2026-04-16
 
 ### Added

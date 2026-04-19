@@ -109,6 +109,7 @@ export interface AuditResponse {
     week_end?: string;
     days_covered?: number;
     new_themes?: NewThemeRef[];
+    prefs_stale?: boolean;
 }
 
 export interface NewThemeRef {
@@ -156,6 +157,26 @@ export interface Capture {
     source_date: string | null;
     classified_at: string | null;
     resolved_at: string | null;
+}
+
+// ── Coaching preferences ──────────────────────────────────────────────────────
+
+export type CoachingTone = 'warm' | 'direct' | 'playful';
+export type CoachingPacing = 'actionable' | 'reflective' | 'both';
+export type CoachingLanguageLock = 'auto' | 'zh' | 'en';
+
+export interface CoachingPreferences {
+    tone: CoachingTone;
+    pacing: CoachingPacing;
+    language_lock: CoachingLanguageLock;
+    avoid_topics: string[];
+}
+
+export interface CoachingPreferencesPatch {
+    tone?: CoachingTone | null;
+    pacing?: CoachingPacing | null;
+    language_lock?: CoachingLanguageLock | null;
+    avoid_topics?: string[] | null;
 }
 
 // ── Error ─────────────────────────────────────────────────────────────────────

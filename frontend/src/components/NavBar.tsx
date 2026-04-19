@@ -135,6 +135,14 @@ const NavBar: React.FC = () => {
                             open={Boolean(anchorEl)}
                             onClose={handleClose}
                         >
+                            <MenuItem
+                                onClick={() => {
+                                    handleClose();
+                                    navigate('/settings');
+                                }}
+                            >
+                                Coaching settings
+                            </MenuItem>
                             <MenuItem onClick={handleLogout}>Sign Out</MenuItem>
                         </Menu>
                     </Box>
