@@ -252,12 +252,14 @@ alembic current
 - Local: `http://localhost:10000`
 - Production: configured via `render.yaml`
 
-### Authentication Endpoints (`/api/auth`)
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/register` | Register with email + password |
-| POST | `/api/auth/token` | Login (OAuth2 form data) → access + refresh tokens |
-| POST | `/api/auth/refresh` | Refresh access token |
+### Authentication
+Auth is handled by **Supabase Auth** (passwordless email OTP + Google OAuth).
+The frontend calls the Supabase client directly — it does not hit backend auth routes.
+Backend validates the Supabase JWT on every protected request.
+
+Legacy JWT endpoints (`/api/auth/register`, `/api/auth/token`, `/api/auth/refresh`) still
+exist on the backend but are orphaned post-Supabase migration. Scheduled for removal —
+see TODOS.md "Backend JWT Auth Endpoint Cleanup".
 
 ### Audio Endpoints (`/api`)
 | Method | Path | Description |
@@ -295,13 +297,23 @@ Frontend displays categorized entry
 
 ### Authentication Flow
 ```
-Login/Register → JWT access token + refresh token
-    ↓ Stored in localStorage
-Axios interceptor adds Bearer token to all requests
-    ↓ On 401 response
-Auto-refresh using refresh token
-    ↓ On refresh failure
-Redirect to /login
+Landing page:
+  [Sign in with Google] ──→ Supabase OAuth ──→ app
+  [Start your debrief]  ──→ /login (SignInForm)
+                                │
+                          Email entry → Supabase signInWithOtp (shouldCreateUser: true)
+                                │
+                          6-digit code arrives via email
+                                │
+                          verifyOtp → Supabase JWT → app
+                                       ↘ invalid/expired → retry or resend
+
+Supabase session stored in localStorage (standard supabase-js behavior).
+Axios interceptor (services/api.ts) reads the session synchronously and
+attaches a Bearer token. On 401: refreshSession() with a 5s timeout and a
+concurrent-401 queue; on refresh failure → signOut → redirect to /login.
+
+No password is ever set. Users authenticate with Google or email OTP only.
 ```
 
 ### Data Models
