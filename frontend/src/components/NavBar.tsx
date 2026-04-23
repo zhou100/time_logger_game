@@ -23,7 +23,7 @@ const NavBar: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [searchParams] = useSearchParams();
-    const { user, logout, loginWithGoogle, useSupabase } = useAuth();
+    const { user, logout, loginWithGoogle } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -148,15 +148,13 @@ const NavBar: React.FC = () => {
                     </Box>
                 ) : (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {useSupabase && (
-                            <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={handleGoogleSignIn}
-                            >
-                                Sign in with Google
-                            </Button>
-                        )}
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleGoogleSignIn}
+                        >
+                            Sign in with Google
+                        </Button>
                         <Button
                             component={RouterLink}
                             to="/login"

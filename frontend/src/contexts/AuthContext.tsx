@@ -1,22 +1,19 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import AuthService from '../services/auth';
-import { getSupabase, isSupabaseConfigured } from '../services/supabase';
+import type { AuthError } from '@supabase/supabase-js';
+import { getSupabase } from '../services/supabase';
 import { readSupabaseSession } from '../services/supabaseStorage';
-import { User, RegisterCredentials, LoginCredentials } from '../types/auth';
+import { User } from '../types/auth';
 import Logger from '../utils/logger';
 
 interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    register: (credentials: RegisterCredentials) => Promise<void>;
-    login: (credentials: LoginCredentials) => Promise<void>;
+    sendOTP: (email: string) => Promise<{ error?: string }>;
+    verifyOTP: (email: string, token: string) => Promise<{ error?: string }>;
     loginWithGoogle: () => Promise<void>;
     logout: () => void;
-    registrationSuccess: string | null;
-    clearRegistrationSuccess: () => void;
     refreshAccessToken: () => Promise<string>;
-    useSupabase: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,84 +24,64 @@ export const useAuth = () => {
     return ctx;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const useSupabase = isSupabaseConfigured;
+/**
+ * Map a Supabase AuthError to a user-facing message.
+ * Single source of truth so messages stay consistent across the app.
+ */
+export function mapAuthError(err: AuthError | Error | null | undefined): string {
+    if (!err) return 'Something went wrong. Please try again.';
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('expired') || msg.includes('otp_expired')) {
+        return 'This code has expired — send a new one.';
+    }
+    if (msg.includes('invalid') && msg.includes('otp')) {
+        return 'That code is wrong. Try again.';
+    }
+    if (msg.includes('rate limit') || msg.includes('too many')) {
+        return 'Too many attempts. Please wait a moment and request a new code.';
+    }
+    if (msg.includes('network') || msg.includes('failed to fetch')) {
+        return "Couldn't reach the server — check your connection.";
+    }
+    if (msg.includes('invalid email')) {
+        return 'That email looks invalid. Double-check and try again.';
+    }
+    return err.message || 'Something went wrong. Please try again.';
+}
 
-    // Synchronously restore user from localStorage so the very first render
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    // Synchronously restore user from localStorage so the first render
     // already has isAuthenticated=true — no blank page, no LandingPage flash.
+    // Going through sb.auth.getSession() can hang on a storage lock; see
+    // services/supabaseStorage.ts for the rationale.
     const [user, setUser] = useState<User | null>(() => {
-        if (useSupabase) {
-            // Read the Supabase session synchronously from localStorage so the
-            // very first render already has isAuthenticated=true. Going through
-            // sb.auth.getSession() can hang on a storage lock — see
-            // services/supabaseStorage.ts for the rationale.
-            const session = readSupabaseSession();
-            if (session?.user?.email) {
-                return { id: 0, email: session.user.email };
-            }
-        } else {
-            // JWT mode: getStoredToken() returns the token regardless of expiry.
-            // An expired access token can still be decoded for user-id; the Axios
-            // request interceptor will auto-refresh it via the 30-day refresh token.
-            if (AuthService.getStoredToken()) {
-                const userId = AuthService.getUserIdFromToken();
-                if (userId !== null) return { id: userId, email: '' };
-            }
-        }
-        return null;
+        const session = readSupabaseSession();
+        return session?.user?.email ? { id: 0, email: session.user.email } : null;
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [registrationSuccess, setRegistrationSuccess] = useState<string | null>(null);
 
     // Re-hydrate user on mount
     useEffect(() => {
-        // Eager unblock: if we already restored a user synchronously from
-        // localStorage, don't gate the UI on a network round-trip. Awaiting
-        // sb.auth.getSession() can hang indefinitely (supabase-js _acquireLock
-        // deadlock or slow token refresh), which previously left users stuck
-        // on a spinner forever. The finally{} below covers the no-user case.
+        // Eager unblock: if we already restored a user synchronously, don't
+        // gate the UI on a network round-trip. The finally{} below covers the
+        // no-user case.
         if (user) setIsLoading(false);
 
         const rehydrate = async () => {
             try {
-                if (useSupabase) {
-                    const sb = getSupabase();
-                    if (!sb) return;
-                    const { data: { session } } = await sb.auth.getSession();
-                    if (session?.user) {
-                        // Don't clobber a synchronously-restored user with id:0
-                        setUser((prev) => prev ?? { id: 0, email: session.user.email || '' });
-                        // Fetch real DB user id in the background
-                        import('../services/api').then(({ authApi }) =>
-                            authApi.getCurrentUser()
-                                .then((profile) => setUser({ id: profile.id, email: session.user.email || '' }))
-                                .catch(() => { /* keep fallback id:0 */ })
-                        );
-                    } else {
-                        // No session — clear any stale synchronously-restored user
-                        setUser(null);
-                    }
+                const sb = getSupabase();
+                if (!sb) return;
+                const { data: { session } } = await sb.auth.getSession();
+                if (session?.user) {
+                    setUser((prev) => prev ?? { id: 0, email: session.user.email || '' });
+                    // Fetch real DB user id in the background
+                    import('../services/api').then(({ authApi }) =>
+                        authApi.getCurrentUser()
+                            .then((profile) => setUser({ id: profile.id, email: session.user.email || '' }))
+                            .catch(() => { /* keep fallback id:0 */ }),
+                    );
                 } else {
-                    // getStoredToken() returns the raw token regardless of expiry.
-                    // An expired token can still be decoded for user-id, and the
-                    // Axios request interceptor (getValidToken) will auto-refresh it.
-                    if (AuthService.getStoredToken()) {
-                        const userId = AuthService.getUserIdFromToken();
-                        if (userId !== null) {
-                            setUser((prev) => prev ?? { id: userId, email: '' });
-                            // Fetch full profile in background (triggers token refresh if expired)
-                            try {
-                                const { authApi } = await import('../services/api');
-                                const profile = await authApi.getCurrentUser();
-                                setUser({ id: profile.id, email: profile.email });
-                            } catch {
-                                // Only log out if tokens were actually cleared (e.g. 401 on refresh).
-                                if (!AuthService.getStoredToken()) {
-                                    setUser(null);
-                                }
-                            }
-                        }
-                    }
+                    setUser(null);
                 }
             } catch (err) {
                 Logger.error('Auth rehydration failed:', err);
@@ -114,11 +91,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         };
         rehydrate();
-    }, [useSupabase]);
+    }, []);
 
-    // Listen for Supabase auth state changes
+    // Listen for Supabase auth state changes (OTP verify, OAuth callback, signOut)
     useEffect(() => {
-        if (!useSupabase) return;
         const sb = getSupabase();
         if (!sb) return;
 
@@ -137,91 +113,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         return () => subscription.unsubscribe();
-    }, [useSupabase]);
+    }, []);
 
-    const register = useCallback(async (credentials: RegisterCredentials) => {
-        if (useSupabase) {
-            const sb = getSupabase()!;
-            const { error } = await sb.auth.signUp({
-                email: credentials.email,
-                password: credentials.password,
-            });
-            if (error) throw new Error(error.message);
-            setRegistrationSuccess('Registration successful! Please check your email.');
-        } else {
-            const response = await AuthService.register(credentials);
-            setRegistrationSuccess('Registration successful! Please log in.');
-            Logger.info(`Registered: user_id=${response.user_id}`);
+    const sendOTP = useCallback(async (email: string): Promise<{ error?: string }> => {
+        const sb = getSupabase();
+        if (!sb) return { error: 'Auth service is not available.' };
+        const { error } = await sb.auth.signInWithOtp({
+            email,
+            options: { shouldCreateUser: true },
+        });
+        if (error) {
+            Logger.warn('sendOTP failed', error);
+            return { error: mapAuthError(error) };
         }
-    }, [useSupabase]);
+        return {};
+    }, []);
 
-    const clearRegistrationSuccess = useCallback(() => setRegistrationSuccess(null), []);
-
-    const login = useCallback(async (credentials: LoginCredentials) => {
-        if (useSupabase) {
-            const sb = getSupabase()!;
-            const { data, error } = await sb.auth.signInWithPassword({
-                email: credentials.username,
-                password: credentials.password,
-            });
-            if (error) throw new Error(error.message);
-            if (data.user) {
-                try {
-                    const { authApi } = await import('../services/api');
-                    const profile = await authApi.getCurrentUser();
-                    setUser({ id: profile.id, email: data.user.email || '' });
-                } catch {
-                    setUser({ id: 0, email: data.user.email || '' });
-                }
+    const verifyOTP = useCallback(async (email: string, token: string): Promise<{ error?: string }> => {
+        const sb = getSupabase();
+        if (!sb) return { error: 'Auth service is not available.' };
+        const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+        if (error) {
+            Logger.warn('verifyOTP failed', error);
+            return { error: mapAuthError(error) };
+        }
+        // Set user state explicitly — don't rely on onAuthStateChange race.
+        if (data.user) {
+            try {
+                const { authApi } = await import('../services/api');
+                const profile = await authApi.getCurrentUser();
+                setUser({ id: profile.id, email: data.user.email || email });
+            } catch {
+                setUser({ id: 0, email: data.user.email || email });
             }
-        } else {
-            const response = await AuthService.login(credentials);
-            setUser({ id: response.user_id, email: response.email });
-            Logger.info(`Logged in: user_id=${response.user_id}`);
         }
-    }, [useSupabase]);
+        return {};
+    }, []);
 
     const loginWithGoogle = useCallback(async () => {
-        if (useSupabase) {
-            const sb = getSupabase()!;
-            const { error } = await sb.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: window.location.origin },
-            });
-            if (error) throw new Error(error.message);
-        }
-    }, [useSupabase]);
+        const sb = getSupabase();
+        if (!sb) throw new Error('Auth service is not available.');
+        const { error } = await sb.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.origin },
+        });
+        if (error) throw new Error(mapAuthError(error));
+    }, []);
 
     const logout = useCallback(() => {
-        if (useSupabase) {
-            const sb = getSupabase();
-            sb?.auth.signOut();
-        } else {
-            AuthService.logout();
-        }
+        const sb = getSupabase();
+        sb?.auth.signOut().catch(() => { /* best effort */ });
         setUser(null);
-    }, [useSupabase]);
+    }, []);
 
     const refreshAccessToken = useCallback(async () => {
-        if (useSupabase) {
-            const sb = getSupabase()!;
-            const { data, error } = await sb.auth.refreshSession();
-            if (error) throw error;
-            return data.session?.access_token || '';
-        }
-        try {
-            return await AuthService.getNewToken();
-        } catch (err) {
-            Logger.error('Token refresh failed:', err);
-            logout();
-            throw err;
-        }
-    }, [useSupabase, logout]);
+        const sb = getSupabase();
+        if (!sb) throw new Error('Auth service is not available.');
+        const { data, error } = await sb.auth.refreshSession();
+        if (error) throw error;
+        return data.session?.access_token || '';
+    }, []);
 
     // isAuthenticated is always derived from user state (React-controlled).
-    // Never read AuthService.isAuthenticated() here — its mutable token fields
-    // can be cleared by the response interceptor mid-session without triggering
-    // a React re-render, causing stale isAuthenticated=false flips.
     const isAuthenticated = !!user;
 
     return (
@@ -229,14 +182,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user,
             isAuthenticated,
             isLoading,
-            register,
-            login,
+            sendOTP,
+            verifyOTP,
             loginWithGoogle,
             logout,
-            registrationSuccess,
-            clearRegistrationSuccess,
             refreshAccessToken,
-            useSupabase,
         }}>
             {children}
         </AuthContext.Provider>

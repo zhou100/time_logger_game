@@ -4,8 +4,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from './theme';
 import { AuthProvider } from './contexts/AuthContext';
-import { LoginForm } from './components/auth/LoginForm';
-import { RegisterForm } from './components/auth/RegisterForm';
+import SignInForm from './components/auth/SignInForm';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
@@ -39,8 +38,8 @@ function App() {
               tabIndex={-1}
             >
               <Routes>
-                <Route path="/login" element={<LoginForm />} />
-                <Route path="/register" element={<RegisterForm />} />
+                <Route path="/login" element={<SignInForm />} />
+                <Route path="/register" element={<Navigate to="/login" replace />} />
                 <Route path="/" element={<HomePage />} />
                 <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
                 <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
