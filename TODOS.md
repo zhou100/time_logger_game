@@ -185,6 +185,29 @@
 
 ---
 
+### Backend JWT Auth Endpoint Cleanup
+**What:** Remove `/api/v1/auth/token`, `/api/v1/auth/register`, and `/api/v1/auth/refresh` from the backend after the Supabase-only frontend has been stable for 2+ weeks. Drop the `password_hash` column on `users` if it remains unused.
+**Why:** After the landing-auth-redesign PR, the frontend no longer calls these endpoints (Supabase handles all auth). Orphaned auth endpoints are an attack surface and a maintenance distraction.
+**Pros:** Smaller backend surface, less to test, less to secure.
+**Cons:** Need to verify no internal/admin tooling still uses them. Drop column requires Alembic migration.
+**Effort:** XS (human: ~30 min / CC: ~10 min) — route deletion + migration + tests.
+**Priority:** P3
+**Depends on:** landing-auth-redesign PR shipping + 2 weeks of stable Supabase-only auth in prod
+**Context:** Deferred from /plan-eng-review 2026-04-22. Marked NOT in scope to keep auth-rewrite PR frontend-only.
+
+---
+
+### Cypress E2E for Supabase OTP Sign-in Flow
+**What:** Add a Cypress test that exercises the full sign-in flow against a real Supabase test project: enter email → fetch OTP via Supabase admin API → submit code → land in app authenticated.
+**Why:** Unit tests with mocked supabase-js cover internal logic, but they can't catch SDK version drift, dashboard config drift (e.g., "Link accounts with same email" toggled off), or OAuth callback issues.
+**Pros:** Catches real-world auth regressions before users hit them.
+**Cons:** Requires a dedicated Supabase test project, admin API key for OTP retrieval, and CI secret management.
+**Effort:** M (human: ~4 hours / CC: ~30 min) — Cypress test + Supabase test project + CI config.
+**Priority:** P3
+**Context:** Deferred from /plan-eng-review 2026-04-22. Unit-level supabase-js mocking is sufficient for v1; revisit if a Supabase-side regression slips to prod.
+
+---
+
 ## Completed
 
 ### ~~Personality.md v1 (coaching preferences)~~ — v0.3.7.0 (2026-04-18)

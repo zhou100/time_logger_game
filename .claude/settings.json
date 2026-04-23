@@ -14,7 +14,8 @@
       "Bash(git push:*)",
       "Skill(plan-eng-review)",
       "Skill(plan-eng-review:*)",
-      "Bash(curl -s http://localhost:3000/static/js/main.f371815b.js)"
+      "Bash(curl -s http://localhost:3000/static/js/main.f371815b.js)",
+      "Bash(python -m pytest tests/test_weekly_letter_check.py tests/test_personalization_validators.py tests/test_weekly_signals.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans",

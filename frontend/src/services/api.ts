@@ -18,10 +18,18 @@ import {
     CoachingPreferences,
     CoachingPreferencesPatch,
 } from '../types/api';
-import AuthService from './auth';
+import { getSupabase } from './supabase';
+import { readSupabaseSession } from './supabaseStorage';
 import Logger from '../utils/logger';
 
 export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:10000';
+
+// Supabase refreshSession() can wedge on a storage lock; cap it so a stuck
+// refresh doesn't translate to a hung request for the user.
+const REFRESH_TIMEOUT_MS = 5000;
+// Refresh slightly before expiry to absorb client clock skew and avoid
+// tripping-then-retrying on every request near the boundary.
+const TOKEN_EXPIRY_SKEW_S = 30;
 
 // ── Axios instance ────────────────────────────────────────────────────────────
 
@@ -31,15 +39,47 @@ const api: AxiosInstance = axios.create({
     headers: { 'Content-Type': 'application/json' },
 });
 
-// Public endpoints that don't need an auth header
+// Public endpoints that don't need an auth header. Left for safety even though
+// the frontend no longer calls the JWT auth routes after the Supabase-only migration.
 const PUBLIC_PATHS = ['/v1/auth/token', '/v1/auth/register', '/v1/auth/refresh', '/v1/auth/google'];
+
+function withTimeout<T>(p: Promise<T>, ms: number, label = 'operation'): Promise<T> {
+    return Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+        ),
+    ]);
+}
+
+async function getAccessToken(): Promise<string | null> {
+    // Sync read — hot path. Avoids supabase-js storage-lock hangs per request.
+    const session = readSupabaseSession();
+    if (!session?.access_token) return null;
+
+    const nowWithSkew = Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_SKEW_S;
+    if (!session.expires_at || session.expires_at > nowWithSkew) {
+        return session.access_token;
+    }
+
+    // Near/past expiry — refresh via supabase-js with a timeout.
+    const sb = getSupabase();
+    if (!sb) return session.access_token; // no way to refresh; send what we have
+    try {
+        const { data } = await withTimeout(sb.auth.refreshSession(), REFRESH_TIMEOUT_MS, 'refresh');
+        return data.session?.access_token ?? null;
+    } catch (err) {
+        Logger.warn('Token refresh failed (pre-request)', err);
+        return null;
+    }
+}
 
 // ── Request interceptor: attach Bearer token ──────────────────────────────────
 
 api.interceptors.request.use(async (config) => {
     const isPublic = PUBLIC_PATHS.some(p => config.url?.includes(p));
     if (!isPublic) {
-        const token = await AuthService.getValidToken();
+        const token = await getAccessToken();
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
@@ -48,7 +88,11 @@ api.interceptors.request.use(async (config) => {
 });
 
 // ── Response interceptor: handle 401 with token refresh ───────────────────────
-
+//
+// Concurrent-401 queue: if N requests 401 simultaneously, only ONE refresh
+// fires; the rest wait on the same promise and retry with the new token.
+// If refresh fails or times out, sign out cleanly — no indefinite spinner.
+//
 let isRefreshing = false;
 let refreshQueue: Array<{
     resolve: (token: string) => void;
@@ -67,15 +111,29 @@ api.interceptors.response.use(
         if (!isRefreshing) {
             isRefreshing = true;
             try {
-                const newToken = await AuthService.getNewToken();
+                const sb = getSupabase();
+                if (!sb) throw new Error('Supabase client not configured');
+                const { data, error: refreshError } = await withTimeout(
+                    sb.auth.refreshSession(),
+                    REFRESH_TIMEOUT_MS,
+                    'refresh',
+                );
+                if (refreshError) throw refreshError;
+                const newToken = data.session?.access_token;
+                if (!newToken) throw new Error('refreshSession returned no access_token');
+
                 refreshQueue.forEach(({ resolve }) => resolve(newToken));
                 refreshQueue = [];
                 original._retry = true;
                 original.headers['Authorization'] = `Bearer ${newToken}`;
                 return api(original);
             } catch (refreshErr) {
+                Logger.error('Token refresh failed on 401; signing out', refreshErr);
                 refreshQueue.forEach(({ reject }) => reject(refreshErr));
                 refreshQueue = [];
+                // Sign out so AuthContext's onAuthStateChange clears user state.
+                const sb = getSupabase();
+                sb?.auth.signOut().catch(() => { /* best effort */ });
                 return Promise.reject(refreshErr);
             } finally {
                 isRefreshing = false;

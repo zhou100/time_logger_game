@@ -27,13 +27,30 @@ jest.mock('axios', () => {
   };
 });
 
-// Auth service is pulled in by api.ts request interceptor; stub it.
-jest.mock('./auth', () => ({
+// api.ts pulls in Supabase for the token attach + 401 refresh. Stub both the
+// synchronous session read and the supabase client's refreshSession.
+jest.mock('./supabase', () => ({
   __esModule: true,
-  default: {
-    getValidToken: jest.fn().mockResolvedValue('test-token'),
-    getNewToken: jest.fn().mockResolvedValue('new-token'),
-  },
+  getSupabase: jest.fn(() => ({
+    auth: {
+      refreshSession: jest.fn().mockResolvedValue({
+        data: { session: { access_token: 'new-token' } },
+        error: null,
+      }),
+      signOut: jest.fn().mockResolvedValue({ error: null }),
+    },
+  })),
+  isSupabaseConfigured: true,
+}));
+
+jest.mock('./supabaseStorage', () => ({
+  __esModule: true,
+  readSupabaseSession: jest.fn(() => ({
+    access_token: 'test-token',
+    // Far-future expiry so the hot path doesn't trigger a refresh.
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: { email: 'test@example.com' },
+  })),
 }));
 
 import axios from 'axios';

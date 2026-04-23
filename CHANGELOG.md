@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0.0] - 2026-04-23
+
+### Added
+- **Passwordless email OTP sign-in.** New unified `SignInForm` replaces the old Login/Register forms. Email → 6-digit code → in app. No password is ever set. Supabase's `signInWithOtp` with `shouldCreateUser: true` handles both new and returning users in one call. Includes auto-focus, paste-aware auto-submit, 3-attempt soft limit, 30-second resend cooldown with countdown, "wrong email?" back link, and a reducer-backed state machine (`step`, `status`, `attempts`, `resendCooldown`).
+- **Google Sign-In on the landing hero.** New shared `GoogleSignInButton` component (Google brand spec — white bg, `#DADCE0` border, blue G logo, `#3C4043` text) rendered side-by-side with "Start your debrief" on the landing page, and again inside the sign-in form above the email input. Users can sign in with one click without visiting `/login`.
+- **Week-arc landing demo.** Replaced the daily audit demo with a two-column showcase of the product's pattern-detection value: Open Loops (TODOs rolling across days) + Recurring Themes + AI Coach quote. Mobile stacks Open Loops first, Themes second.
+- **Unified auth error mapping** via `mapAuthError(err)` exported from `AuthContext` — single source of truth for user-facing copy across sign-in, resend, Google OAuth, and 401 refresh paths. Covers expired codes, wrong codes, rate limits, network failures, invalid emails, and generic fallback.
+- **New test coverage.** `SignInForm.test.tsx` (10 cases), `LandingPage.test.tsx` (7 cases), `AuthContext.test.tsx` (8 `mapAuthError` cases), `interceptor.test.ts` (6 cases for Bearer token attach, public path skip, near-expiry refresh, no-session handling, 401 refresh+retry, signOut on refresh failure). 84 tests pass across 10 suites.
+
+### Changed
+- **Axios interceptor switched to Supabase session** (`frontend/src/services/api.ts`). Reads the Supabase access token synchronously from `localStorage` on every request (avoids `supabase-js` storage-lock hangs), refreshes slightly before expiry via a 30-second skew margin, and caps `refreshSession()` at 5 seconds via `Promise.race` so a wedged refresh can't hang a request. Preserves the concurrent-401 queue so N simultaneous 401s trigger one refresh and N retries. On unrecoverable refresh failure, signs out cleanly via `supabase.auth.signOut()` — no more indefinite spinners.
+- **`AuthContext.tsx` is now Supabase-only.** Dropped the JWT fallback branch and the `useSupabase` flag. `register()` and `login()` removed from the context interface. Exposed new `sendOTP(email)` and `verifyOTP(email, token)` hooks; `loginWithGoogle()`, `logout()`, and `refreshAccessToken()` remain.
+- **Routing.** `/register` now redirects to `/login` (preserves old email/bookmark links). `/login` renders the new `SignInForm`. `NavBar` drops the `useSupabase` conditional — the Google button is always shown.
+- **`CLAUDE.md` auth section rewritten** to describe the Supabase OTP + Google flow. Legacy JWT endpoints are marked as orphaned with a pointer to the backend-cleanup TODO.
+
+### Removed
+- `frontend/src/services/auth.ts` — JWT-token service class, no longer needed after the Supabase-only migration.
+- `frontend/src/components/auth/LoginForm.tsx` and `frontend/src/components/auth/RegisterForm.tsx` — replaced by `SignInForm`.
+- `frontend/src/pages/Login.tsx` and `frontend/src/pages/Register.tsx` — dead code (not imported anywhere).
+- `LoginCredentials`, `RegisterCredentials`, `AuthResponse`, `TokenData` from `frontend/src/types/auth.ts` — unused after the JWT removal. `User` remains.
+
+### Design
+- Landing page, sign-in form, and Google button fully align to `DESIGN.md` tokens (warm cream `#F5EDE0`, vermilion `#B6492D`, hairline `#C4B8A8`, 8px scale, no shadows, DM Serif Display h1/h2, DM Sans body). OTP input uses `JetBrains Mono` with `0.4em` letter-spacing and a `• • • • • •` placeholder. Full design spec lives in [`docs/designs/landing-auth-redesign.md`](docs/designs/landing-auth-redesign.md).
+- Responsive: hero CTA row stacks on mobile (Google on top), two-column demo collapses to single-column on `<900px`.
+- Accessibility: `autoFocus` on each step, `aria-live="polite"` on OTP errors and resend cooldown, `aria-describedby` linking OTP input to the helper text, `inputMode="numeric"` + `autoComplete="one-time-code"`, all touch targets ≥44px.
+
+### Operational pre-launch checklist
+Before merging, verify in the Supabase dashboard:
+- Auth > Providers > Email > "Email OTP" enabled.
+- Auth > Providers > Google > client ID/secret configured (already set in v0.2.0.0).
+- Auth > Settings > **"Link accounts with same email" enabled** — without this, a user who signs up via OTP then signs in with Google using the same email creates a duplicate account.
+- Email OTP template customized to match the editorial tone.
+- `REACT_APP_USE_SUPABASE=true` in Render environment variables (only used to gate the now-removed JWT fallback; safe to unset in a follow-up).
+
 ## [0.3.8.0] - 2026-04-19
 
 ### Changed
