@@ -56,12 +56,13 @@ time_logger_game/
 │   │   ├── App.tsx           # Root component, routing setup
 │   │   ├── index.tsx         # React entry point
 │   │   ├── components/       # Reusable UI components
-│   │   │   └── auth/         # LoginForm, RegisterForm, ProtectedRoute
+│   │   │   └── auth/         # SignInForm (email OTP), GoogleSignInButton, ProtectedRoute
 │   │   ├── pages/
 │   │   │   └── RecordingPage.tsx  # Main app page
 │   │   ├── services/
-│   │   │   ├── api.ts        # Axios client with auto token refresh
-│   │   │   └── auth.ts       # Auth service, token localStorage management
+│   │   │   ├── api.ts        # Axios client; Supabase session + auto refresh + 401 queue
+│   │   │   ├── supabase.ts   # Supabase client singleton
+│   │   │   └── supabaseStorage.ts  # Synchronous session read (no storage-lock hangs)
 │   │   ├── store/            # Redux store + contentSlice
 │   │   ├── contexts/
 │   │   │   └── AuthContext.tsx
