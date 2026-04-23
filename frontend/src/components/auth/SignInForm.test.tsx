@@ -1,22 +1,23 @@
 /**
- * Tests for SignInForm: state machine, OTP entry, resend cooldown, 3-attempt
- * limit, Google button, back-to-email.
+ * Tests for SignInForm (magic-link flow): email entry, link-sent confirmation,
+ * resend cooldown, back link, Google button error path.
+ *
+ * Users never type a code — they click the link in their email. Supabase's
+ * onAuthStateChange handles the redirect-back; this form only gets the email
+ * out the door.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SignInForm from './SignInForm';
 
-// ── Mocks ─────────────────────────────────────────────────────────────────────
 const mockSendOTP = jest.fn();
-const mockVerifyOTP = jest.fn();
 const mockLoginWithGoogle = jest.fn();
 
 jest.mock('../../contexts/AuthContext', () => ({
     __esModule: true,
     useAuth: () => ({
         sendOTP: mockSendOTP,
-        verifyOTP: mockVerifyOTP,
         loginWithGoogle: mockLoginWithGoogle,
         isAuthenticated: false,
         isLoading: false,
@@ -32,7 +33,6 @@ jest.mock('react-router-dom', () => {
     return { ...actual, useNavigate: () => mockNavigate };
 });
 
-// Skip the palette import cycle
 jest.mock('../../theme', () => ({
     __esModule: true,
     palette: {
@@ -57,7 +57,6 @@ function renderForm() {
 beforeEach(() => {
     jest.useFakeTimers();
     mockSendOTP.mockReset();
-    mockVerifyOTP.mockReset();
     mockLoginWithGoogle.mockReset();
     mockNavigate.mockReset();
 });
@@ -68,24 +67,23 @@ afterEach(() => {
 });
 
 describe('SignInForm — step 1 (email)', () => {
-    it('renders Google button + email field + Send code button', () => {
+    it('renders Google button + email field + send button', () => {
         renderForm();
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
         expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /send code/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /email me a link/i })).toBeInTheDocument();
     });
 
-    it('calls sendOTP on submit and transitions to step 2', async () => {
+    it('calls sendOTP on submit and transitions to the "sent" step', async () => {
         mockSendOTP.mockResolvedValue({});
         renderForm();
-        const email = screen.getByLabelText(/email/i);
-        fireEvent.change(email, { target: { value: 'me@test.com' } });
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@test.com' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+            fireEvent.click(screen.getByRole('button', { name: /email me a link/i }));
         });
         expect(mockSendOTP).toHaveBeenCalledWith('me@test.com');
         await waitFor(() => {
-            expect(screen.getByLabelText(/6-digit code/i)).toBeInTheDocument();
+            expect(screen.getByText(/check your inbox/i)).toBeInTheDocument();
         });
     });
 
@@ -94,101 +92,58 @@ describe('SignInForm — step 1 (email)', () => {
         renderForm();
         fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@test.com' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+            fireEvent.click(screen.getByRole('button', { name: /email me a link/i }));
         });
         expect(await screen.findByText(/too many attempts/i)).toBeInTheDocument();
     });
 });
 
-describe('SignInForm — step 2 (OTP)', () => {
-    async function advanceToOtpStep() {
+describe('SignInForm — step 2 (link sent)', () => {
+    async function advanceToSentStep() {
         mockSendOTP.mockResolvedValue({});
         renderForm();
         fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'me@test.com' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+            fireEvent.click(screen.getByRole('button', { name: /email me a link/i }));
         });
         await waitFor(() => {
-            expect(screen.getByLabelText(/6-digit code/i)).toBeInTheDocument();
+            expect(screen.getByText(/check your inbox/i)).toBeInTheDocument();
         });
     }
 
-    it('auto-submits once 6 digits are entered and navigates on success', async () => {
-        mockVerifyOTP.mockResolvedValue({});
-        await advanceToOtpStep();
-        const otp = screen.getByLabelText(/6-digit code/i);
-        await act(async () => {
-            fireEvent.change(otp, { target: { value: '123456' } });
-        });
-        await waitFor(() => {
-            expect(mockVerifyOTP).toHaveBeenCalledWith('me@test.com', '123456');
-        });
-        await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
-        });
+    it('shows the "check your inbox" confirmation with the email address', async () => {
+        await advanceToSentStep();
+        expect(screen.getByText('me@test.com')).toBeInTheDocument();
+        expect(screen.getByText(/open the email and click the link/i)).toBeInTheDocument();
     });
 
-    it('strips non-digit characters from OTP input', async () => {
-        await advanceToOtpStep();
-        const otp = screen.getByLabelText(/6-digit code/i) as HTMLInputElement;
-        fireEvent.change(otp, { target: { value: 'ab12-34' } });
-        expect(otp.value).toBe('1234');
-    });
-
-    it('shows error message and increments attempts on wrong code', async () => {
-        mockVerifyOTP.mockResolvedValue({ error: 'That code is wrong. Try again.' });
-        await advanceToOtpStep();
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText(/6-digit code/i), { target: { value: '000000' } });
-        });
-        await waitFor(() => {
-            expect(screen.getByText(/that code is wrong/i)).toBeInTheDocument();
-        });
-    });
-
-    it('disables input after 3 failed attempts', async () => {
-        mockVerifyOTP.mockResolvedValue({ error: 'That code is wrong. Try again.' });
-        await advanceToOtpStep();
-        const otp = () => screen.getByLabelText(/6-digit code/i) as HTMLInputElement;
-        for (let i = 0; i < 3; i++) {
-            await act(async () => {
-                fireEvent.change(otp(), { target: { value: `00000${i}` } });
-            });
-            await waitFor(() => expect(mockVerifyOTP).toHaveBeenCalledTimes(i + 1));
-        }
-        expect(otp()).toBeDisabled();
-        expect(screen.getByText(/request a new code below/i)).toBeInTheDocument();
+    it('does not render an OTP code input (magic link flow)', async () => {
+        await advanceToSentStep();
+        expect(screen.queryByLabelText(/code/i)).not.toBeInTheDocument();
     });
 
     it('resend button respects 30s cooldown', async () => {
-        mockSendOTP.mockResolvedValue({});
-        await advanceToOtpStep();
+        await advanceToSentStep();
         const resend = screen.getByRole('button', { name: /resend/i });
         expect(resend).toBeDisabled();
         expect(resend.textContent).toMatch(/resend in/i);
 
-        // Tick 30s forward — each 1s tick fires a setTimeout, so advance in
-        // chunks and let React flush state updates between them.
+        // Advance 30s in 1-second ticks so React flushes between cooldown updates
         for (let i = 0; i < 30; i++) {
             await act(async () => {
                 jest.advanceTimersByTime(1000);
             });
         }
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /resend code/i })).not.toBeDisabled();
+            expect(screen.getByRole('button', { name: /resend link/i })).not.toBeDisabled();
         });
     });
 
     it('"Wrong email?" link returns to step 1', async () => {
-        await advanceToOtpStep();
+        await advanceToSentStep();
         fireEvent.click(screen.getByRole('button', { name: /wrong email/i }));
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /send code/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /email me a link/i })).toBeInTheDocument();
         });
-    });
-
-    it('displays the email address in helper text', async () => {
-        await advanceToOtpStep();
-        expect(screen.getByText('me@test.com')).toBeInTheDocument();
     });
 });
