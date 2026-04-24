@@ -299,8 +299,8 @@ Frontend displays categorized entry
 ### Authentication Flow
 ```
 Landing page:
-  [Sign in with Google] ──→ Supabase OAuth ──→ app
-  [Start your debrief]  ──→ /login (SignInForm)
+  [Sign in with Google to start]  ──→ Supabase OAuth ──→ app   (primary CTA)
+  "or get a magic link" (text link) ──→ /login (SignInForm)    (secondary)
                                 │
                           Email entry → signInWithOtp (shouldCreateUser: true,
                                         emailRedirectTo: origin)
