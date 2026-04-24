@@ -9,8 +9,12 @@ interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    /**
+     * Send a sign-in magic link to the given email. Supabase handles the
+     * redirect-back-to-app flow; onAuthStateChange fires SIGNED_IN when the
+     * user clicks the link in their inbox.
+     */
     sendOTP: (email: string) => Promise<{ error?: string }>;
-    verifyOTP: (email: string, token: string) => Promise<{ error?: string }>;
     loginWithGoogle: () => Promise<void>;
     logout: () => void;
     refreshAccessToken: () => Promise<string>;
@@ -32,13 +36,10 @@ export function mapAuthError(err: AuthError | Error | null | undefined): string 
     if (!err) return 'Something went wrong. Please try again.';
     const msg = (err.message || '').toLowerCase();
     if (msg.includes('expired') || msg.includes('otp_expired')) {
-        return 'This code has expired — send a new one.';
-    }
-    if (msg.includes('invalid') && msg.includes('otp')) {
-        return 'That code is wrong. Try again.';
+        return 'This link has expired — send a new one.';
     }
     if (msg.includes('rate limit') || msg.includes('too many')) {
-        return 'Too many attempts. Please wait a moment and request a new code.';
+        return 'Too many magic links sent in the last hour. Try Google sign-in, or try again in ~30 minutes.';
     }
     if (msg.includes('network') || msg.includes('failed to fetch')) {
         return "Couldn't reach the server — check your connection.";
@@ -120,32 +121,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!sb) return { error: 'Auth service is not available.' };
         const { error } = await sb.auth.signInWithOtp({
             email,
-            options: { shouldCreateUser: true },
+            options: {
+                shouldCreateUser: true,
+                emailRedirectTo: window.location.origin,
+            },
         });
         if (error) {
             Logger.warn('sendOTP failed', error);
             return { error: mapAuthError(error) };
-        }
-        return {};
-    }, []);
-
-    const verifyOTP = useCallback(async (email: string, token: string): Promise<{ error?: string }> => {
-        const sb = getSupabase();
-        if (!sb) return { error: 'Auth service is not available.' };
-        const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-        if (error) {
-            Logger.warn('verifyOTP failed', error);
-            return { error: mapAuthError(error) };
-        }
-        // Set user state explicitly — don't rely on onAuthStateChange race.
-        if (data.user) {
-            try {
-                const { authApi } = await import('../services/api');
-                const profile = await authApi.getCurrentUser();
-                setUser({ id: profile.id, email: data.user.email || email });
-            } catch {
-                setUser({ id: 0, email: data.user.email || email });
-            }
         }
         return {};
     }, []);
@@ -183,7 +166,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isAuthenticated,
             isLoading,
             sendOTP,
-            verifyOTP,
             loginWithGoogle,
             logout,
             refreshAccessToken,

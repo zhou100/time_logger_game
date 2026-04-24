@@ -302,19 +302,24 @@ Landing page:
   [Sign in with Google] ──→ Supabase OAuth ──→ app
   [Start your debrief]  ──→ /login (SignInForm)
                                 │
-                          Email entry → Supabase signInWithOtp (shouldCreateUser: true)
+                          Email entry → signInWithOtp (shouldCreateUser: true,
+                                        emailRedirectTo: origin)
                                 │
-                          6-digit code arrives via email
+                          "Check your inbox" confirmation page
                                 │
-                          verifyOtp → Supabase JWT → app
-                                       ↘ invalid/expired → retry or resend
+                          User clicks magic link in email → Supabase redirects
+                          back to app with session token in URL fragment
+                                │
+                          supabase-js parses fragment → onAuthStateChange fires
+                          SIGNED_IN → AuthContext sets user → app
 
 Supabase session stored in localStorage (standard supabase-js behavior).
 Axios interceptor (services/api.ts) reads the session synchronously and
 attaches a Bearer token. On 401: refreshSession() with a 5s timeout and a
 concurrent-401 queue; on refresh failure → signOut → redirect to /login.
 
-No password is ever set. Users authenticate with Google or email OTP only.
+No password is ever set. Users authenticate with Google (one click) or
+email magic link (one field → click link in inbox).
 ```
 
 ### Data Models

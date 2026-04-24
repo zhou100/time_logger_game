@@ -21,11 +21,27 @@ story, not the daily audit story — showing what Brief notices *across time*, n
 
 | # | Proposal | Effort | Decision | Reasoning |
 |---|----------|--------|----------|-----------|
-| 1 | Inline OTP (6-digit code, no email-link) | XS | ACCEPTED | Faster, no tab-switch |
+| 1 | ~~Inline OTP (6-digit code, no email-link)~~ | XS | REVERSED 2026-04-23 | Magic link is Supabase's default and requires no template customization; see revision note below |
 | 2 | Week-arc demo (open loops + themes, not single-day) | XS | ACCEPTED | Matches new value prop |
 | 3 | Guided first-capture onboarding post sign-up | S | DEFERRED | Need real new-user data first |
 | 4 | Google Sign-In button on landing hero | XS | ACCEPTED | One fewer click to entry |
-| 5 | Fully passwordless (OTP only, no password ever) | XS | ACCEPTED | Purest UX, matches philosophy |
+| 5 | Fully passwordless (no password ever) | XS | ACCEPTED | Purest UX, matches philosophy |
+
+## 2026-04-23 Revision — Magic Link over Inline OTP
+
+**What changed:** The sign-in form no longer asks the user to type a 6-digit code. The email now contains a magic link; clicking it redirects back to the app and `onAuthStateChange` logs the user in automatically.
+
+**Why:** Supabase's default `signInWithOtp` email template uses `{{ .ConfirmationURL }}` (a link). To actually deliver a 6-digit code, the Supabase dashboard template has to be manually customized to use `{{ .Token }}` instead. When we tested the shipped flow end-to-end, the email arrived with a link — and clicking the link already logged the user in, bypassing the OTP input entirely.
+
+The original "inline OTP" decision (cherry-pick #1) was chosen to avoid tab-switching. In practice, every modern email client (Gmail, Outlook, Apple Mail) opens links in a new tab anyway, so the tab-switch happens either way. The only real difference: with magic link, the user clicks once instead of switching tabs + reading + typing 6 digits.
+
+**Changes applied:**
+- `SignInForm`: step 2 is now a "Check your inbox" confirmation screen — no code input, no 3-attempt counter, no paste auto-submit, no `verifyOtp` call. Resend cooldown + "Wrong email?" back link kept.
+- `AuthContext`: `verifyOTP` method removed. `sendOTP` now passes `emailRedirectTo: window.location.origin`.
+- Tests simplified: 13 cases → 7 cases covering email send, error path, confirmation screen, resend cooldown, back link, Google button.
+- No Supabase dashboard template customization needed — the default magic link template works out of the box.
+
+**Supabase pre-launch checklist update:** one item removed (email template customization for `{{ .Token }}`), one item added: verify **Site URL / Redirect URLs** in Supabase dashboard > Auth > URL Configuration include both the prod URL and `http://localhost:3000` for dev.
 
 ## Accepted Scope
 

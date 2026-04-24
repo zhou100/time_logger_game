@@ -17,10 +17,6 @@ describe('mapAuthError', () => {
             .toMatch(/expired/i);
     });
 
-    it('maps invalid OTP', () => {
-        expect(mapAuthError(new Error('Invalid otp'))).toMatch(/wrong/i);
-    });
-
     it('maps rate limit errors', () => {
         expect(mapAuthError(new Error('Email rate limit exceeded')))
             .toMatch(/too many/i);
