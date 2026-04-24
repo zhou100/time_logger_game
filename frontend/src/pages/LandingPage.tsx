@@ -2,13 +2,11 @@ import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
     Box,
-    Button,
     Container,
     Link,
     Typography,
     Alert,
 } from '@mui/material';
-import MicIcon from '@mui/icons-material/Mic';
 import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 import { palette } from '../theme';
 
@@ -43,18 +41,19 @@ const LandingPage: React.FC = () => {
 
     return (
         <Container maxWidth="md">
-            <Box sx={{ mt: { xs: 6, md: 8 }, mb: 8 }}>
+            <Box sx={{ mt: { xs: 5, md: 8 }, mb: { xs: 6, md: 8 } }}>
                 {/* ── Hero ───────────────────────────────────────────────── */}
-                <Box sx={{ mb: 6 }}>
+                <Box sx={{ mb: { xs: 6, md: 8 } }}>
                     <Typography variant="h1" component="h1" sx={{ mb: 2 }}>
                         Debrief your day.
                     </Typography>
-                    <Typography variant="h3" component="p" color="text.secondary" sx={{ mb: 1 }}>
-                        A daily work debrief, powered by your voice. Turn what you did into a
-                        clear, structured brief.
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 540 }}>
-                        No timers. No typing. Just talk.
+                    <Typography
+                        variant="h3"
+                        component="p"
+                        color="text.secondary"
+                        sx={{ mb: { xs: 3, md: 4 }, maxWidth: 520 }}
+                    >
+                        Talk. We turn it into your weekly brief.
                     </Typography>
 
                     {googleError && (
@@ -63,40 +62,32 @@ const LandingPage: React.FC = () => {
                         </Alert>
                     )}
 
-                    {/* CTA row — Google primary, email alternative */}
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            gap: { xs: 1.5, sm: 2 },
-                            alignItems: { xs: 'stretch', sm: 'center' },
-                            maxWidth: { xs: '100%', sm: 520 },
-                        }}
-                    >
-                        <Box sx={{ flex: { xs: 'none', sm: '1 1 auto' }, minWidth: 0 }}>
-                            <GoogleSignInButton variant="landing" onError={setGoogleError} />
-                        </Box>
-                        <Button
-                            component={RouterLink}
-                            to="/login"
-                            variant="outlined"
-                            color="primary"
-                            size="large"
-                            fullWidth
-                            startIcon={<MicIcon />}
-                            sx={{
-                                height: 48,
-                                flex: { xs: 'none', sm: '1 1 auto' },
-                                textTransform: 'none',
-                            }}
+                    {/* Primary CTA — Google. Magic link is a lightweight alternative below. */}
+                    <Box sx={{ maxWidth: 400 }}>
+                        <GoogleSignInButton
+                            variant="landing"
+                            label="Sign in with Google to start"
+                            onError={setGoogleError}
+                        />
+                        <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mt: 1.5, textAlign: 'center' }}
                         >
-                            Start your debrief
-                        </Button>
+                            or{' '}
+                            <Link
+                                component={RouterLink}
+                                to="/login"
+                                sx={{ color: palette.accent, fontWeight: 500 }}
+                            >
+                                get a magic link
+                            </Link>
+                        </Typography>
                     </Box>
                 </Box>
 
                 {/* ── Demo section ───────────────────────────────────────── */}
-                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 2 }}>
                     Here&rsquo;s what Brief notices over a week
                 </Typography>
 
@@ -104,24 +95,24 @@ const LandingPage: React.FC = () => {
                     sx={{
                         display: 'grid',
                         gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' },
-                        gap: 2,
+                        gap: { xs: 2, md: 3 },
                     }}
                 >
                     {/* Left: Open Loops */}
                     <Box
                         sx={{
-                            p: 3,
+                            p: { xs: 2.5, md: 3 },
                             borderRadius: '8px',
-                            border: `1px solid ${palette.rule}`,
+                            border: `1px solid ${palette.textMuted}`,
                             bgcolor: 'background.paper',
                         }}
                     >
                         <Typography
                             variant="overline"
                             component="h2"
-                            color="text.secondary"
+                            color="text.primary"
                             display="block"
-                            gutterBottom
+                            sx={{ mb: 1.5, fontWeight: 600 }}
                         >
                             Open Loops — {DEMO_OPEN_LOOPS.length}
                         </Typography>
@@ -134,7 +125,7 @@ const LandingPage: React.FC = () => {
                                         display: 'flex',
                                         gap: 1.5,
                                         alignItems: 'flex-start',
-                                        py: 1.25,
+                                        py: 1.5,
                                         borderBottom: `1px solid ${palette.rule}`,
                                         '&:last-child': { borderBottom: 'none' },
                                     }}
@@ -142,11 +133,11 @@ const LandingPage: React.FC = () => {
                                     <Box
                                         aria-hidden="true"
                                         sx={{
-                                            width: 16,
-                                            height: 16,
+                                            width: 20,
+                                            height: 20,
                                             mt: 0.25,
                                             border: `1.5px solid ${palette.textMuted}`,
-                                            borderRadius: '3px',
+                                            borderRadius: '4px',
                                             flexShrink: 0,
                                         }}
                                     />
@@ -164,21 +155,21 @@ const LandingPage: React.FC = () => {
                     </Box>
 
                     {/* Right: Recurring Themes + coach quote */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 } }}>
                         <Box
                             sx={{
-                                p: 3,
+                                p: { xs: 2.5, md: 3 },
                                 borderRadius: '8px',
-                                border: `1px solid ${palette.rule}`,
+                                border: `1px solid ${palette.textMuted}`,
                                 bgcolor: 'background.paper',
                             }}
                         >
                             <Typography
                                 variant="overline"
                                 component="h2"
-                                color="text.secondary"
+                                color="text.primary"
                                 display="block"
-                                gutterBottom
+                                sx={{ mb: 1.5, fontWeight: 600 }}
                             >
                                 Recurring Themes
                             </Typography>
@@ -191,7 +182,7 @@ const LandingPage: React.FC = () => {
                                             display: 'flex',
                                             justifyContent: 'space-between',
                                             alignItems: 'baseline',
-                                            py: 1,
+                                            py: 1.25,
                                             borderBottom: `1px solid ${palette.rule}`,
                                             '&:last-child': { borderBottom: 'none' },
                                         }}
@@ -216,20 +207,21 @@ const LandingPage: React.FC = () => {
                         <Box
                             sx={{
                                 pl: 2,
-                                py: 1.5,
+                                pr: 2.5,
+                                py: 2,
                                 bgcolor: 'background.paper',
                                 borderRadius: '0 8px 8px 0',
-                                border: `1px solid ${palette.rule}`,
-                                borderLeftWidth: '2px',
+                                border: `1px solid ${palette.textMuted}`,
+                                borderLeftWidth: '3px',
                                 borderLeftColor: palette.accent,
                             }}
                         >
                             <Typography
                                 variant="overline"
                                 component="h2"
-                                color="text.secondary"
+                                color="text.primary"
                                 display="block"
-                                sx={{ mb: 0.5 }}
+                                sx={{ mb: 0.5, fontWeight: 600 }}
                             >
                                 AI Coach
                             </Typography>
@@ -241,26 +233,6 @@ const LandingPage: React.FC = () => {
                             </Typography>
                         </Box>
                     </Box>
-                </Box>
-
-                {/* ── Footer CTA ─────────────────────────────────────────── */}
-                <Box sx={{ mt: 6 }}>
-                    <Button
-                        component={RouterLink}
-                        to="/login"
-                        variant="contained"
-                        color="primary"
-                        size="large"
-                        sx={{ px: 4, py: 1.5, mr: 2, textTransform: 'none' }}
-                    >
-                        Sign up free
-                    </Button>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                        Already have an account?{' '}
-                        <Link component={RouterLink} to="/login" sx={{ color: palette.accent }}>
-                            Sign in
-                        </Link>
-                    </Typography>
                 </Box>
             </Box>
         </Container>

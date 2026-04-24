@@ -138,6 +138,44 @@
 - **Buttons:** Primary = vermilion filled. Secondary = vermilion outlined. Ghost = muted border. All 8px border-radius.
 - **Record button:** 72px circle, vermilion fill, white mic icon, pulse animation when idle.
 
+## Landing / Marketing Surface
+
+The landing page and pre-auth NavBar are a **separate surface** from the in-app workspace. Visitors see these cold, without context or commitment — the rules tune visual weight and CTA density differently than in-app screens.
+
+### CTA hierarchy (one primary per viewport)
+- **Primary CTA:** Google Sign-In button in Google brand spec (white bg `#FFFFFF`, `#DADCE0` border, blue G logo, `#3C4043` text). Intentionally does NOT use vermilion. Users click what they recognize; trust beats brand consistency at the entry point.
+- **Primary copy:** `"Sign in with Google to start"` on landing hero. Shorter label `"Sign in with Google"` on SignInForm (already inside the auth flow).
+- **Secondary alternative:** lightweight **text link**, not a button. Pattern: `or [get a magic link](/login)` — centered under the primary CTA, vermilion link color, `body2` size. Never a competing button.
+- **Rule of one:** Never place two buttons of equal weight in a marketing hero. The entire surface should have a single obvious action.
+
+### NavBar (unauthenticated)
+- Left: logo (`"Debrief"` in display serif) linking to `/`
+- Right: single `"Sign in"` text link → `/login`. No Google button, no "Sign up" button, no hamburger.
+- Rationale: the landing hero carries the primary CTA. A second Google button in the nav fractures attention and competes with the hero. Hamburger menus on a single-page marketing surface are theater.
+
+### Spacing rhythm (landing hero)
+Overrides the general density — landing breathes more than app surfaces.
+
+| Relationship | Mobile | Desktop | Token |
+|--------------|--------|---------|-------|
+| Title → subtitle | 16px | 16px | md |
+| Subtitle → primary CTA | 24px | 32px | lg / xl |
+| CTA → secondary link | 12px | 12px | (1.5 × xs) |
+| Hero → demo section | 48px | 64px | 2xl / 3xl |
+| Demo card padding | 20px | 24px | (2.5 × xs) / lg |
+| Between demo cards | 16px | 24px | md / lg |
+
+### Card contrast on marketing surfaces
+- **Border:** use `var(--text-muted)` (`#6F6258`) instead of `var(--rule)` (`#C4B8A8`). Stronger contrast so cards read as distinct surfaces to a cold visitor.
+- **Card header overline:** `text.primary` + `fontWeight: 600` (not muted). The header is a label on a billboard, not a soft divider.
+- **Coach letter left border on landing:** `3px solid var(--accent)` (vs. `2px` on the in-app coach letter). Heavier visual emphasis for the marketing preview.
+- **Touch targets in demo:** preview checkboxes are `20px × 20px` with `4px` radius (not the dense `16px` used in active app lists). Marketing demo should look tappable even though it isn't.
+
+### Not-in-scope for marketing surfaces
+- No floating shadows, no gradient CTAs, no "Built for X / Designed for Y" copy patterns
+- No Google button AND magic-link button on the same screen — if both are visible, one must be a text link
+- No mid-page signup modals, no exit-intent overlays — respect the visitor
+
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
@@ -147,3 +185,7 @@
 | 2026-03-25 | Serif headings (DM Serif Display) | "Serif is for reflection, sans is for action." Literary headings differentiate from startup-clean sans-serif competitors. |
 | 2026-03-25 | Bilingual typography pairing | Noto Serif SC for Chinese headings, Noto Sans SC for Chinese body. Matches the serif/sans role split across both languages. |
 | 2026-03-25 | No box-shadow anywhere | Paper-tone layering via background color, not elevation. Hairline borders for separation. Cleaner, more editorial. |
+| 2026-04-23 | Landing CTA: Google primary, magic link as secondary text | Post-auth-revamp CEO review flipped the primary back to Google (1-tap vs. 4-step friction for email magic link). Magic link kept as a lightweight "or [link]" alternative for non-Google users. One primary per viewport — two buttons of equal weight was fragmenting attention. |
+| 2026-04-23 | Unauth NavBar stripped to logo + single "Sign in" text link | Previous nav had Google + Sign In + Sign Up competing with the hero CTA on mobile. Rule: the hero owns the primary action; the nav is a quiet escape hatch. |
+| 2026-04-23 | Marketing surfaces use `text-muted` card borders (not `rule`) | Cold visitors need card boundaries to read as distinct surfaces. In-app users already have spatial context, so hairline `rule` borders are enough. This split is deliberate, not drift. |
+| 2026-04-23 | Landing demo checkboxes 20px (vs. 16px in-app) | Marketing preview should look tappable. In-app lists favor density; landing favors legibility and implied touch affordance. |
