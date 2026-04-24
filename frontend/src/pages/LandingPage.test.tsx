@@ -52,13 +52,13 @@ describe('LandingPage', () => {
     it('renders the hero headline and subhead', () => {
         renderPage();
         expect(screen.getByRole('heading', { name: /debrief your day/i })).toBeInTheDocument();
-        expect(screen.getByText(/no timers. no typing/i)).toBeInTheDocument();
+        expect(screen.getByText(/we turn it into your weekly brief/i)).toBeInTheDocument();
     });
 
-    it('shows both CTA buttons in the hero — Google and Start your debrief', () => {
+    it('shows Google as the primary CTA and magic link as secondary text', () => {
         renderPage();
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: /start your debrief/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /get a magic link/i })).toBeInTheDocument();
     });
 
     it('renders Open Loops section with demo items', () => {

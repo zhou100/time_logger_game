@@ -12,12 +12,12 @@
 
 ## P2 — Medium Priority
 
-### Mobile Landing CTA Click Analytics
-**What:** Instrument click tracking on mobile landing primary CTA ("Start talking"), secondary Google link, navbar "Get Started" CTA, and measure time-to-first-click / bounce-before-CTA.
-**Why:** The mobile-landing-cleanup PR reverses the primary CTA from Google-SSO to email-magic-link. That's a 1-tap → 4-step friction change. Without a baseline there's no way to detect a conversion regression. Also unblocks future A/B on CTA copy.
-**Pros:** Unblocks data-driven CTA iteration. Catches regressions from the CTA reversal.
+### Landing CTA Click Analytics
+**What:** Instrument click tracking on the landing primary CTA ("Sign in with Google to start"), the secondary magic-link text, and the NavBar "Sign in" link. Measure time-to-first-click and bounce-before-CTA.
+**Why:** The landing funnel now has a single primary CTA (Google) with magic link as a lightweight text alternative. No baseline exists to measure conversion, detect regressions from copy/layout tweaks, or A/B test CTA variants.
+**Pros:** Unblocks data-driven CTA iteration. Catches regressions from future landing changes.
 **Cons:** Needs an analytics vendor choice (PostHog / Plausible / GA4) or a lightweight backend event endpoint.
-**Context:** Surfaced in 2026-04-23 `/plan-ceo-review` of mobile-landing-cleanup. Section 8 (Observability) flagged a zero-analytics posture on a strategic funnel change. HOLD SCOPE deferred this from the PR.
+**Context:** Originally surfaced in 2026-04-23 `/plan-ceo-review` of mobile-landing-cleanup when a Google→email CTA reversal was on the table. Reversal was later dropped (v0.4.1.1 kept Google as primary), but the analytics gap remains — still worth filling.
 **Effort:** S (human: ~3 hours / CC: ~30 min)
 **Priority:** P2
 **Depends on:** Analytics vendor decision (1-line doc).

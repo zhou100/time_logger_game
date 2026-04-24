@@ -23,7 +23,7 @@ const NavBar: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [searchParams] = useSearchParams();
-    const { user, logout, loginWithGoogle } = useAuth();
+    const { user, logout } = useAuth();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -49,14 +49,6 @@ const NavBar: React.FC = () => {
             navigate('/login');
         } catch (error) {
             Logger.error('Logout error:', error);
-        }
-    };
-
-    const handleGoogleSignIn = async () => {
-        try {
-            await loginWithGoogle();
-        } catch (error) {
-            Logger.error('Google sign-in error:', error);
         }
     };
 
@@ -147,32 +139,15 @@ const NavBar: React.FC = () => {
                         </Menu>
                     </Box>
                 ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={handleGoogleSignIn}
-                        >
-                            Sign in with Google
-                        </Button>
-                        <Button
-                            component={RouterLink}
-                            to="/login"
-                            variant="text"
-                            size="small"
-                            sx={{ color: 'text.secondary' }}
-                        >
-                            Sign In
-                        </Button>
-                        <Button
-                            component={RouterLink}
-                            to="/register"
-                            variant="contained"
-                            size="small"
-                        >
-                            Sign Up
-                        </Button>
-                    </Box>
+                    <Button
+                        component={RouterLink}
+                        to="/login"
+                        variant="text"
+                        size="small"
+                        sx={{ color: 'text.primary', textTransform: 'none' }}
+                    >
+                        Sign in
+                    </Button>
                 )}
             </Toolbar>
         </AppBar>

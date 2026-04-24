@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1.1] - 2026-04-23
+
+### Changed
+- **Landing hero simplified to a single primary CTA.** "Sign in with Google to start" is now the one visually dominant action, with a lightweight "or get a magic link" text link below for users without a Google account. The previous side-by-side Google + "Start your debrief" layout competed for attention on mobile and fragmented the funnel. Rationale: Google is a 1-tap path; magic link is a 4-step tab-switching flow, so the default should be the fastest — magic link stays reachable as a text alternative for the Google-less.
+- **Pre-auth NavBar stripped down.** Unauthenticated users now see logo + a single "Sign in" text link. The competing Google / Sign In / Sign Up trio was removed — the hero owns the primary action; the nav is a quiet escape hatch.
+- **Landing tightened overall.** Shorter subhead ("Talk. We turn it into your weekly brief."), 8px-rhythm spacing between hero elements (title→sub 16px, sub→CTA 24–32px, hero→demo 48–64px), stronger card borders on marketing surfaces using `text-muted` instead of `rule`, 20px demo checkboxes (vs. 16px in-app) for visible touch affordance, bolder card-header overlines, and a 3px AI Coach left border (vs. 2px in-app).
+- **`GoogleSignInButton` accepts an optional `label` prop** so the landing hero can use "Sign in with Google to start" while other surfaces keep the default "Sign in with Google".
+
+### Docs
+- **DESIGN.md gains a "Landing / Marketing Surface" section** codifying CTA-hierarchy rules, unauth NavBar spec, landing-specific spacing tokens, and the text-muted border / heavier coach-border overrides for marketing surfaces. Four new Decisions Log entries anchor today's choices with rationale so future changes have a spec to read against.
+
 ## [0.4.1.0] - 2026-04-23
 
 ### Security

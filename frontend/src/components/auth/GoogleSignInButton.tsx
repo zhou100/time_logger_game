@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
  */
 interface Props {
     variant?: 'landing' | 'form';
+    label?: string;
     onError?: (message: string) => void;
 }
 
@@ -24,7 +25,7 @@ const GoogleG: React.FC = () => (
     </svg>
 );
 
-const GoogleSignInButton: React.FC<Props> = ({ variant = 'form', onError }) => {
+const GoogleSignInButton: React.FC<Props> = ({ variant = 'form', label, onError }) => {
     const { loginWithGoogle } = useAuth();
     const [loading, setLoading] = useState(false);
 
@@ -72,7 +73,7 @@ const GoogleSignInButton: React.FC<Props> = ({ variant = 'form', onError }) => {
             }}
             aria-label="Sign in with Google"
         >
-            {loading ? 'Signing in…' : 'Sign in with Google'}
+            {loading ? 'Signing in…' : label ?? 'Sign in with Google'}
         </Button>
     );
 };
