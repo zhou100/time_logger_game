@@ -12,6 +12,30 @@
 
 ## P2 — Medium Priority
 
+### Mobile Landing CTA Click Analytics
+**What:** Instrument click tracking on mobile landing primary CTA ("Start talking"), secondary Google link, navbar "Get Started" CTA, and measure time-to-first-click / bounce-before-CTA.
+**Why:** The mobile-landing-cleanup PR reverses the primary CTA from Google-SSO to email-magic-link. That's a 1-tap → 4-step friction change. Without a baseline there's no way to detect a conversion regression. Also unblocks future A/B on CTA copy.
+**Pros:** Unblocks data-driven CTA iteration. Catches regressions from the CTA reversal.
+**Cons:** Needs an analytics vendor choice (PostHog / Plausible / GA4) or a lightweight backend event endpoint.
+**Context:** Surfaced in 2026-04-23 `/plan-ceo-review` of mobile-landing-cleanup. Section 8 (Observability) flagged a zero-analytics posture on a strategic funnel change. HOLD SCOPE deferred this from the PR.
+**Effort:** S (human: ~3 hours / CC: ~30 min)
+**Priority:** P2
+**Depends on:** Analytics vendor decision (1-line doc).
+
+---
+
+### Record-First Mobile Landing Flow
+**What:** Visitor hits mobile landing → taps primary CTA → records one voice entry anonymously → THEN is prompted to save via magic-link signup. Entry is attached to the new account on signup.
+**Why:** The platonic-ideal mobile landing per Step 0C of the 2026-04-23 CEO review. Current funnel asks for auth before demonstrating value; record-first inverts that. Potentially 10x mobile conversion by removing the pre-value friction.
+**Pros:** Removes the "prove value before I give you my email" objection. Product demo *is* the onboarding.
+**Cons:** Anonymous entry storage (ephemeral table or cookie-keyed session), Whisper cost for unauthed users (rate-limit), merge flow on signup, abuse surface.
+**Context:** Surfaced in 2026-04-23 `/plan-ceo-review` as the scope-expansion option the user held. Should sequence AFTER Mobile Landing CTA Click Analytics so impact is measurable.
+**Effort:** L (human: ~1 week / CC: ~4 hours)
+**Priority:** P2
+**Depends on:** Mobile Landing CTA Click Analytics (need baseline to measure impact).
+
+---
+
 ### Re-enable or Remove Module-Skipped Backend Test Files
 **What:** 5 test files carry `pytest.skip(..., allow_module_level=True)` added on this branch: `test_auth.py`, `test_auth_integration.py`, `test_categorization.py`, `e2e/auth/test_auth_flow.py`, `e2e/test_users.py`. Either fix the environment/fixture issues and unskip them, or delete the orphaned files outright.
 **Why:** Codex adversarial review flagged that branch-level module skips disable auth coverage while this branch adds a new protected endpoint. Auth regressions the tests would catch are currently invisible.
