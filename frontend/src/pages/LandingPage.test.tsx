@@ -69,13 +69,13 @@ describe('LandingPage', () => {
         expect(screen.getByText(/review design mockups/i)).toBeInTheDocument();
     });
 
-    it('renders Recurring Themes section with counts', () => {
+    it('renders the themes section with counts', () => {
         renderPage();
-        expect(screen.getByText(/recurring themes/i)).toBeInTheDocument();
+        expect(screen.getByText(/what kept coming up/i)).toBeInTheDocument();
         expect(screen.getByText('deep work')).toBeInTheDocument();
-        expect(screen.getByText('4×')).toBeInTheDocument();
+        expect(screen.getByText('4 times')).toBeInTheDocument();
         expect(screen.getByText('client prep')).toBeInTheDocument();
-        expect(screen.getByText('3×')).toBeInTheDocument();
+        expect(screen.getByText('3 times')).toBeInTheDocument();
     });
 
     it('renders the "Your recent debrief" transition with recent entries', () => {

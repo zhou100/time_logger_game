@@ -256,37 +256,78 @@ const LandingPage: React.FC = () => {
                                 component="h2"
                                 color="text.primary"
                                 display="block"
-                                sx={{ mb: 1.5, fontWeight: 600 }}
+                                sx={{ mb: 2, fontWeight: 600 }}
                             >
-                                Recurring Themes
+                                What kept coming up
                             </Typography>
-                            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-                                {DEMO_THEMES.map((t) => (
-                                    <Box
-                                        key={t.label}
-                                        component="li"
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'baseline',
-                                            py: 1.25,
-                                            borderBottom: `1px solid ${palette.rule}`,
-                                            '&:last-child': { borderBottom: 'none' },
-                                        }}
-                                    >
-                                        <Typography variant="body2">{t.label}</Typography>
-                                        <Typography
-                                            variant="body2"
-                                            sx={{
-                                                fontWeight: 600,
-                                                fontVariantNumeric: 'tabular-nums',
-                                                color: palette.textMuted,
-                                            }}
+                            <Box
+                                component="ul"
+                                sx={{
+                                    listStyle: 'none',
+                                    m: 0,
+                                    p: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 1.25,
+                                }}
+                            >
+                                {(() => {
+                                    const maxCount = Math.max(...DEMO_THEMES.map((t) => t.count));
+                                    return DEMO_THEMES.map((t) => (
+                                        <Box
+                                            key={t.label}
+                                            component="li"
+                                            sx={{ position: 'relative' }}
                                         >
-                                            {t.count}×
-                                        </Typography>
-                                    </Box>
-                                ))}
+                                            {/* proportional fill bar behind the row */}
+                                            <Box
+                                                aria-hidden="true"
+                                                sx={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    bottom: 0,
+                                                    left: 0,
+                                                    width: `${(t.count / maxCount) * 100}%`,
+                                                    bgcolor: palette.accent,
+                                                    opacity: 0.14,
+                                                    borderRadius: '4px',
+                                                }}
+                                            />
+                                            <Box
+                                                sx={{
+                                                    position: 'relative',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'baseline',
+                                                    px: 1.5,
+                                                    py: 1,
+                                                }}
+                                            >
+                                                <Typography
+                                                    variant="body1"
+                                                    sx={{
+                                                        fontFamily: '"DM Serif Display", serif',
+                                                        fontSize: '1.0625rem',
+                                                        color: palette.textPrimary,
+                                                    }}
+                                                >
+                                                    {t.label}
+                                                </Typography>
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{
+                                                        fontWeight: 600,
+                                                        fontVariantNumeric: 'tabular-nums',
+                                                        color: palette.textMuted,
+                                                        letterSpacing: '0.04em',
+                                                    }}
+                                                >
+                                                    {t.count} times
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                    ));
+                                })()}
                             </Box>
                         </Box>
 
