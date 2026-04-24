@@ -15,7 +15,8 @@
       "Skill(plan-eng-review)",
       "Skill(plan-eng-review:*)",
       "Bash(curl -s http://localhost:3000/static/js/main.f371815b.js)",
-      "Bash(python -m pytest tests/test_weekly_letter_check.py tests/test_personalization_validators.py tests/test_weekly_signals.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_weekly_letter_check.py tests/test_personalization_validators.py tests/test_weekly_signals.py -x --tb=short)",
+      "PowerShell(wsl.exe -d Ubuntu -e bash -lc \"source ~/.nvm/nvm.sh 2>/dev/null; nvm use 18 2>/dev/null; cd /home/yujunz/llm_projects/time_logger_game/frontend && ./node_modules/.bin/tsc --noEmit 2>&1 | head -30\")"
     ],
     "additionalDirectories": [
       "/home/yujunz/.gstack/projects/zhou100-time_logger_game/ceo-plans",

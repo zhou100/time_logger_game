@@ -105,8 +105,8 @@ time_logger_game/
 | TypeScript | latest | Type safety |
 | Material-UI | latest | Component library |
 | Redux Toolkit | latest | State management |
-| Axios | 1.6.5 | HTTP client |
-| react-router-dom | 6.21.3 | Routing |
+| Axios | 1.15.2 | HTTP client |
+| react-router-dom | 6.30.3 | Routing |
 | react-media-recorder | 1.7.1 | Browser audio recording |
 | react-beautiful-dnd | 13.1.1 | Drag-and-drop |
 | Cypress | 13.6.3 | E2E testing |
