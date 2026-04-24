@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1.0] - 2026-04-23
+
+### Security
+- **Backend dependency bumps to close Dependabot CVEs.** `python-jose` 3.3.0 → 3.4.0 (critical: OpenSSH ECDSA algorithm confusion), `python-multipart` 0.0.6 → 0.0.20 (high: arbitrary file write, Content-Type ReDoS, multipart DoS), `PyJWT` 2.8.0 → 2.12.1 (high: unknown `crit` header extensions), `requests` 2.31.0 → 2.33.1 (netrc credentials leak, `verify=False` session reuse, insecure temp file), `python-dotenv` 1.0.0 → 1.2.2 (`set_key` symlink follow). All 161 backend tests pass on the bumped versions.
+- **Frontend dependency bumps.** `axios` ^1.6.5 → ^1.15.2 (high: SSRF via absolute URL, DoS via `__proto__` in mergeConfig, header-injection cloud-metadata exfiltration, NO_PROXY bypass SSRF), `react-router-dom` ^6.21.3 → ^6.30.3 (high: XSS via open redirect in `@remix-run/router`, unexpected external redirect in `react-router`). Transitively pulls in `form-data` 4.0.5 (critical: unsafe random boundary) and `follow-redirects` 1.16.0 (auth header leak on cross-domain redirect). Production build succeeds; bundle size +390 B gzipped.
+- **Remaining alerts** (~45) are all CRA/`react-scripts@5.0.1` dev/test-only transitives (`minimatch`, `node-forge`, `lodash`, `svgo`, `webpack-dev-server`, etc.) that don't ship to users. Will be resolved by a future CRA→Vite migration.
+
 ## [0.4.0.0] - 2026-04-23
 
 ### Added
