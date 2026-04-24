@@ -21,6 +21,33 @@ interface RecurringTheme {
     count: number;
 }
 
+interface RecentEntry {
+    id: string;
+    time: string;
+    text: string;
+}
+
+const DEMO_RECENT_ENTRIES: RecentEntry[] = [
+    {
+        id: 'r1',
+        time: '9:42 AM · today',
+        text:
+            'Long call with the client — decided to push the launch back two weeks so the onboarding isn’t a mess.',
+    },
+    {
+        id: 'r2',
+        time: '2:15 PM · yesterday',
+        text:
+            'Keep getting pulled into scheduling that should belong to someone else. Need to draw a line here.',
+    },
+    {
+        id: 'r3',
+        time: '6:30 PM · Tuesday',
+        text:
+            'Finally through the compliance review. Three weeks of back-and-forth for something that should have been a form.',
+    },
+];
+
 const DEMO_OPEN_LOOPS: OpenLoop[] = [
     { id: 'l1', text: 'Fix the login bug before standup', day: 'from Tue' },
     { id: 'l2', text: 'Block time for deep work mornings', day: 'from Wed' },
@@ -83,6 +110,66 @@ const LandingPage: React.FC = () => {
                                 get a magic link
                             </Link>
                         </Typography>
+                    </Box>
+                </Box>
+
+                {/* ── Transition: Your recent debrief ───────────────────── */}
+                <Box sx={{ mb: { xs: 6, md: 8 } }}>
+                    <Typography
+                        variant="h2"
+                        component="h2"
+                        sx={{ mb: { xs: 2, md: 3 } }}
+                    >
+                        Your recent debrief
+                    </Typography>
+                    <Box
+                        component="ul"
+                        sx={{
+                            listStyle: 'none',
+                            m: 0,
+                            p: 0,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: { xs: 2, md: 2.5 },
+                        }}
+                    >
+                        {DEMO_RECENT_ENTRIES.map((entry) => (
+                            <Box
+                                key={entry.id}
+                                component="li"
+                                sx={{
+                                    display: 'grid',
+                                    gridTemplateColumns: { xs: '1fr', sm: '140px 1fr' },
+                                    columnGap: { xs: 0, sm: 3 },
+                                    rowGap: 0.5,
+                                    alignItems: 'baseline',
+                                    borderTop: `1px solid ${palette.rule}`,
+                                    pt: { xs: 1.5, md: 2 },
+                                }}
+                            >
+                                <Typography
+                                    variant="overline"
+                                    color="text.secondary"
+                                    sx={{
+                                        fontWeight: 600,
+                                        fontVariantNumeric: 'tabular-nums',
+                                        letterSpacing: '0.08em',
+                                    }}
+                                >
+                                    {entry.time}
+                                </Typography>
+                                <Typography
+                                    variant="body1"
+                                    sx={{
+                                        fontStyle: 'italic',
+                                        lineHeight: 1.65,
+                                        color: palette.textPrimary,
+                                    }}
+                                >
+                                    &ldquo;{entry.text}&rdquo;
+                                </Typography>
+                            </Box>
+                        ))}
                     </Box>
                 </Box>
 

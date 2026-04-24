@@ -78,6 +78,13 @@ describe('LandingPage', () => {
         expect(screen.getByText('3×')).toBeInTheDocument();
     });
 
+    it('renders the "Your recent debrief" transition with recent entries', () => {
+        renderPage();
+        expect(screen.getByRole('heading', { name: /your recent debrief/i })).toBeInTheDocument();
+        expect(screen.getByText(/push the launch back two weeks/i)).toBeInTheDocument();
+        expect(screen.getByText(/compliance review/i)).toBeInTheDocument();
+    });
+
     it('renders the AI Coach letter with a coaching quote', () => {
         renderPage();
         expect(screen.getByText(/ai coach/i)).toBeInTheDocument();
