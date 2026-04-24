@@ -36,13 +36,10 @@ export function mapAuthError(err: AuthError | Error | null | undefined): string 
     if (!err) return 'Something went wrong. Please try again.';
     const msg = (err.message || '').toLowerCase();
     if (msg.includes('expired') || msg.includes('otp_expired')) {
-        return 'This code has expired — send a new one.';
-    }
-    if (msg.includes('invalid') && msg.includes('otp')) {
-        return 'That code is wrong. Try again.';
+        return 'This link has expired — send a new one.';
     }
     if (msg.includes('rate limit') || msg.includes('too many')) {
-        return 'Too many attempts. Please wait a moment and request a new code.';
+        return 'Too many magic links sent in the last hour. Try Google sign-in, or try again in ~30 minutes.';
     }
     if (msg.includes('network') || msg.includes('failed to fetch')) {
         return "Couldn't reach the server — check your connection.";
