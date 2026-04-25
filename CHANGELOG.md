@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3.0] - 2026-04-25
+
+### Fixed
+- **First-tap recording on the landing page no longer fails with "Something went wrong."** When the user tapped the mic with no cached Turnstile permit, the page mounted Turnstile, awaited verification, and called `start()` synchronously inside the same event handler that committed the new permit to React state. `start()` then captured a stale `getPermitToken` closure that still saw `permitToken === null`. The recorder ran fine, but on stop the pipeline read the stale permit, bailed at `/presign`, and surfaced the error UI. Second taps worked because the permit was already in state. Fix: defer the auto-start to a `useEffect` that runs after the permit lands in state.
+
 ## [0.5.2.0] - 2026-04-25
 
 ### Changed
