@@ -12,6 +12,7 @@ from .refresh_token import RefreshToken
 from .audit_result import AuditResult
 from .notification import Notification
 from .weekly_theme import WeeklyTheme
+from .demo import DemoCostCounter, DemoRequestLog
 
 __all__ = [
     "Base",
@@ -25,4 +26,6 @@ __all__ = [
     "AuditResult",
     "Notification",
     "WeeklyTheme",
+    "DemoCostCounter",
+    "DemoRequestLog",
 ]

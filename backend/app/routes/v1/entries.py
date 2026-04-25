@@ -298,7 +298,7 @@ async def submit_entry(
     for ar in stale_result.scalars().all():
         ar.is_stale = True
 
-    job = await queue_svc.enqueue(db, entry_uuid, current_user.id)
+    job = await queue_svc.enqueue(db, entry_id=entry_uuid, user_id=current_user.id)
     await db.commit()
 
     logger.info(f"Entry {entry_id} submitted, job {job.id} enqueued")

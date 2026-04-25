@@ -5,6 +5,7 @@ Uses SELECT FOR UPDATE SKIP LOCKED so multiple workers can run safely
 without a separate message broker.
 """
 import logging
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from ..models.jobs import Job, JobStatus
@@ -12,12 +13,33 @@ from ..models.jobs import Job, JobStatus
 logger = logging.getLogger(__name__)
 
 
-async def enqueue(db: AsyncSession, entry_id, user_id: int) -> Job:
-    """Create a PENDING job for the given entry."""
-    job = Job(entry_id=entry_id, user_id=user_id, status=JobStatus.PENDING, step="queued")
+async def enqueue(
+    db: AsyncSession,
+    *,
+    entry_id,
+    user_id: Optional[int] = None,
+    demo_session_id: Optional[str] = None,
+) -> Job:
+    """
+    Create a PENDING job for the given entry.
+
+    Exactly one of `user_id` or `demo_session_id` should be provided:
+      - authed path: user_id set, demo_session_id=None
+      - anonymous demo path: user_id=None, demo_session_id set
+    """
+    job = Job(
+        entry_id=entry_id,
+        user_id=user_id,
+        demo_session_id=demo_session_id,
+        status=JobStatus.PENDING,
+        step="queued",
+    )
     db.add(job)
     await db.flush()
-    logger.info(f"Enqueued job {job.id} for entry {entry_id}")
+    logger.info(
+        f"Enqueued job {job.id} for entry {entry_id} "
+        f"(user_id={user_id}, demo_session_id={demo_session_id})"
+    )
     return job
 
 
