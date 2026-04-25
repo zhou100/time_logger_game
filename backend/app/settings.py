@@ -58,6 +58,33 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
 
+    # ── Anonymous demo / interaction-first landing ────────────────────────────
+    # Master switch for the public demo pipeline. Prod starts `false` per rollout
+    # plan; tests and dev default to `true` so the flow is exercised.
+    PUBLIC_DEMO_ENABLED: bool = True
+    FLYWHEEL_ENABLED: bool = True
+    WELCOME_HANDOFF_ENABLED: bool = True
+    # Daily cap on aggregate OpenAI cost for anonymous demo traffic. Worker
+    # increments demo_cost_counter post-Whisper; /submit checks read-only.
+    DAILY_DEMO_OPENAI_USD_CAP: float = 5.00
+    # Salt for SHA-256 hashing of client IPs before logging/rate-limiting.
+    # Rotate quarterly. Never empty in production.
+    DEMO_IP_HASH_SALT: str = "test-salt-do-not-use-in-prod"
+    # HMAC secret for the claim_token that survives the OAuth redirect. In
+    # production this is 32 random bytes per environment.
+    DEMO_CLAIM_HMAC_SECRET: str = "test-claim-hmac-secret-do-not-use-in-prod"
+    # Cloudflare Turnstile (bot challenge on landing).
+    TURNSTILE_SITE_KEY: str = ""
+    TURNSTILE_SECRET_KEY: str = ""
+    # Analytics.
+    POSTHOG_API_KEY: str = ""
+    # Operator alerting (cost-cap, sweep-stall). Empty disables alert delivery.
+    SLACK_ALERT_WEBHOOK_URL: str = ""
+    # Bearer token required to scrape /metrics. Empty = open (suitable for
+    # private network or single-tenant dev). Set in prod to keep Prometheus
+    # data (cost, conversion, attack rate) out of competitor hands.
+    METRICS_AUTH_TOKEN: str = ""
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": True,

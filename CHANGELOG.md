@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0.0] - 2026-04-24
+
+### Added
+- **Interaction-first landing.** Visitors now tap a microphone on `/` and get a real debrief back without ever signing in. Recording, transcription, summarization, and pattern detection all happen anonymously; sign-in becomes a save action that appears after the product has demonstrated value, not a gate before it. Hero headline is "Debrief your day," subtitle "Speak your day. Get a clear summary, key points, and todos." Mic is the single visual anchor, with example prompts ("Try saying...") and a fake "what your debrief looks like" strip that doubles as the loading skeleton during the Whisper + GPT pipeline.
+- **Anonymous demo pipeline.** Public endpoints `POST /v1/public/demo/verify-turnstile`, `POST /v1/public/demo/presign`, `POST /v1/public/demo/submit`, and `GET /v1/public/demo/status/{entry_id}` accept recordings without auth, run the same Whisper + GPT-4o-mini pipeline as authed entries, and return real debriefs polled from the frontend.
+- **Save-handoff flow.** When a visitor signs in (Google OAuth or magic link), the just-recorded debrief is claimed under their new account via `POST /api/v1/entries/claim-demo-session`. The new `/welcome` page shows the saved entry with a one-click link to the recording history, then the cookie expires naturally at 24h.
+- **Anonymous flywheel.** A second recording in the same session triggers a teaser card ("You've mentioned `focus` in 2 debriefs — sign in to see the full week"). Pattern detection is a deliberately lightweight Porter-stem pass with allowlist + blocklist + language guards; no LLM call.
+- **Cloudflare Turnstile bot verification.** Single challenge per hour, HMAC-signed permit token shared between presign and submit. iOS Safari `audio/mp4` recording supported alongside Chrome/Firefox `audio/webm`.
+- **Daily OpenAI cost cap.** Configurable `DAILY_DEMO_OPENAI_USD_CAP` (default $5) protects against unbounded spend. When tripped, `/submit` returns a pre-baked fake debrief and a "Demo is resting until tomorrow" banner instead of calling OpenAI. Cost-debit happens post-Whisper under `SELECT ... FOR UPDATE` to bound concurrent overshoot.
+- **Per-IP and per-session rate limits.** SlowAPI-backed: 5 requests/minute/IP, 3 successful submits/hour/session, 10 successful submits/24h/IP. Keys are hashed (CF-Connecting-IP + per-environment salt); raw IPs never reach a log or DB row.
+- **TTL sweep job.** Hourly `asyncio.create_task` deletes anonymous entries past `expires_at` (24h after creation), batches S3 blob deletes via `DeleteObjects` (1000 keys per call), prunes `demo_request_log` older than 14 days, and garbage-collects stale rate-limit deques so a long-running process doesn't leak memory.
+- **`/privacy` page.** Plain-prose disclosure: 24-hour retention, OpenAI processing, hashed-IP rate limits, no persistent anonymous account.
+- **PostHog product analytics.** Client and server events tied by `demo_session_id`: `landing_viewed`, `mic_tapped`, `recording_started`, `recording_completed`, `debrief_shown`, `teaser_shown`, `save_clicked`, `signup_completed`, `demo_claim_succeeded`, `demo_claim_missing`, `demo_claim_failed`, `cookie_blocked`, `demo_turnstile_verified`, `demo_submit`, `demo_pipeline_completed`. Lazy-init: zero overhead when keys are unset or in test mode.
+- **Prometheus metrics endpoint.** `GET /metrics` exposes `demo_submit_total{outcome}`, `demo_cost_usd_today`, `demo_whisper_latency_seconds`, `demo_rate_limited_total{limiter}`, `demo_claims_total{result}`, `demo_sweep_expired_total`, `demo_sweep_pruned_log_total`. Standard Prometheus exposition format, no auth (standard scrape contract).
+
+### Changed
+- **`entries` and `jobs` tables now allow anonymous rows.** Single additive migration drops `NOT NULL` on `user_id`, adds nullable `demo_session_id` + `expires_at` with partial indexes (`WHERE demo_session_id IS NOT NULL`). Anonymous demo entries live in the same tables as authed entries; claim flow is a one-statement `UPDATE entries SET user_id = ? WHERE demo_session_id = ? AND user_id IS NULL`. Idempotent by construction.
+- **Worker reuses the existing pipeline for anonymous jobs.** `services/queue.py::enqueue` extended to accept `user_id: Optional[int]` and `demo_session_id: Optional[str]` (keyword-only). Worker skips `Notification` writes when `user_id is None` and computes mechanical summary from classifications at read-time (no separate stored field).
+- **Top-nav Sign-in link suppressed on the landing route.** Other authed routes keep their navigation untouched.
+- **Auth moved to a footer surface.** `AuthFooter` houses Google + magic-link with the OAuth `state` param threading the `claim_token` to `/welcome`. `WELCOME_HANDOFF_ENABLED=false` bypasses `/welcome` and routes signed-in users straight to recording.
+
+### Fixed
+- **conftest test fixture base import.** `backend/tests/conftest.py` was importing the placeholder `Base` from `app.db` rather than `app.models.base`, making `create_all`/`drop_all` no-ops in the test session. Tests now operate on real metadata.
+
 ## [0.4.1.1] - 2026-04-23
 
 ### Changed

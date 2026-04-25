@@ -1,369 +1,422 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import {
-    Box,
-    Container,
-    Link,
-    Typography,
-    Alert,
-} from '@mui/material';
-import GoogleSignInButton from '../components/auth/GoogleSignInButton';
+import { Box, Container, Link, Typography } from '@mui/material';
 import { palette } from '../theme';
+import MicButton, { MicState } from '../components/landing/MicButton';
+import TrySayingChips from '../components/landing/TrySayingChips';
+import DebriefStrip, { DebriefPhase } from '../components/landing/DebriefStrip';
+import TurnstileWidget from '../components/landing/TurnstileWidget';
+import AuthFooter from '../components/landing/AuthFooter';
+import TeaserCard from '../components/landing/TeaserCard';
+import { useDemoRecording } from '../hooks/useDemoRecording';
+import { detectCookieBlocked, readPermit } from '../services/demoApi';
+import { capture as captureEvent } from '../services/analytics';
 
-interface OpenLoop {
-    id: string;
-    text: string;
-    day: string;
+/**
+ * Interaction-first landing.
+ *
+ * Information Architecture (mobile-first 375px reference, single column at
+ * every breakpoint):
+ *   1. Top nav (rendered by NavBar above us — Sign-in link suppressed on `/`)
+ *   2. Hero h1
+ *   3. Subtitle
+ *   4. Mic button
+ *   5. "Tap to speak" label
+ *   6. "No sign-in required" support
+ *   7. Cookie-blocked caption (conditional)
+ *   8. Turnstile widget (after first mic tap; cached for ~1h)
+ *   9. "TRY SAYING" overline
+ *  10. Three try-saying chips
+ *  11. Debrief overline (pre-tap vs YOUR DEBRIEF)
+ *  12. Debrief strip (fake → skeleton → real)
+ *  13. Teaser card (rendered only when demo_teaser is non-null on 2nd+ recording)
+ *  14. PII disclosure caption + privacy link (moved here from #8 per dogfooding)
+ *  15. Auth footer (overline + Google + magic link + privacy)
+ *  16. Footer fine print is included inside AuthFooter
+ *
+ * Above the mobile fold (375 × 812): items 1–6.
+ */
+
+type RecStateAll =
+    | 'idle'
+    | 'requesting-mic'
+    | 'recording'
+    | 'processing'
+    | 'done'
+    | 'error'
+    | 'capped'
+    | 'mic-denied';
+
+const SR_LIVE_MESSAGES: Record<Exclude<RecStateAll, 'processing'>, string> = {
+    idle: 'Ready',
+    'requesting-mic': 'Requesting microphone',
+    recording: 'Recording',
+    done: 'Debrief ready.',
+    error: 'Something went wrong.',
+    capped: 'Demo is resting until tomorrow.',
+    'mic-denied': 'Microphone permission denied.',
+};
+
+const SR_PROCESSING_MESSAGES: Record<string, string> = {
+    transcribing: 'Transcribing',
+    classifying: 'Summarizing',
+};
+
+function srLiveMessage(recState: string, step: string | null): string {
+    if (recState === 'processing') {
+        return (step && SR_PROCESSING_MESSAGES[step]) || 'Processing';
+    }
+    return SR_LIVE_MESSAGES[recState as Exclude<RecStateAll, 'processing'>] || 'Ready';
 }
-
-interface RecurringTheme {
-    label: string;
-    count: number;
-}
-
-interface RecentEntry {
-    id: string;
-    time: string;
-    text: string;
-}
-
-const DEMO_RECENT_ENTRIES: RecentEntry[] = [
-    {
-        id: 'r1',
-        time: '9:42 AM · today',
-        text:
-            'Long call with the client — decided to push the launch back two weeks so the onboarding isn’t a mess.',
-    },
-    {
-        id: 'r2',
-        time: '2:15 PM · yesterday',
-        text:
-            'Keep getting pulled into scheduling that should belong to someone else. Need to draw a line here.',
-    },
-    {
-        id: 'r3',
-        time: '6:30 PM · Tuesday',
-        text:
-            'Finally through the compliance review. Three weeks of back-and-forth for something that should have been a form.',
-    },
-];
-
-const DEMO_OPEN_LOOPS: OpenLoop[] = [
-    { id: 'l1', text: 'Fix the login bug before standup', day: 'from Tue' },
-    { id: 'l2', text: 'Block time for deep work mornings', day: 'from Wed' },
-    { id: 'l3', text: 'Review design mockups for the new page', day: 'from Thu' },
-];
-
-const DEMO_THEMES: RecurringTheme[] = [
-    { label: 'deep work', count: 4 },
-    { label: 'client prep', count: 3 },
-    { label: 'boundary setting', count: 2 },
-];
-
-const DEMO_COACH_LINE =
-    'You keep circling back to focus. Maybe it’s time to actually block mornings for the work that matters.';
 
 const LandingPage: React.FC = () => {
-    const [googleError, setGoogleError] = useState<string | null>(null);
+    // ── Cookie-blocked detection (run once on mount) ──────────────────────
+    const [cookieBlocked, setCookieBlocked] = useState(false);
+    useEffect(() => {
+        const blocked = detectCookieBlocked();
+        setCookieBlocked(blocked);
+        // Observability: server can't see this signal, so the client emits it.
+        if (blocked) captureEvent('cookie_blocked');
+    }, []);
+
+    // ── Landing-mounted event (fires once on first paint) ─────────────────
+    useEffect(() => {
+        captureEvent('landing_viewed');
+    }, []);
+
+    // ── First-tap guard so `mic_tapped` only emits once per mount ─────────
+    const micTappedRef = useRef(false);
+
+    // ── Turnstile permit lifecycle ────────────────────────────────────────
+    // The widget renders only after the first mic tap AND only when the
+    // cached permit is missing/expired. Cached permit is stored as
+    //   sessionStorage.tlg_demo_permit = JSON({ token, expires_at })
+    // Renew flow:
+    //   first tap → render widget → solve → /verify-turnstile → cached → start()
+    //   subsequent taps within the hour → start() directly
+    const [hasTapped, setHasTapped] = useState(false);
+    const [permitToken, setPermitToken] = useState<string | null>(() => {
+        const p = readPermit();
+        return p?.token ?? null;
+    });
+    const [pendingStart, setPendingStart] = useState(false); // true while waiting for fresh permit
+
+    // ── sr-live region — pipeline state announcements ─────────────────────
+    const liveRegionRef = useRef<HTMLDivElement | null>(null);
+    const [liveMessage, setLiveMessage] = useState<string>('Ready');
+
+    // ── Demo recording orchestration ──────────────────────────────────────
+    const {
+        state: recState,
+        step,
+        summary,
+        classifications,
+        demoTeaser,
+        fakeOutput,
+        start,
+        stop,
+        reset,
+    } = useDemoRecording({
+        getPermitToken: () => permitToken,
+        onPermitRotated: (next) => setPermitToken(next),
+    });
+
+    // Map record state → mic visual state
+    const micState: MicState = useMemo(() => {
+        switch (recState) {
+            case 'recording':
+                return 'recording';
+            case 'requesting-mic':
+            case 'processing':
+                return 'processing';
+            case 'mic-denied':
+                return 'denied';
+            default:
+                return 'idle';
+        }
+    }, [recState]);
+
+    // Update sr-live region as pipeline progresses.
+    useEffect(() => {
+        setLiveMessage(srLiveMessage(recState, step));
+    }, [recState, step]);
+
+    // Map record state → debrief phase
+    const debriefPhase: DebriefPhase = useMemo(() => {
+        if (recState === 'done') return 'done';
+        if (recState === 'capped') return 'capped';
+        if (recState === 'error') return 'error';
+        if (recState === 'processing' || recState === 'requesting-mic') return 'pipeline';
+        return 'pre-tap';
+    }, [recState]);
+
+    // ── Mic tap handler ───────────────────────────────────────────────────
+    const onMicTap = () => {
+        if (!micTappedRef.current) {
+            // First tap of this mount — fires once even if the user later
+            // bounces between idle/recording/done states.
+            micTappedRef.current = true;
+            captureEvent('mic_tapped');
+        }
+        if (recState === 'recording') {
+            stop();
+            return;
+        }
+        // Done / error / capped → reset and re-arm
+        if (recState === 'done' || recState === 'error' || recState === 'capped') {
+            reset();
+        }
+        setHasTapped(true);
+        if (permitToken) {
+            // Permit is fresh; start straight away.
+            start();
+        } else {
+            // Wait for Turnstile to mint a permit, then auto-start.
+            setPendingStart(true);
+        }
+    };
+
+    // After widget mints a fresh permit, auto-fire the recording start so the
+    // user doesn't have to tap the mic a second time.
+    const onPermitObtained = (token: string) => {
+        setPermitToken(token);
+        if (pendingStart) {
+            setPendingStart(false);
+            start();
+        }
+    };
+
+    // From try-saying chips: announce the phrase and start recording.
+    const onChipTap = (phrase: string) => {
+        setLiveMessage(`Try saying: ${phrase}`);
+        // Briefly bounce the message back so screen readers re-announce.
+        setTimeout(() => setLiveMessage('Ready'), 50);
+    };
+
+    const showTurnstile = hasTapped && !permitToken;
 
     return (
-        <Container maxWidth="md">
-            <Box sx={{ mt: { xs: 5, md: 8 }, mb: { xs: 6, md: 8 } }}>
-                {/* ── Hero ───────────────────────────────────────────────── */}
-                <Box sx={{ mb: { xs: 6, md: 8 } }}>
-                    <Typography variant="h1" component="h1" sx={{ mb: 2 }}>
-                        Debrief your day.
-                    </Typography>
+        <>
+            {/* sr-live region — polite so it doesn't interrupt the visual UX */}
+            <Box
+                ref={liveRegionRef}
+                aria-live="polite"
+                aria-atomic="true"
+                sx={{
+                    position: 'absolute',
+                    width: 1,
+                    height: 1,
+                    overflow: 'hidden',
+                    clip: 'rect(0 0 0 0)',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {liveMessage}
+            </Box>
+
+            <Container
+                maxWidth={false}
+                sx={{
+                    maxWidth: { xs: 360, sm: 520, md: 640 },
+                    mx: 'auto',
+                    pt: { xs: 4, md: 6 },
+                    pb: { xs: 2, md: 4 },
+                    px: { xs: 2, md: 3 },
+                }}
+            >
+                {/* ── 2. Hero h1 ─────────────────────────────────────────── */}
+                <Typography
+                    variant="h1"
+                    component="h1"
+                    sx={{ textAlign: 'center', mb: 1 }}
+                >
+                    Debrief your day.
+                </Typography>
+
+                {/* ── 3. Subtitle ────────────────────────────────────────── */}
+                <Typography
+                    component="p"
+                    sx={{
+                        textAlign: 'center',
+                        color: palette.textMuted,
+                        fontFamily: '"DM Serif Display", serif',
+                        fontSize: '1.25rem',
+                        lineHeight: 1.4,
+                        mb: { xs: 1.5, md: 2 },
+                    }}
+                >
+                    Speak your day. Get a clear summary, key points, and todos.
+                </Typography>
+
+                {/* ── 4. Mic button ──────────────────────────────────────── */}
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <MicButton
+                        state={micState}
+                        onTap={onMicTap}
+                        descriptionId="mic-supporting-text"
+                    />
+                </Box>
+
+                {/* ── 5. Mic label "Tap to speak" ────────────────────────── */}
+                <Typography
+                    sx={{
+                        fontFamily: '"DM Sans", sans-serif',
+                        fontSize: '15px',
+                        color: palette.textPrimary,
+                        textAlign: 'center',
+                        mb: 0.5,
+                    }}
+                >
+                    {recState === 'recording' ? 'Tap to stop' : 'Tap to speak'}
+                </Typography>
+
+                {/* ── 6. "No sign-in required" ───────────────────────────── */}
+                <Typography
+                    id="mic-supporting-text"
+                    variant="caption"
+                    sx={{
+                        display: 'block',
+                        textAlign: 'center',
+                        color: palette.textMuted,
+                        mb: 1,
+                    }}
+                >
+                    No sign-in required
+                </Typography>
+
+                {/* ── 7. Cookie-blocked caption (conditional) ────────────── */}
+                {cookieBlocked && (
                     <Typography
-                        variant="h3"
-                        component="p"
-                        color="text.secondary"
-                        sx={{ mb: { xs: 3, md: 4 }, maxWidth: 520 }}
+                        variant="caption"
+                        sx={{
+                            display: 'block',
+                            textAlign: 'center',
+                            color: palette.textMuted,
+                            maxWidth: 360,
+                            mx: 'auto',
+                            mb: 1,
+                        }}
                     >
-                        Talk. We turn it into your weekly brief.
+                        Heads up — your browser is blocking cookies, so this one recording won’t
+                        save if you come back.
                     </Typography>
+                )}
 
-                    {googleError && (
-                        <Alert severity="error" sx={{ mb: 2, maxWidth: 480 }} onClose={() => setGoogleError(null)}>
-                            {googleError}
-                        </Alert>
-                    )}
+                {/* ── Mic-denied caption (only when applicable) ──────────── */}
+                {micState === 'denied' && (
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            display: 'block',
+                            textAlign: 'center',
+                            color: palette.textMuted,
+                            mb: 1,
+                        }}
+                    >
+                        Enable mic in browser settings ↗
+                    </Typography>
+                )}
 
-                    {/* Primary CTA — Google. Magic link is a lightweight alternative below. */}
-                    <Box sx={{ maxWidth: 400 }}>
-                        <GoogleSignInButton
-                            variant="landing"
-                            label="Sign in with Google to start"
-                            onError={setGoogleError}
-                        />
-                        <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mt: 1.5, textAlign: 'center' }}
-                        >
-                            or{' '}
+                {/* ── 9. Turnstile widget (after first tap, no fresh permit) */}
+                {showTurnstile && (
+                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+                        <TurnstileWidget onPermit={onPermitObtained} />
+                    </Box>
+                )}
+
+                {/* ── 10/11. Try-saying overline + chips ─────────────────── */}
+                <Box sx={{ mb: 3 }}>
+                    <TrySayingChips
+                        onSpeak={onChipTap}
+                        onStartRecording={() => {
+                            // Same pathway as a mic tap.
+                            onMicTap();
+                        }}
+                        disabled={
+                            recState === 'recording' ||
+                            recState === 'processing' ||
+                            recState === 'requesting-mic'
+                        }
+                    />
+                </Box>
+
+                {/* ── 13. Debrief strip ──────────────────────────────────── */}
+                <Box sx={{ mb: 3 }}>
+                    <DebriefStrip
+                        phase={debriefPhase}
+                        summary={summary}
+                        classifications={classifications}
+                        fakeOutput={fakeOutput}
+                    />
+                </Box>
+
+                {/* ── Cost-capped banner (thin vermilion band) ───────────── */}
+                {recState === 'capped' && (
+                    <Box
+                        sx={{
+                            bgcolor: palette.accent,
+                            color: '#F5EDE0',
+                            textAlign: 'center',
+                            py: 1.25,
+                            px: 2,
+                            borderRadius: '4px',
+                            mb: 3,
+                        }}
+                    >
+                        <Typography variant="body2" sx={{ color: '#F5EDE0', fontWeight: 500 }}>
+                            Demo is resting until tomorrow —{' '}
                             <Link
                                 component={RouterLink}
                                 to="/login"
-                                sx={{ color: palette.accent, fontWeight: 500 }}
-                            >
-                                get a magic link
-                            </Link>
-                        </Typography>
-                    </Box>
-                </Box>
-
-                {/* ── Transition: Your recent debrief ───────────────────── */}
-                <Box sx={{ mb: { xs: 6, md: 8 } }}>
-                    <Typography
-                        variant="h2"
-                        component="h2"
-                        sx={{ mb: { xs: 2, md: 3 } }}
-                    >
-                        Your recent debrief
-                    </Typography>
-                    <Box
-                        component="ul"
-                        sx={{
-                            listStyle: 'none',
-                            m: 0,
-                            p: 0,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: { xs: 2, md: 2.5 },
-                        }}
-                    >
-                        {DEMO_RECENT_ENTRIES.map((entry) => (
-                            <Box
-                                key={entry.id}
-                                component="li"
                                 sx={{
-                                    display: 'grid',
-                                    gridTemplateColumns: { xs: '1fr', sm: '140px 1fr' },
-                                    columnGap: { xs: 0, sm: 3 },
-                                    rowGap: 0.5,
-                                    alignItems: 'baseline',
-                                    borderTop: `1px solid ${palette.rule}`,
-                                    pt: { xs: 1.5, md: 2 },
+                                    color: '#F5EDE0',
+                                    textDecoration: 'underline',
+                                    fontWeight: 600,
                                 }}
                             >
-                                <Typography
-                                    variant="overline"
-                                    color="text.secondary"
-                                    sx={{
-                                        fontWeight: 600,
-                                        fontVariantNumeric: 'tabular-nums',
-                                        letterSpacing: '0.08em',
-                                    }}
-                                >
-                                    {entry.time}
-                                </Typography>
-                                <Typography
-                                    variant="body1"
-                                    sx={{
-                                        fontStyle: 'italic',
-                                        lineHeight: 1.65,
-                                        color: palette.textPrimary,
-                                    }}
-                                >
-                                    &ldquo;{entry.text}&rdquo;
-                                </Typography>
-                            </Box>
-                        ))}
+                                sign in to try yours
+                            </Link>
+                            .
+                        </Typography>
                     </Box>
-                </Box>
+                )}
 
-                {/* ── Demo section ───────────────────────────────────────── */}
-                <Typography variant="overline" color="text.secondary" display="block" sx={{ mb: 2 }}>
-                    Here&rsquo;s what Brief notices over a week
-                </Typography>
+                {/* ── 14. Teaser card (only when demo_teaser present) ────── */}
+                {demoTeaser && (
+                    <Box sx={{ mb: 3 }}>
+                        <TeaserCard teaser={demoTeaser} />
+                    </Box>
+                )}
 
-                <Box
+                {/* PII disclosure — moved here from above-the-mic per dogfooding
+                    feedback. Saying "deleted after 24h" up top introduced friction
+                    before users had decided to engage. Sits as fine print just above
+                    the auth surface where retention is contextually relevant. */}
+                <Typography
+                    variant="caption"
                     sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1fr', md: '1fr 1.4fr' },
-                        gap: { xs: 2, md: 3 },
+                        display: 'block',
+                        textAlign: 'center',
+                        color: palette.textMuted,
+                        maxWidth: 360,
+                        mx: 'auto',
+                        mb: 2,
                     }}
                 >
-                    {/* Left: Open Loops */}
-                    <Box
-                        sx={{
-                            p: { xs: 2.5, md: 3 },
-                            borderRadius: '8px',
-                            border: `1px solid ${palette.textMuted}`,
-                            bgcolor: 'background.paper',
-                        }}
+                    Recordings are deleted after 24h unless you save them.{' '}
+                    <Link
+                        component={RouterLink}
+                        to="/privacy"
+                        sx={{ color: palette.textMuted, textDecoration: 'underline' }}
                     >
-                        <Typography
-                            variant="overline"
-                            component="h2"
-                            color="text.primary"
-                            display="block"
-                            sx={{ mb: 1.5, fontWeight: 600 }}
-                        >
-                            Open Loops — {DEMO_OPEN_LOOPS.length}
-                        </Typography>
-                        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-                            {DEMO_OPEN_LOOPS.map((loop) => (
-                                <Box
-                                    key={loop.id}
-                                    component="li"
-                                    sx={{
-                                        display: 'flex',
-                                        gap: 1.5,
-                                        alignItems: 'flex-start',
-                                        py: 1.5,
-                                        borderBottom: `1px solid ${palette.rule}`,
-                                        '&:last-child': { borderBottom: 'none' },
-                                    }}
-                                >
-                                    <Box
-                                        aria-hidden="true"
-                                        sx={{
-                                            width: 20,
-                                            height: 20,
-                                            mt: 0.25,
-                                            border: `1.5px solid ${palette.textMuted}`,
-                                            borderRadius: '4px',
-                                            flexShrink: 0,
-                                        }}
-                                    />
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography variant="body2" sx={{ color: palette.textPrimary }}>
-                                            {loop.text}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {loop.day}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                            ))}
-                        </Box>
-                    </Box>
+                        Privacy
+                    </Link>
+                </Typography>
 
-                    {/* Right: Recurring Themes + coach quote */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 } }}>
-                        <Box
-                            sx={{
-                                p: { xs: 2.5, md: 3 },
-                                borderRadius: '8px',
-                                border: `1px solid ${palette.textMuted}`,
-                                bgcolor: 'background.paper',
-                            }}
-                        >
-                            <Typography
-                                variant="overline"
-                                component="h2"
-                                color="text.primary"
-                                display="block"
-                                sx={{ mb: 2, fontWeight: 600 }}
-                            >
-                                What kept coming up
-                            </Typography>
-                            <Box
-                                component="ul"
-                                sx={{
-                                    listStyle: 'none',
-                                    m: 0,
-                                    p: 0,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 1.25,
-                                }}
-                            >
-                                {(() => {
-                                    const maxCount = Math.max(...DEMO_THEMES.map((t) => t.count));
-                                    return DEMO_THEMES.map((t) => (
-                                        <Box
-                                            key={t.label}
-                                            component="li"
-                                            sx={{ position: 'relative' }}
-                                        >
-                                            {/* proportional fill bar behind the row */}
-                                            <Box
-                                                aria-hidden="true"
-                                                sx={{
-                                                    position: 'absolute',
-                                                    top: 0,
-                                                    bottom: 0,
-                                                    left: 0,
-                                                    width: `${(t.count / maxCount) * 100}%`,
-                                                    bgcolor: palette.accent,
-                                                    opacity: 0.14,
-                                                    borderRadius: '4px',
-                                                }}
-                                            />
-                                            <Box
-                                                sx={{
-                                                    position: 'relative',
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'baseline',
-                                                    px: 1.5,
-                                                    py: 1,
-                                                }}
-                                            >
-                                                <Typography
-                                                    variant="body1"
-                                                    sx={{
-                                                        fontFamily: '"DM Serif Display", serif',
-                                                        fontSize: '1.0625rem',
-                                                        color: palette.textPrimary,
-                                                    }}
-                                                >
-                                                    {t.label}
-                                                </Typography>
-                                                <Typography
-                                                    variant="caption"
-                                                    sx={{
-                                                        fontWeight: 600,
-                                                        fontVariantNumeric: 'tabular-nums',
-                                                        color: palette.textMuted,
-                                                        letterSpacing: '0.04em',
-                                                    }}
-                                                >
-                                                    {t.count} times
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                    ));
-                                })()}
-                            </Box>
-                        </Box>
-
-                        {/* AI Coach letter pattern — left vermilion border + surface */}
-                        <Box
-                            sx={{
-                                pl: 2,
-                                pr: 2.5,
-                                py: 2,
-                                bgcolor: 'background.paper',
-                                borderRadius: '0 8px 8px 0',
-                                border: `1px solid ${palette.textMuted}`,
-                                borderLeftWidth: '3px',
-                                borderLeftColor: palette.accent,
-                            }}
-                        >
-                            <Typography
-                                variant="overline"
-                                component="h2"
-                                color="text.primary"
-                                display="block"
-                                sx={{ mb: 0.5, fontWeight: 600 }}
-                            >
-                                AI Coach
-                            </Typography>
-                            <Typography variant="body2" sx={{ lineHeight: 1.7, fontStyle: 'italic' }}>
-                                {DEMO_COACH_LINE}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                                Based on this week&rsquo;s entries · sample
-                            </Typography>
-                        </Box>
-                    </Box>
-                </Box>
-            </Box>
-        </Container>
+                {/* ── 15+16. Auth footer (with privacy fine print) ───────── */}
+                <AuthFooter />
+            </Container>
+        </>
     );
 };
 

@@ -21,6 +21,9 @@ requests==2.33.1
 PyJWT==2.12.1
 # Object storage (R2 / MinIO / S3)
 aioboto3==12.3.0
+# Observability (item 6: PostHog product analytics + Prometheus metrics)
+posthog>=3.5.0
+prometheus-client==0.19.0
 # Supabase JWT verification handled by PyJWT (no SDK needed)
 # Testing
 pytest==7.4.3

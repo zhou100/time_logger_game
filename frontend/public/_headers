@@ -2,7 +2,7 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://apis.google.com https://static.cloudflareinsights.com; worker-src blob:; style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.onrender.com https://*.supabase.co wss://*.supabase.co https://*.r2.cloudflarestorage.com https://accounts.google.com https://oauth2.googleapis.com https://cloudflareinsights.com; frame-src https://accounts.google.com;
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://apis.google.com https://static.cloudflareinsights.com https://challenges.cloudflare.com https://us-assets.i.posthog.com; worker-src blob:; style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.onrender.com https://*.supabase.co wss://*.supabase.co https://*.r2.cloudflarestorage.com https://accounts.google.com https://oauth2.googleapis.com https://cloudflareinsights.com https://challenges.cloudflare.com https://us.i.posthog.com https://us-assets.i.posthog.com; frame-src https://accounts.google.com https://challenges.cloudflare.com;
 
 /index.html
   Cache-Control: no-cache

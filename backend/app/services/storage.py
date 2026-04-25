@@ -136,6 +136,29 @@ async def delete_object(key: str) -> None:
     logger.debug(f"Deleted {key}")
 
 
+async def delete_objects(keys: list[str]) -> list[dict]:
+    """Batch delete via DeleteObjects (up to 1000 keys per S3 request).
+
+    Returns the per-key error list as reported by S3 — empty if everything
+    succeeded. Caller can match on `Code` ("NoSuchKey", etc.) to decide
+    whether to retry or treat as benign.
+    """
+    keys = [k for k in keys if k]
+    if not keys:
+        return []
+    errors: list[dict] = []
+    async with _client() as s3:
+        for i in range(0, len(keys), 1000):
+            chunk = keys[i : i + 1000]
+            resp = await s3.delete_objects(
+                Bucket=settings.S3_BUCKET,
+                Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True},
+            )
+            errors.extend(resp.get("Errors") or [])
+    logger.debug(f"Batch-deleted {len(keys)} keys ({len(errors)} errors)")
+    return errors
+
+
 def make_audio_key(user_id: int, entry_id: str, suffix: str = ".webm") -> str:
     """Deterministic object storage key for an audio file."""
     return f"audio/{user_id}/{entry_id}{suffix}"

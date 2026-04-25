@@ -24,7 +24,12 @@ class Job(Base):
     entry_id = Column(
         UUID(as_uuid=True), ForeignKey("entries.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Nullable: anonymous demo jobs have no user yet. The worker skips the
+    # notification push when user_id is None.
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    # Mirrors entries.demo_session_id so the worker can look up the session
+    # without joining entries. Null for authed jobs.
+    demo_session_id = Column(String(64), nullable=True)
     status = Column(SQLEnum(JobStatus, values_callable=lambda obj: [e.value for e in obj]), default=JobStatus.PENDING, nullable=False, index=True)
     step = Column(String(50), nullable=True)    # "queued" | "transcribing" | "classifying" | "complete"
     error = Column(Text, nullable=True)

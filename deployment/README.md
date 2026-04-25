@@ -130,7 +130,18 @@ sudo systemctl start timelogger
    - `API_USERNAME`: Your chosen API username
    - `API_PASSWORD`: Your chosen API password
    - `OPENAI_API_KEY`: Your OpenAI API key
-   
+
+   Anonymous demo flow (v0.5.0.0+):
+   - `PUBLIC_DEMO_ENABLED`: `false` until ready to launch the public landing demo
+   - `DAILY_DEMO_OPENAI_USD_CAP`: daily OpenAI budget for anonymous demo recordings (default `5.00`)
+   - `DEMO_IP_HASH_SALT`: 32-byte random per-environment salt for hashing IPs in rate limits + abuse log
+   - `DEMO_CLAIM_HMAC_SECRET`: 32-byte random per-environment secret for HMAC-signed permit_token + claim_token
+   - `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile site + secret pair (provision per environment)
+   - `FLYWHEEL_ENABLED`: `true` to surface anonymous teaser cards on 2nd+ recording
+   - `WELCOME_HANDOFF_ENABLED`: `true` to route OAuth/magic-link callbacks through `/welcome` (`false` → straight to `/recording`)
+   - `POSTHOG_API_KEY`, `POSTHOG_HOST`: optional, for product analytics
+   - `SLACK_ALERT_WEBHOOK_URL`: optional, no-op when empty (Slack alerting code seam exists for future use)
+
    Other variables are automatically set through `render.yaml`:
    - `FLASK_ENV`: production
    - `LOG_LEVEL`: INFO

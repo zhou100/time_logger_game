@@ -12,7 +12,10 @@ from sqlalchemy.pool import NullPool
 
 from app.settings import get_settings
 from app.main import app
-from app.db import Base
+# Import Base from app.models (not app.db) — app.db.Base is an empty
+# declarative_base() placeholder, so create_all/drop_all against it would
+# be a no-op and tests relying on real schema would see ghost tables.
+from app.models import Base  # noqa: F401 — also registers all models
 from app.models.user import User
 from app.schemas.user import UserResponse
 from app.utils.auth import create_access_token, get_password_hash
@@ -111,3 +114,27 @@ async def override_get_db():
         yield db
     finally:
         await db.close()
+
+
+# ── Observability (item 6): hard-pin analytics to no-op for every test ───────
+# Some tests reload `app.settings` with a real POSTHOG_API_KEY to verify
+# environment overrides; if that singleton leaks across tests, downstream
+# `/submit` paths instantiate a real Posthog client and ship batches to
+# us.i.posthog.com. Reset the singleton before AND after every test so the
+# only real-init paths are the explicit analytics tests that mock
+# `sys.modules["posthog"]`.
+@pytest.fixture(autouse=True)
+def _reset_analytics_singleton_global():
+    try:
+        import app.services.analytics as _analytics
+        _analytics._reset_for_tests()
+    except Exception:
+        pass
+    yield
+    try:
+        import app.services.analytics as _analytics
+        _analytics._reset_for_tests()
+    except Exception:
+        pass
+
+

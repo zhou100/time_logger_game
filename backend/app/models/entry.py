@@ -13,13 +13,18 @@ class Entry(Base):
     __tablename__ = "entries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # Nullable: anonymous demo entries have no user yet. They are claimed on
+    # signup via demo_session_id, or swept on expires_at.
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     raw_audio_key = Column(String, nullable=True)       # object storage key (MinIO/S3)
     transcript = Column(Text, nullable=True)            # filled by worker after Whisper
     recorded_at = Column(DateTime(timezone=True), nullable=True)   # client-reported time
     duration_seconds = Column(Integer, nullable=True)
     local_date = Column(Date, nullable=True)              # user's local calendar date
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Anonymous demo fields (populated only for pre-auth demo entries).
+    demo_session_id = Column(String(64), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="entries")

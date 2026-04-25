@@ -18,6 +18,10 @@
 .env.test.local
 .env.production.local
 
+# The repo-root .gitignore excludes `.env.example`; this exception lets the
+# frontend ship an env template (public REACT_APP_* identifiers only — no secrets).
+!.env.example
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

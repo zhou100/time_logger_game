@@ -27,17 +27,29 @@ time_logger_game/
 │   │   │   ├── base.py
 │   │   │   ├── user.py
 │   │   │   ├── audio.py
-│   │   │   └── categories.py
+│   │   │   ├── categories.py
+│   │   │   └── demo.py       # DemoCostCounter, DemoRequestLog, DemoOutcome constants
 │   │   ├── routes/           # Active FastAPI routers (use these, not routers/)
 │   │   │   ├── auth.py       # /api/auth — register, login, token refresh
 │   │   │   ├── audio.py      # /api/audio — upload, transcribe, list
 │   │   │   ├── categories.py # /api/categories — CRUD for categories
-│   │   │   └── users.py
+│   │   │   ├── public_demo.py # /v1/public/demo — anonymous landing pipeline (v0.5.0.0)
+│   │   │   ├── users.py
+│   │   │   └── v1/claim.py   # /api/v1/entries/claim-demo-session
 │   │   ├── routers/          # LEGACY — do not add new routes here
 │   │   ├── schemas/          # Pydantic request/response models
 │   │   ├── services/         # Business logic
 │   │   │   ├── audio.py      # Whisper transcription
-│   │   │   └── categorization.py  # GPT-4o-mini categorization
+│   │   │   ├── categorization.py  # GPT-4o-mini categorization
+│   │   │   ├── analytics.py  # PostHog client (lazy-init)
+│   │   │   ├── metrics.py    # Prometheus instruments + /metrics endpoint
+│   │   │   ├── demo_tokens.py # HMAC permit_token + claim_token
+│   │   │   ├── demo_ip.py    # CF-Connecting-IP extraction + hashed salt
+│   │   │   ├── demo_pricing.py # Whisper + GPT-4o-mini cost helpers
+│   │   │   ├── demo_sweep.py # Hourly TTL sweep + S3 batch delete + rate-limit GC
+│   │   │   ├── teaser.py     # Anonymous flywheel pattern detection
+│   │   │   ├── _porter.py    # Vendored Porter stemmer
+│   │   │   └── teaser_{allow,block}list.txt # Curated wordlists
 │   │   └── utils/            # Auth helpers, misc utilities
 │   ├── alembic/              # DB migration management
 │   │   └── versions/         # Migration scripts
@@ -56,11 +68,19 @@ time_logger_game/
 │   │   ├── App.tsx           # Root component, routing setup
 │   │   ├── index.tsx         # React entry point
 │   │   ├── components/       # Reusable UI components
-│   │   │   └── auth/         # SignInForm (email OTP), GoogleSignInButton, ProtectedRoute
+│   │   │   ├── auth/         # SignInForm (email OTP), GoogleSignInButton, ProtectedRoute
+│   │   │   └── landing/      # MicButton, TrySayingChips, DebriefStrip, TurnstileWidget, AuthFooter, TeaserCard
 │   │   ├── pages/
-│   │   │   └── RecordingPage.tsx  # Main app page
+│   │   │   ├── RecordingPage.tsx  # Main app page
+│   │   │   ├── LandingPage.tsx    # Interaction-first landing (v0.5.0.0)
+│   │   │   ├── WelcomePage.tsx    # Post-OAuth save handoff (v0.5.0.0)
+│   │   │   └── PrivacyPage.tsx    # 24h retention disclosure (v0.5.0.0)
+│   │   ├── hooks/
+│   │   │   └── useDemoRecording.ts # MediaRecorder → presign → submit → status state machine
 │   │   ├── services/
 │   │   │   ├── api.ts        # Axios client; Supabase session + auto refresh + 401 queue
+│   │   │   ├── demoApi.ts    # Public demo client (no auth, withCredentials)
+│   │   │   ├── analytics.ts  # PostHog client (lazy-init)
 │   │   │   ├── supabase.ts   # Supabase client singleton
 │   │   │   └── supabaseStorage.ts  # Synchronous session read (no storage-lock hangs)
 │   │   ├── store/            # Redux store + contentSlice
@@ -274,10 +294,26 @@ see TODOS.md "Backend JWT Auth Endpoint Cleanup".
 | GET | `/api/categories` | List all categories (standard + custom) |
 | POST | `/api/categories/custom` | Create custom category |
 
+### Anonymous Demo Endpoints (`/v1/public/demo`)
+Public, no auth. Gated on `PUBLIC_DEMO_ENABLED` (false → all return 404).
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/public/demo/verify-turnstile` | Cloudflare Turnstile siteverify → issue HMAC permit_token + set HttpOnly `tlg_demo_sid` cookie |
+| POST | `/v1/public/demo/presign` | Validate permit + cookie → create anonymous Entry placeholder → return S3 presigned PUT + claim_token |
+| POST | `/v1/public/demo/submit` | Validate permit + cookie → cost-cap check → enqueue Job (no inline Whisper). Returns `{entry_id, job_id}` or `{demo:"capped", fake_output}` |
+| GET | `/v1/public/demo/status/{entry_id}` | Cookie-gated polling. Returns `{step, transcript, classifications, summary, demo_teaser}` with mechanical summary derived at read-time |
+
+### Save-on-signup
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/entries/claim-demo-session` | Auth required. Body `{claim_token}`. Idempotent single-tx UPDATE flipping `user_id` on `entries`/`jobs` for the session |
+
 ### Utility
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus exposition (no auth, scrape contract) |
 
 ---
 

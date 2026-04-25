@@ -8,6 +8,7 @@ A FastAPI and React-based voice-enabled time tracking and content organization s
 - Automatic content categorization (TODOs, Ideas, Thoughts, Time Records)
 - Past record search with filters and deep-linkable day view (v0.3.0.0)
 - Passwordless sign-in: email one-time code or Google OAuth — no password to remember (v0.4.0.0)
+- Interaction-first landing: tap mic → speak → see your debrief, no sign-in required. Save with Google when ready and your anonymous recording is claimed under your account (v0.5.0.0)
 - RESTful API with OpenAPI documentation
 - Structured data storage with PostgreSQL
 - Modern, responsive React-based UI

@@ -3,6 +3,13 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
 import App from './App';
+import { init as initAnalytics } from './services/analytics';
+
+// Kick off PostHog as early as we can so the eventual `landing_viewed`
+// event has a live client to flush against. The init helper short-circuits
+// when `REACT_APP_POSTHOG_KEY` is empty, so dev environments stay free of
+// network calls.
+initAnalytics();
 
 const queryClient = new QueryClient({
   defaultOptions: {
