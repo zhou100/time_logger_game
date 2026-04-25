@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: str = ""
     # Operator alerting (cost-cap, sweep-stall). Empty disables alert delivery.
     SLACK_ALERT_WEBHOOK_URL: str = ""
+    # Bearer token required to scrape /metrics. Empty = open (suitable for
+    # private network or single-tenant dev). Set in prod to keep Prometheus
+    # data (cost, conversion, attack rate) out of competitor hands.
+    METRICS_AUTH_TOKEN: str = ""
 
     model_config = {
         "env_file": ".env",

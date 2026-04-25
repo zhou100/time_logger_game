@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,9 @@ from ...utils.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/entries", tags=["entries"])
+
+# Same cookie name as set by /v1/public/demo/verify-turnstile.
+_DEMO_SESSION_COOKIE = "tlg_demo_sid"
 
 
 class ClaimDemoSessionRequest(BaseModel):
@@ -59,6 +62,7 @@ class ClaimDemoSessionResponse(BaseModel):
 )
 async def claim_demo_session(
     body: ClaimDemoSessionRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ClaimDemoSessionResponse:
@@ -69,6 +73,24 @@ async def claim_demo_session(
             "demo_claim",
             demo_session_id=None,
             properties={"result": "missing", "claimed_count": 0},
+        )
+        metrics_svc.demo_claims_total.labels(result="missing").inc()
+        return ClaimDemoSessionResponse(claimed=0, entry_ids=[])
+
+    # Cookie pin: when the demo session cookie is present, it MUST match the
+    # token's session_id. This blocks the leaked-URL attack — an attacker
+    # who obtains the claim_token from history/screenshots/referrers cannot
+    # claim the entries unless they also have the original browser's
+    # HttpOnly cookie. When the cookie is absent (Safari ITP, blocked
+    # cookies, fresh browser) we fall back to token-only — the spec's
+    # intentional dual path keeps cookie-blocked users functional.
+    cookie_session = request.cookies.get(_DEMO_SESSION_COOKIE)
+    if cookie_session and cookie_session != session_id:
+        analytics_svc.capture_demo_event(
+            "demo_claim",
+            demo_session_id=session_id,
+            properties={"result": "missing", "claimed_count": 0,
+                        "reason": "cookie_session_mismatch"},
         )
         metrics_svc.demo_claims_total.labels(result="missing").inc()
         return ClaimDemoSessionResponse(claimed=0, entry_ids=[])

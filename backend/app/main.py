@@ -115,13 +115,22 @@ async def root():
 
 
 # ── Prometheus scrape endpoint ────────────────────────────────────────────────
-# Standard scrape contract: no auth, plain-text format, served at the root
-# of the deployment so a Prometheus job hitting `${BACKEND_URL}/metrics` just
-# works. Importing prometheus_client here keeps the dependency optional —
-# tests that touch this endpoint exercise the real path.
+# Plain-text format. When METRICS_AUTH_TOKEN is set in env, the scrape must
+# present it as a Bearer token. Without auth, demo_cost_usd_today and the
+# demo_claims_total / demo_submit_total ratios would let competitors read
+# real-time OpenAI spend and conversion rate. When the env var is unset
+# (dev / single-tenant / private network) the endpoint is open.
 @app.get("/metrics")
-async def prometheus_metrics():
+async def prometheus_metrics(request: Request):
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from .settings import settings as _settings
+
+    expected = getattr(_settings, "METRICS_AUTH_TOKEN", "") or ""
+    if expected:
+        auth = request.headers.get("authorization", "")
+        if not auth.startswith("Bearer ") or auth[7:] != expected:
+            return Response(status_code=401, content="unauthorized")
+
     # Ensure metric instruments exist in the registry (Counter labels are
     # only emitted after their first .inc; importing the module is cheap).
     from .services import metrics as _metrics  # noqa: F401

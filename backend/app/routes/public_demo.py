@@ -411,6 +411,33 @@ async def verify_turnstile(
         )
         raise HTTPException(status_code=400, detail={"error": "verification_failed"})
 
+    # Hostname pin: Cloudflare returns the hostname the challenge was solved
+    # on. Without this check, a token farmed on any of our domains (or any
+    # domain our secret accepts via Turnstile site config) could be replayed
+    # here. Match against the request's Origin header host. Skipped only when
+    # the response uses the public always-pass test fixture (cf_json reports
+    # hostname=`example.com` for those, intentionally).
+    request_origin = request.headers.get("origin", "")
+    cf_hostname = cf_json.get("hostname", "")
+    test_fixture = cf_hostname == "example.com"
+    if request_origin and cf_hostname and not test_fixture:
+        try:
+            from urllib.parse import urlparse
+            request_host = urlparse(request_origin).hostname or ""
+        except Exception:  # noqa: BLE001 — malformed Origin → reject
+            request_host = ""
+        if not request_host or request_host != cf_hostname:
+            await _log_request(
+                db, hashed_ip=hashed_ip, demo_session_id=None,
+                outcome=DemoOutcome.TURNSTILE_FAILED,
+            )
+            logger.warning(
+                f"Turnstile hostname mismatch: cf={cf_hostname} origin={request_host}"
+            )
+            raise HTTPException(
+                status_code=400, detail={"error": "verification_failed"}
+            )
+
     session_id = secrets.token_hex(32)  # 64 chars
     exp = datetime.now(timezone.utc) + PERMIT_TTL
     permit = _build_permit_token(session_id, exp, PERMIT_INITIAL_USES)
@@ -554,6 +581,17 @@ async def submit(
     entry = result.scalar_one_or_none()
     if not entry:
         raise HTTPException(status_code=404, detail={"error": "entry_not_found"})
+
+    # Replay protection: a Job already exists for this entry → return its id
+    # rather than enqueueing a duplicate. Without this, replaying /submit
+    # for the same entry_id would queue a second pipeline run, double-bill
+    # OpenAI, and append a duplicate set of EntryClassification rows.
+    existing_job_result = await db.execute(
+        select(Job).where(Job.entry_id == entry_uuid).order_by(Job.created_at.desc()).limit(1)
+    )
+    existing_job = existing_job_result.scalar_one_or_none()
+    if existing_job is not None:
+        return SubmitResponse(entry_id=body.entry_id, job_id=str(existing_job.id))
 
     # ── Cost-cap: read-only; increment happens post-Whisper in the worker ─
     current_cost = await _current_cost_usd(db)

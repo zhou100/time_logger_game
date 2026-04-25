@@ -83,9 +83,11 @@ def _db_with_entry(entry, *, current_cost: float = 0.0):
     db.commit = AsyncMock()
     entry_result = MagicMock()
     entry_result.scalar_one_or_none = MagicMock(return_value=entry)
+    job_result = MagicMock()
+    job_result.scalar_one_or_none = MagicMock(return_value=None)  # no replay
     cost_result = MagicMock()
     cost_result.scalar_one_or_none = MagicMock(return_value=current_cost)
-    db.execute = AsyncMock(side_effect=[entry_result, cost_result])
+    db.execute = AsyncMock(side_effect=[entry_result, job_result, cost_result])
     return db
 
 

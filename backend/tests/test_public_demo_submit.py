@@ -72,24 +72,29 @@ def _trusted_headers(cookies=None):
     return h
 
 
-def _db_with_entry(entry, *, current_cost: float = 0.0):
+def _db_with_entry(entry, *, current_cost: float = 0.0, existing_job=None):
     """
-    AsyncMock db whose execute() returns the entry on the lookup query
-    and `current_cost` (Decimal-ish) on the cost peek.
+    AsyncMock db whose execute() returns the entry on the lookup query,
+    the existing-job check (None by default = no replay), and
+    `current_cost` (Decimal-ish) on the cost peek.
     """
     db = AsyncMock()
     db.add = MagicMock()
     db.flush = AsyncMock()
     db.commit = AsyncMock()
 
-    # Two execute() calls per submit: Entry lookup, then cost-counter peek.
+    # Three execute() calls per submit: Entry lookup, existing-Job lookup
+    # (replay protection), cost-counter peek.
     entry_result = MagicMock()
     entry_result.scalar_one_or_none = MagicMock(return_value=entry)
+
+    job_result = MagicMock()
+    job_result.scalar_one_or_none = MagicMock(return_value=existing_job)
 
     cost_result = MagicMock()
     cost_result.scalar_one_or_none = MagicMock(return_value=current_cost)
 
-    db.execute = AsyncMock(side_effect=[entry_result, cost_result])
+    db.execute = AsyncMock(side_effect=[entry_result, job_result, cost_result])
     return db
 
 

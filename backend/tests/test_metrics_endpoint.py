@@ -94,9 +94,11 @@ async def test_submit_increments_demo_submit_counter():
     db.commit = AsyncMock()
     entry_result = MagicMock()
     entry_result.scalar_one_or_none = MagicMock(return_value=entry)
+    job_result = MagicMock()
+    job_result.scalar_one_or_none = MagicMock(return_value=None)  # no replay
     cost_result = MagicMock()
     cost_result.scalar_one_or_none = MagicMock(return_value=0.0)
-    db.execute = AsyncMock(side_effect=[entry_result, cost_result])
+    db.execute = AsyncMock(side_effect=[entry_result, job_result, cost_result])
 
     from app.db import get_db
 

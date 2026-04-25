@@ -147,6 +147,71 @@
 
 ---
 
+### Demo cost-cap: reserve-at-submit instead of debit-at-use
+**What:** `/v1/public/demo/submit` does a read-only cost-cap check, then debits in the worker post-Whisper. Under burst load (N concurrent submits all see `current_cost < cap`), the actual daily spend can overshoot by up to N × per-request cost. Mitigated for solo abusers by `submit_per_ip_day=10`, but coordinated traffic from N IPs can blow the cap.
+**Fix:** Reserve expected cost at /submit time under SELECT FOR UPDATE on demo_cost_counter (optimistic charge of e.g. $0.05); reconcile actual in worker.
+**Why deferred:** Cloudflare + rate limits provide reasonable protection for v1; the overshoot window is documented in the design spec.
+**Effort:** S (human: ~2 hours / CC: ~30 min)
+**Priority:** P2
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Codex + Claude agreed)
+
+---
+
+### Sweep races active uploads + post-claim row preservation
+**What:** Two related races in `services/demo_sweep.py`: (a) sweep can delete an entry between presign and submit if the user takes >24h between the two — submit then 404s; (b) sweep snapshots expired ids then deletes by `id IN (...)`, but if a user claims the session in between, the row is no longer anonymous (`user_id IS NOT NULL`) yet still gets deleted with classifications/jobs CASCADE.
+**Fix:** Add a 5-minute grace period to expires_at filter (`WHERE expires_at < now() - interval '5 min'`); add `AND user_id IS NULL` to the final DELETE (defense in depth even though the SELECT already filters this); exclude rows referenced by Job rows in PENDING/PROCESSING.
+**Effort:** XS (human: ~30 min / CC: ~10 min)
+**Priority:** P2
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Codex + Claude agreed)
+
+---
+
+### In-memory rate limits don't span replicas
+**What:** `_RATE_BUCKETS` is process-local. When the backend scales to N replicas (or during rolling restarts), the effective per-IP limit becomes N × the configured value. An attacker spreading traffic across instances bypasses the intended caps, which compounds the cost-cap overshoot problem above.
+**Fix:** Move counters to Redis or use a SlowAPI store backed by Redis. Or (simpler) gate at Cloudflare with WAF rules so the in-memory limits become defense-in-depth.
+**Why deferred:** Currently single-instance on Render; flag immediately if scaling out.
+**Effort:** M (human: ~4 hours / CC: ~1 hour) for Redis backend
+**Priority:** P2
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Codex)
+
+---
+
+### Submit `_record_rate` writes before `db.commit()`
+**What:** In `routes/public_demo.py::submit`, the `_record_rate("submit_per_session_hour")` and `_record_rate("submit_per_ip_day")` calls run before `db.commit()`. If the commit fails (constraint violation, connection drop), the rate counter has already counted a submit that didn't happen — user is locked out of submitting again for an hour with no entry to show.
+**Fix:** Move `_record_rate` calls to after the `db.commit()` in the success path; wrap in a try/finally so a commit failure doesn't leak the counter increment.
+**Effort:** XS (human: ~15 min / CC: ~5 min)
+**Priority:** P3
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Claude)
+
+---
+
+### Teaser blocklist needs to be pre-stemmed at load time
+**What:** `services/teaser_blocklist.txt` contains raw words (profanity + first names). The match in `services/teaser.py` happens against Porter-stemmed transcript tokens, but the blocklist is loaded as raw words. If "abigail" in the blocklist doesn't equal `porter("abigail")`, the blocklist silently fails to match — PII (first names) can leak through into teaser cards.
+**Fix:** Pre-stem the blocklist at module-load time. Also reconsider the "any blocklisted stem aborts whole teaser" semantics — per-stem block (skip just that stem) might be less drastic.
+**Effort:** XS (human: ~20 min / CC: ~10 min)
+**Priority:** P2
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Claude)
+
+---
+
+### Frontend setState after unmount + orphan demo entries
+**What:** `useDemoRecording.ts::pollStatus` recursively schedules setTimeout → setState. Cleanup useEffect clears the current timer ref but in-flight setTimeouts persist. Worse: `recorder.onstop` calls `presign + setState` after teardownStream — the in-flight presign creates an `Entry` row in the DB that the user will never claim → orphan tombstones until the 24h sweep. Turnstile callback can also fire after the widget is removed → React warnings.
+**Fix:** Track an `isMounted` ref in `useDemoRecording`; bail out of setState + network calls when unmounted. Cancel in-flight `fetch` with `AbortController` so the presign never lands.
+**Effort:** S (human: ~1 hour / CC: ~20 min)
+**Priority:** P3
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Claude)
+
+---
+
+### Migration uses CREATE INDEX without CONCURRENTLY
+**What:** Alembic migration `q6r7s8t9u0v1` creates partial indexes on `entries(demo_session_id)` etc without `CONCURRENTLY`. On a non-empty `entries` table, this takes an ACCESS EXCLUSIVE lock that blocks writes during deploy. Also: the migration `ALTER COLUMN entries.user_id DROP NOT NULL` is irreversible while any anonymous row exists (downgrade fails, by design — but worth documenting).
+**Fix:** Use `CREATE INDEX CONCURRENTLY` (requires running outside transaction — Alembic supports `op.execute_atomic=False` or split into a separate revision). Document the downgrade prerequisite (delete demo rows manually first).
+**Effort:** S (human: ~1 hour / CC: ~30 min)
+**Priority:** P3 (only matters when entries table is large in prod)
+**Surfaced by:** /review adversarial pass on v0.5.0.0 PR (Claude)
+
+---
+
 ### Slack alert wiring on cost > 80% / sweep stall
 **What:** Add a small alerting helper that POSTs to `SLACK_ALERT_WEBHOOK_URL` when `demo_cost_usd_today >= 0.8 * DAILY_DEMO_OPENAI_USD_CAP` or when the sweep counter (`demo_sweep_expired_total`) hasn't ticked in 2+ hours. Both metrics are already emitted; this just adds the alert side.
 **Why:** Without it, the first sign of a runaway demo cost is the demo turning into "capped" mode for users; the first sign of a stuck sweep is days-stale anonymous data lingering past the 24h promise. Slack pings give an early warning.
