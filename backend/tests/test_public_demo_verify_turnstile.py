@@ -113,13 +113,13 @@ async def test_valid_turnstile_issues_permit_and_cookie(app):
     assert uses == "5"
     assert data["expires_at"] == exp_iso
 
-    # Cookie set with HttpOnly + Secure + None (cross-site XHR from
-    # frontend domain to backend domain).
+    # Cookie set with HttpOnly + Secure + Lax. Frontend and backend share
+    # the same registrable domain (yujun.net) so Lax is sufficient.
     set_cookie = resp.headers.get("set-cookie", "")
     assert "tlg_demo_sid=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert "samesite=none" in set_cookie.lower()
+    assert "samesite=lax" in set_cookie.lower()
     assert "Max-Age=86400" in set_cookie
 
 

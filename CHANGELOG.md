@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2.0] - 2026-04-25
+
+### Changed
+- **Backend now lives on `time-api.yujun.net`** (was `time-logger-backend.onrender.com`). Frontend and backend share the registrable domain `yujun.net`, which means cross-subdomain XHR is treated as same-site by browsers. The demo session cookie reverts to `SameSite=Lax` (was temporarily `None` in 0.5.1.0 to work around the cross-site case). This sidesteps Chrome's third-party cookie phaseout entirely — the cookie is now first-party and immune to future browser policy changes.
+- **CSP `connect-src`** now includes `https://time-api.yujun.net` so the frontend can talk to the new backend domain.
+
 ## [0.5.1.0] - 2026-04-25
 
 ### Fixed

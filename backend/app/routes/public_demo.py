@@ -22,7 +22,7 @@ Lifecycle (happy path):
        mechanical summary from classifications at read-time (never stored).
 
 Security posture:
-    - tlg_demo_sid cookie is HttpOnly + SameSite=None + Secure. The session_id
+    - tlg_demo_sid cookie is HttpOnly + SameSite=Lax + Secure. The session_id
       cannot be lifted via JS/XSS.
     - permit_token ties presign/submit to the exact session_id stamped in the
       cookie. Spoofing one without the other is rejected.
@@ -443,16 +443,16 @@ async def verify_turnstile(
     permit = _build_permit_token(session_id, exp, PERMIT_INITIAL_USES)
 
     # HttpOnly prevents JS/XSS from reading the session_id. Secure keeps it
-    # off plaintext HTTP. SameSite=None is required because the frontend
-    # (time.yujun.net) and backend (*.onrender.com) are different registrable
-    # domains — Lax would drop the cookie on every demo XHR.
+    # off plaintext HTTP. SameSite=Lax works because frontend (time.yujun.net)
+    # and backend (time-api.yujun.net) share the same registrable domain
+    # (yujun.net), so cross-subdomain XHR is treated as same-site.
     response.set_cookie(
         SESSION_COOKIE,
         session_id,
         max_age=SESSION_COOKIE_MAX_AGE,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
     )
     await _log_request(
         db, hashed_ip=hashed_ip, demo_session_id=session_id, outcome=DemoOutcome.OK
