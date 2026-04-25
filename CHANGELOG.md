@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1.0] - 2026-04-25
+
+### Fixed
+- **Anonymous demo recordings now actually work in production.** The session cookie that ties the Turnstile verification to the upload step was being dropped by the browser on every demo XHR because the frontend (`time.yujun.net`) and backend (`*.onrender.com`) are different registrable domains. Switched the cookie to `SameSite=None` so it survives cross-site requests. Without this, every anonymous recording failed at presign with a `session_mismatch` 401 and the user saw "Something went wrong. Try again."
+- **Service worker registration no longer blocked by CSP.** Added `'self'` to `worker-src` in both the Nginx config and the Netlify-style `_headers` file. The PWA install path was failing silently on every page load.
+
 ## [0.5.0.0] - 2026-04-24
 
 ### Added
