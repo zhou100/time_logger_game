@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4.0] - 2026-04-25
+
+### Added
+- **Sign-in gate on the landing page.** After the user has seen one real debrief and taps the mic again, a modal slides up: "Save this debrief to keep going" with the same Google + magic-link options that already live in the page footer. Dismissing keeps the existing debrief on screen, but every subsequent mic tap re-opens the gate until the user signs in. Replaces the previous behavior where the next tap silently wiped the prior debrief and started a fresh anonymous recording, which gave away the value with no conversion hook.
+
+### Changed
+- **Mic tap after a real debrief no longer wipes the debrief and re-records.** The gate intercepts. Edge cases (errors, mic-denied, silent recordings that produce no classifications, cost-capped fake debriefs) still fall through to the old reset-and-record path so the user is never stuck.
+
 ## [0.5.3.0] - 2026-04-25
 
 ### Fixed

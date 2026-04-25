@@ -8,6 +8,7 @@ import DebriefStrip, { DebriefPhase } from '../components/landing/DebriefStrip';
 import TurnstileWidget from '../components/landing/TurnstileWidget';
 import AuthFooter from '../components/landing/AuthFooter';
 import TeaserCard from '../components/landing/TeaserCard';
+import SignInGate from '../components/landing/SignInGate';
 import { useDemoRecording } from '../hooks/useDemoRecording';
 import { detectCookieBlocked, readPermit } from '../services/demoApi';
 import { capture as captureEvent } from '../services/analytics';
@@ -100,6 +101,7 @@ const LandingPage: React.FC = () => {
         return p?.token ?? null;
     });
     const [pendingStart, setPendingStart] = useState(false); // true while waiting for fresh permit
+    const [gateOpen, setGateOpen] = useState(false); // sign-in gate after first real debrief
 
     // ── sr-live region — pipeline state announcements ─────────────────────
     const liveRegionRef = useRef<HTMLDivElement | null>(null);
@@ -162,7 +164,15 @@ const LandingPage: React.FC = () => {
             stop();
             return;
         }
-        // Done / error / capped → reset and re-arm
+        // After a real debrief, gate further recording behind sign-in. We treat
+        // "real" as state=done with at least one classification — empty Whisper
+        // output, capped/fake debriefs, and pipeline errors all fall through
+        // to the reset-and-re-record path so the user is never stuck.
+        if (recState === 'done' && classifications.length >= 1) {
+            setGateOpen(true);
+            return;
+        }
+        // Done (no classifications) / error / capped → reset and re-arm
         if (recState === 'done' || recState === 'error' || recState === 'capped') {
             reset();
         }
@@ -425,6 +435,10 @@ const LandingPage: React.FC = () => {
                 {/* ── 15+16. Auth footer (with privacy fine print) ───────── */}
                 <AuthFooter />
             </Container>
+
+            {/* Sign-in gate fires after the user has seen one real debrief and
+                taps the mic again. See onMicTap above for the gate condition. */}
+            <SignInGate open={gateOpen} onDismiss={() => setGateOpen(false)} />
         </>
     );
 };
