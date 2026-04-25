@@ -12,6 +12,8 @@ import WeeklyReportPage from './pages/WeeklyReportPage';
 import ThoughtGardenPage from './pages/ThoughtGardenPage';
 import ThemesPage from './pages/ThemesPage';
 import SettingsPage from './pages/SettingsPage';
+import WelcomePage from './pages/WelcomePage';
+import PrivacyPage from './pages/PrivacyPage';
 import NavBar from './components/NavBar';
 import InstallBanner from './components/InstallBanner';
 import { Box } from '@mui/material';
@@ -41,6 +43,15 @@ function App() {
                 <Route path="/login" element={<SignInForm />} />
                 <Route path="/register" element={<Navigate to="/login" replace />} />
                 <Route path="/" element={<HomePage />} />
+                {/*
+                 * /welcome is intentionally NOT wrapped in ProtectedRoute. It
+                 * runs its own session-loading state machine (with a 500ms
+                 * spinner cap) and gracefully degrades to a calm error
+                 * fallback if the user never materializes. Wrapping it in
+                 * ProtectedRoute would short-circuit those branches.
+                 */}
+                <Route path="/welcome" element={<WelcomePage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/week" element={<ProtectedRoute><WeeklyReportPage /></ProtectedRoute>} />
                 <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
                 <Route path="/thoughts" element={<ProtectedRoute><ThoughtGardenPage /></ProtectedRoute>} />

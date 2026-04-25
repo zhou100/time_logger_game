@@ -139,15 +139,20 @@ const NavBar: React.FC = () => {
                         </Menu>
                     </Box>
                 ) : (
-                    <Button
-                        component={RouterLink}
-                        to="/login"
-                        variant="text"
-                        size="small"
-                        sx={{ color: 'text.primary', textTransform: 'none' }}
-                    >
-                        Sign in
-                    </Button>
+                    // Interaction-first landing: the page itself is the only CTA on `/`,
+                    // so we hide the nav Sign-in link there. All other unauthed routes
+                    // (e.g. /login, /privacy) keep the link as a quiet escape hatch.
+                    location.pathname !== '/' && (
+                        <Button
+                            component={RouterLink}
+                            to="/login"
+                            variant="text"
+                            size="small"
+                            sx={{ color: 'text.primary', textTransform: 'none' }}
+                        >
+                            Sign in
+                        </Button>
+                    )
                 )}
             </Toolbar>
         </AppBar>
