@@ -12,27 +12,21 @@
 
 ## P2 — Medium Priority
 
-### Landing CTA Click Analytics
-**What:** Instrument click tracking on the landing primary CTA ("Sign in with Google to start"), the secondary magic-link text, and the NavBar "Sign in" link. Measure time-to-first-click and bounce-before-CTA.
-**Why:** The landing funnel now has a single primary CTA (Google) with magic link as a lightweight text alternative. No baseline exists to measure conversion, detect regressions from copy/layout tweaks, or A/B test CTA variants.
-**Pros:** Unblocks data-driven CTA iteration. Catches regressions from future landing changes.
-**Cons:** Needs an analytics vendor choice (PostHog / Plausible / GA4) or a lightweight backend event endpoint.
-**Context:** Originally surfaced in 2026-04-23 `/plan-ceo-review` of mobile-landing-cleanup when a Google→email CTA reversal was on the table. Reversal was later dropped (v0.4.1.1 kept Google as primary), but the analytics gap remains — still worth filling.
-**Effort:** S (human: ~3 hours / CC: ~30 min)
+### test_demo_settings env-precedence flake
+**What:** `tests/test_demo_settings.py::test_defaults_load` asserts `DEMO_IP_HASH_SALT == "test-salt-do-not-use-in-prod"` (the value in `backend/.env.test`), but pydantic-settings loads `backend/.env` first when present. Any developer who sets a local `DEMO_IP_HASH_SALT` override in their gitignored `.env` for dogfooding fails this test.
+**Why:** Failure is purely local — `.env` is gitignored so CI doesn't hit it. But it makes `pytest` red on every dev's machine if they set up Cloudflare test keys per the v0.5.0.0 dogfooding instructions.
+**Fix:** Either (a) the test should set `DEMO_IP_HASH_SALT` via `monkeypatch.setenv` before reading settings, or (b) settings load order should ignore `.env` when running under pytest (PYTEST_CURRENT_TEST is set), or (c) `.env.test` should win.
+**Effort:** S (human: ~30 min / CC: ~10 min)
 **Priority:** P2
-**Depends on:** Analytics vendor decision (1-line doc).
+**Context:** Surfaced in v0.5.0.0 ship pre-flight. Test is currently `--deselect`'d in the ship workflow.
 
 ---
 
-### Record-First Mobile Landing Flow
-**What:** Visitor hits mobile landing → taps primary CTA → records one voice entry anonymously → THEN is prompted to save via magic-link signup. Entry is attached to the new account on signup.
-**Why:** The platonic-ideal mobile landing per Step 0C of the 2026-04-23 CEO review. Current funnel asks for auth before demonstrating value; record-first inverts that. Potentially 10x mobile conversion by removing the pre-value friction.
-**Pros:** Removes the "prove value before I give you my email" objection. Product demo *is* the onboarding.
-**Cons:** Anonymous entry storage (ephemeral table or cookie-keyed session), Whisper cost for unauthed users (rate-limit), merge flow on signup, abuse surface.
-**Context:** Surfaced in 2026-04-23 `/plan-ceo-review` as the scope-expansion option the user held. Should sequence AFTER Mobile Landing CTA Click Analytics so impact is measurable.
-**Effort:** L (human: ~1 week / CC: ~4 hours)
+### Explicit `/recording` route in App.tsx
+**What:** Add a top-level `<Route path="/recording" element={...}>` to `frontend/src/App.tsx`. Currently `/welcome`'s "See all my entries →" link points at `/recording`, which resolves via the catch-all `<Route path="*" element={<Navigate to="/" replace />}>` → `HomePage` → `RecordingPage` for authed users. Works, but the indirection makes the routing intent unclear and the URL invisible to bookmarking.
+**Why:** Surfaced in v0.5.0.0 item 5. The plan assumed `/recording` was a real route; we shipped without adding one because `HomePage` already mounts `RecordingPage` for authed users.
+**Effort:** XS (human: ~15 min / CC: ~5 min) — likely just an alias route to the same component.
 **Priority:** P2
-**Depends on:** Mobile Landing CTA Click Analytics (need baseline to measure impact).
 
 ---
 
@@ -65,6 +59,30 @@
 ---
 
 ## P3 — Low Priority
+
+### Time-of-day Aware "Try saying…" Prompts on Landing
+**What:** Rotate the "Try saying…" example prompts on the landing page based on the visitor's local clock. Morning prompts ("Today feels like a fresh start…"), afternoon prompts ("I've been pulled in too many directions today…"), evening prompts ("Looking back at today I…"). Client-side detection via `new Date().getHours()`, three prompt sets defined in the landing component.
+**Why:** Static prompts get stale and can feel impersonal; time-aware prompts meet the visitor where they are emotionally. Small delight item, reduces blank-state friction.
+**Pros:** Cheap (no backend change), adds personality, matches journal aesthetic.
+**Cons:** Marginal until A/B data shows which prompts convert best.
+**Effort:** XS (human: ~15 min / CC: ~5 min).
+**Priority:** P3
+**Depends on:** interaction-first landing shipping first.
+**Context:** Deferred from 2026-04-24 /plan-ceo-review (ceo-plans/2026-04-24-interaction-first-landing.md). Accepted static prompts in v1; this is the polish pass.
+
+---
+
+### Inline Waveform on Landing Mic Button
+**What:** Replace the pulse animation on the landing-page mic button with a real-time waveform during recording, using Web Audio `AnalyserNode` + `getByteFrequencyData`. The in-app `RecordButton` already has a visual state; this TODO is specifically for the landing-page hero mic, where the "voice affordance" needs to feel more alive than a pulse.
+**Why:** The interaction-first pivot depends on visitors believing "this thing is really listening." A live waveform sells that in a way a pulse can't. Potential lever on the `mic_tapped → recording_completed` funnel step.
+**Pros:** Strong delight signal, reinforces the product's core promise.
+**Cons:** Marginal if the pulse already converts; 30 min of work unless base conversion is weak.
+**Effort:** S (human: ~30 min / CC: ~15 min).
+**Priority:** P3
+**Depends on:** interaction-first landing shipping + PostHog data showing mic_tap → complete drop-off worth optimizing.
+**Context:** Deferred from 2026-04-24 /plan-ceo-review. Revisit after 2 weeks of funnel data.
+
+---
 
 ### Extract Shared `QuoteCard` Component on `/week`
 **What:** Once the `feat/personality-md` weekly-letter-polish ships, `RecurringThemesTeaser` and the `ThoughtGems` teaser will both be near-identical card components differing only by left-bar color and content source. Extract a shared `QuoteCard({leftBarColor, label, body, linkHref, linkLabel})` on the next `WeeklyReportPage.tsx` touch.
@@ -129,11 +147,43 @@
 
 ---
 
-### Presigned URL Content-Type Validation
+### Slack alert wiring on cost > 80% / sweep stall
+**What:** Add a small alerting helper that POSTs to `SLACK_ALERT_WEBHOOK_URL` when `demo_cost_usd_today >= 0.8 * DAILY_DEMO_OPENAI_USD_CAP` or when the sweep counter (`demo_sweep_expired_total`) hasn't ticked in 2+ hours. Both metrics are already emitted; this just adds the alert side.
+**Why:** Without it, the first sign of a runaway demo cost is the demo turning into "capped" mode for users; the first sign of a stuck sweep is days-stale anonymous data lingering past the 24h promise. Slack pings give an early warning.
+**Why deferred:** User explicitly skipped during v0.5.0.0 item 6 — no Slack workspace yet.
+**Effort:** S (human: ~1 hour / CC: ~15 min)
+**Priority:** P3
 
-**What:** Validate the `content_type` parameter on the presign endpoint to restrict to audio MIME types.
-**Why:** Adversarial review flagged that unvalidated content_type allows arbitrary file upload.
-**Effort:** XS (human: ~15 min / CC: ~5 min)
+---
+
+### Worker language detection threading
+**What:** `services/worker.py::_maybe_write_demo_teaser` and the `demo_pipeline_completed` PostHog event currently pass `language=None` (treated as English). Whisper actually returns a detected language — surface it from the transcription call through to the teaser compute and the analytics event.
+**Why:** The teaser safety filter SKIPS non-English entries entirely. Right now we treat every demo as English, which means a Spanish/Mandarin recording will get a stem extracted and possibly surfaced in the teaser card.
+**Effort:** XS (human: ~20 min / CC: ~10 min) — the hook in worker.py is already documented inline; just thread the value.
+**Priority:** P3
+
+---
+
+### Expand teaser allowlist + blocklist
+**What:** `services/teaser_allowlist.txt` is 1555 hand-curated journaling lemmas (TODO marker says expand to top-5k common English lemmas). `services/teaser_blocklist.txt` is 840 entries (50 profanity + 400 first names; TODO says expand to 1000 first names from a public-domain census source).
+**Why:** Smaller-but-real lists were the right v1 call but the curated lemma list will let through proper-noun-y stems and the small first-name list will leak common names as teaser stems.
+**Effort:** S (human: ~1 hour to source + lint / CC: ~20 min)
+**Priority:** P3
+
+---
+
+### Single-entry GET endpoint for /welcome
+**What:** Add `GET /api/v1/entries/{id}` that returns one entry by id (auth required). `/welcome` currently calls `entriesApi.list(0, 5)` then filters for the just-claimed `entry_ids[0]` — fetches 4 unused entries and parses extra JSON.
+**Why:** Low impact (`/welcome` is a low-volume page) but the indirection is silly once anyone notices it.
+**Effort:** XS (human: ~30 min / CC: ~10 min)
+**Priority:** P3
+
+---
+
+### Frontend leaf-component isolated tests
+**What:** `MicButton`, `TurnstileWidget`, `DebriefStrip`, `TrySayingChips`, `TeaserCard` are all covered indirectly via `LandingPage.test.tsx` integration tests. Each is small (under 200 LOC) but isolated component tests would tighten regression detection — e.g. MicButton's 5 anti-slop visual states are easier to assert at the component level than via the page.
+**Why:** Surfaced in v0.5.0.0 ship coverage audit. Not blocking — integration coverage is solid — but the leaf components are visible and might evolve quickly.
+**Effort:** S (human: ~2 hours / CC: ~30 min for all 5)
 **Priority:** P3
 
 ---
@@ -233,6 +283,15 @@
 ---
 
 ## Completed
+
+### ~~Record-First Mobile Landing Flow~~ — v0.5.0.0 (2026-04-24)
+Shipped as the interaction-first landing. Visitor taps mic on `/`, records anonymously, gets a real debrief back, then sees Save With Google in the footer. Anonymous entries live in `entries`/`jobs` with nullable `user_id` + `demo_session_id` + 24h `expires_at` (Alembic q6r7s8t9u0v1). Worker reuses the existing pipeline for both authed and anonymous jobs. Daily OpenAI cost cap + 3 SlowAPI rate limits + Cloudflare Turnstile. Save merges via `POST /api/v1/entries/claim-demo-session` (HMAC-signed claim_token threaded through OAuth state). New `/welcome` post-OAuth handoff. Anonymous flywheel: 2nd recording surfaces a teaser stem (Porter + allowlist + blocklist + lang guard).
+
+### ~~Landing CTA Click Analytics~~ — v0.5.0.0 (2026-04-24)
+PostHog wired across landing, /welcome, and AuthFooter. Client emits `landing_viewed`, `mic_tapped`, `recording_started/completed`, `debrief_shown`, `teaser_shown`, `save_clicked` (with `method: "google"|"magic_link"`), `signup_completed`, `demo_claim_succeeded|missing|failed`, `cookie_blocked`. Server emits `demo_turnstile_verified`, `demo_submit{outcome}`, `demo_pipeline_completed`, `demo_claim`. Both join on `demo_session_id`. Lazy-init keeps zero overhead when `REACT_APP_POSTHOG_KEY` is unset or in test mode. Prometheus `/metrics` endpoint also exposes funnel + cost + latency counters.
+
+### ~~Presigned URL Content-Type Validation~~ — v0.5.0.0 (2026-04-24)
+`POST /v1/public/demo/presign` validates `content_type` against `{audio/webm, audio/mp4, audio/m4a, audio/mpeg}` and rejects anything else with HTTP 400. iOS Safari `audio/mp4` recording supported alongside Chrome/Firefox `audio/webm`. The authed `/captures` presign path predates this PR and is out of scope; the anonymous path is now hardened.
 
 ### ~~Personality.md v1 (coaching preferences)~~ — v0.3.7.0 (2026-04-18)
 Per-user `coaching_preferences` JSONB on `users` (Alembic `p5q6r7s8t9u0`): tone, pacing, language_lock, avoid_topics. Strict write validation (NFKC + zero-width strip + EN/ZH prompt-injection blocklist + 60-char/10-topic caps); forgiving read normalizer (unknown enums → field defaults; malformed shape → full defaults). `GET`/`PATCH /api/v1/users/me/preferences` with omit/null/value PATCH semantics. New `/settings` page with selectors + chip editor + per-field 422 helper text + Reset. Weekly audit Stage-1 + Stage-2 inject prefs and recent-change signals (`emerging` / `fading` / `new_friction` from `weekly_signals.py`, computed relative to `week_start`). `language_lock=zh|en` hard-overrides Stage-2 detection; avoid-topics downgrade prescriptive advice. `prefs_stale` banner on `/week` with Regenerate + deep link. Server-side `applied_prefs` echo. `COACHING_PERSONALIZATION_ENABLED` env-var kill switch (default true). 70 backend + 20 frontend tests; 50/50 frontend suite green, tsc clean.
