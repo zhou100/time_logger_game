@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4.1] - 2026-04-25
+
+### Added
+- **Sign-in link in the top nav on the landing page.** Mobile visitors landing on `/` previously had to scroll past the entire debrief surface before seeing any way to sign in. The nav now shows "Sign in" in the top-right for unauthenticated users on every route, including the landing page.
+
+### Fixed
+- **Cloudflare Pages build no longer fails with TS7006.** A test helper in `LandingPageGate.test.tsx` had an untyped `overrides` parameter and a loosely-typed mock object. CRA's production build typechecks test files, which Cloudflare picked up but local `jest` did not. Imported `UseDemoRecordingResult` from the hook and built a mock-friendly variant so `.mockClear()` typechecks.
+
 ## [0.5.4.0] - 2026-04-25
 
 ### Added

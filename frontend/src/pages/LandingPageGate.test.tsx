@@ -15,10 +15,17 @@ import React from 'react';
 import { render, screen, fireEvent, waitForElementToBeRemoved } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LandingPage from './LandingPage';
+import type { UseDemoRecordingResult } from '../hooks/useDemoRecording';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockHookReturn = {
+type MockHookReturn = Omit<UseDemoRecordingResult, 'start' | 'stop' | 'reset'> & {
+    start: jest.Mock;
+    stop: jest.Mock;
+    reset: jest.Mock;
+};
+
+const mockHookReturn: MockHookReturn = {
     state: 'idle',
     step: null,
     summary: null,
@@ -102,7 +109,7 @@ beforeEach(() => {
     mockHookReturn.reset.mockClear();
 });
 
-function setHookState(overrides) {
+function setHookState(overrides: Partial<MockHookReturn>) {
     Object.assign(mockHookReturn, overrides);
 }
 

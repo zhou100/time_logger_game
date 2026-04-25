@@ -18,7 +18,7 @@ import { capture as captureEvent } from '../services/analytics';
  *
  * Information Architecture (mobile-first 375px reference, single column at
  * every breakpoint):
- *   1. Top nav (rendered by NavBar above us — Sign-in link suppressed on `/`)
+ *   1. Top nav (rendered by NavBar above us — includes Sign-in link top-right)
  *   2. Hero h1
  *   3. Subtitle
  *   4. Mic button
