@@ -169,7 +169,7 @@ async def test_submit_rate_limit_writes_log_row(monkeypatch):
         transport=ASGITransport(app=application), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/submit",
+            "/api/v1/public/demo/submit",
             json={"entry_id": "x", "permit_token": "y"},
             headers=headers,
         )

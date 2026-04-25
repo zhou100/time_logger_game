@@ -119,7 +119,7 @@ async def test_submit_ok_emits_event_and_metric(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/submit",
+                "/api/v1/public/demo/submit",
                 json={"entry_id": str(entry_id), "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )
@@ -158,7 +158,7 @@ async def test_submit_capped_emits_event_and_metric(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/submit",
+                "/api/v1/public/demo/submit",
                 json={"entry_id": str(entry_id), "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )
@@ -220,7 +220,7 @@ async def test_submit_rate_limited_emits_event_and_metric(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/submit",
+                "/api/v1/public/demo/submit",
                 json={"entry_id": str(entry_id), "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )

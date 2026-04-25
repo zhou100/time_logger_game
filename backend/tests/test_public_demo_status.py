@@ -101,7 +101,7 @@ async def test_status_cookie_mismatch_returns_404(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers({"tlg_demo_sid": session_b}),
         )
     assert resp.status_code == 404
@@ -120,7 +120,7 @@ async def test_status_no_cookie_returns_404(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers(),  # no cookie
         )
     assert resp.status_code == 404
@@ -135,7 +135,7 @@ async def test_status_invalid_uuid_returns_404(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            "/v1/public/demo/status/not-a-uuid",
+            "/api/v1/public/demo/status/not-a-uuid",
             headers=_trusted_headers({"tlg_demo_sid": "a" * 64}),
         )
     assert resp.status_code == 404
@@ -160,7 +160,7 @@ async def test_status_queued_no_job(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
     assert resp.status_code == 200
@@ -203,7 +203,7 @@ async def test_status_done_with_mechanical_summary(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
     assert resp.status_code == 200
@@ -247,7 +247,7 @@ async def test_status_demo_teaser_dict_value(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
     assert resp.status_code == 200
@@ -282,7 +282,7 @@ async def test_status_demo_teaser_string_value(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get(
-            f"/v1/public/demo/status/{entry_id}",
+            f"/api/v1/public/demo/status/{entry_id}",
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
     assert resp.status_code == 200

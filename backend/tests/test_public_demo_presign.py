@@ -87,7 +87,7 @@ async def test_presign_happy_path(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/presign",
+                "/api/v1/public/demo/presign",
                 json={"content_type": "audio/webm", "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )
@@ -129,7 +129,7 @@ async def test_presign_expired_permit_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm", "permit_token": permit},
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
@@ -148,7 +148,7 @@ async def test_presign_exhausted_permit_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm", "permit_token": permit},
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
@@ -169,7 +169,7 @@ async def test_presign_session_mismatch_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm", "permit_token": permit},
             headers=_trusted_headers({"tlg_demo_sid": session_b}),
         )
@@ -189,7 +189,7 @@ async def test_presign_no_cookie_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm", "permit_token": permit},
             headers=_trusted_headers(),  # no cookie
         )
@@ -207,7 +207,7 @@ async def test_presign_rejects_bad_content_type(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "video/mp4", "permit_token": permit},
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )
@@ -236,7 +236,7 @@ async def test_presign_extension_matches_content_type(app, ct, ext):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/presign",
+                "/api/v1/public/demo/presign",
                 json={"content_type": ct, "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )
@@ -260,7 +260,7 @@ async def test_claim_token_is_hmac_verifiable(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/presign",
+                "/api/v1/public/demo/presign",
                 json={"content_type": "audio/webm", "permit_token": permit},
                 headers=_trusted_headers({"tlg_demo_sid": session_id}),
             )
@@ -295,7 +295,7 @@ async def test_presign_tampered_permit_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm", "permit_token": tampered},
             headers=_trusted_headers({"tlg_demo_sid": session_id}),
         )

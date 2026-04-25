@@ -65,7 +65,7 @@ from ..services.demo_ip import extract_hashed_ip
 from ..settings import settings
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/v1/public/demo", tags=["public-demo"])
+router = APIRouter(prefix="/api/v1/public/demo", tags=["public-demo"])
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -302,14 +302,20 @@ def _enforce_rate_limits(
 ) -> None:
     """Trip RateLimitTripped on any rule applicable to this request.
 
-    submit-specific buckets only apply to /submit. The exception subclasses
-    HTTPException, so routes that don't want bucket-level observability can
-    simply let it propagate as a 429.
+    submit-specific buckets only apply to /submit. /status is exempt from
+    per_ip_minute because the frontend polls it ~24×/min (every 2.5s for up
+    to 90s) — counting status polls would 429 the user before Whisper p50
+    completes. The cookie-gating + per-entry scoping make /status much
+    lower-risk than write endpoints, so the looser limit is appropriate.
+
+    The exception subclasses HTTPException, so routes that don't want
+    bucket-level observability can simply let it propagate as a 429.
     """
     now = datetime.now(timezone.utc)
-    ok, retry = _check_rate("per_ip_minute", hashed_ip, now)
-    if not ok:
-        raise RateLimitTripped("per_ip_minute", retry or 1)
+    if kind != "status":
+        ok, retry = _check_rate("per_ip_minute", hashed_ip, now)
+        if not ok:
+            raise RateLimitTripped("per_ip_minute", retry or 1)
     if kind == "submit":
         if session_id:
             ok, retry = _check_rate("submit_per_session_hour", session_id, now)
@@ -318,7 +324,8 @@ def _enforce_rate_limits(
         ok, retry = _check_rate("submit_per_ip_day", hashed_ip, now)
         if not ok:
             raise RateLimitTripped("submit_per_ip_day", retry or 1)
-    _record_rate("per_ip_minute", hashed_ip, now)
+    if kind != "status":
+        _record_rate("per_ip_minute", hashed_ip, now)
 
 
 def _derive_mechanical_summary(rows: List[EntryClassification]) -> Optional[str]:

@@ -94,7 +94,7 @@ async def test_valid_turnstile_issues_permit_and_cookie(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/verify-turnstile",
+                "/api/v1/public/demo/verify-turnstile",
                 json={"token": "cf-proof"},
                 headers={
                     "cf-connecting-ip": "203.0.113.7",
@@ -133,7 +133,7 @@ async def test_failed_turnstile_returns_400(app):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             resp = await client.post(
-                "/v1/public/demo/verify-turnstile",
+                "/api/v1/public/demo/verify-turnstile",
                 json={"token": "bad"},
                 headers={
                     "cf-connecting-ip": "203.0.113.7",
@@ -163,25 +163,25 @@ async def test_disabled_returns_404(monkeypatch):
         transport=ASGITransport(app=application), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/verify-turnstile",
+            "/api/v1/public/demo/verify-turnstile",
             json={"token": "x"},
             headers={"cf-connecting-ip": "203.0.113.7", "cf-ray": "r"},
         )
         assert resp.status_code == 404
         resp2 = await client.post(
-            "/v1/public/demo/presign",
+            "/api/v1/public/demo/presign",
             json={"content_type": "audio/webm"},
             headers={"cf-connecting-ip": "203.0.113.7", "cf-ray": "r"},
         )
         assert resp2.status_code == 404
         resp3 = await client.post(
-            "/v1/public/demo/submit",
+            "/api/v1/public/demo/submit",
             json={"entry_id": "ignored", "permit_token": "x"},
             headers={"cf-connecting-ip": "203.0.113.7", "cf-ray": "r"},
         )
         assert resp3.status_code == 404
         resp4 = await client.get(
-            "/v1/public/demo/status/00000000-0000-0000-0000-000000000000",
+            "/api/v1/public/demo/status/00000000-0000-0000-0000-000000000000",
             headers={"cf-connecting-ip": "203.0.113.7", "cf-ray": "r"},
         )
         assert resp4.status_code == 404
@@ -197,7 +197,7 @@ async def test_untrusted_origin_rejected(app):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.post(
-            "/v1/public/demo/verify-turnstile", json={"token": "x"},
+            "/api/v1/public/demo/verify-turnstile", json={"token": "x"},
         )
     assert resp.status_code == 400
     assert resp.json() == {"detail": {"error": "untrusted_origin"}}
