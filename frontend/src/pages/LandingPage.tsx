@@ -176,15 +176,24 @@ const LandingPage: React.FC = () => {
         }
     };
 
-    // After widget mints a fresh permit, auto-fire the recording start so the
-    // user doesn't have to tap the mic a second time.
+    // After widget mints a fresh permit, just commit it to state. The auto-
+    // start fires from the effect below — calling start() synchronously here
+    // would capture a stale opts.getPermitToken closure (pre-setState), so
+    // recorder.onstop would later see permitToken=null and error out with
+    // "Verification expired."
     const onPermitObtained = (token: string) => {
         setPermitToken(token);
-        if (pendingStart) {
+    };
+
+    // Auto-start once both the permit has landed in state AND the user is
+    // waiting on it. Deferring to an effect guarantees start() runs against a
+    // render where opts.getPermitToken() returns the new token.
+    useEffect(() => {
+        if (permitToken && pendingStart) {
             setPendingStart(false);
             start();
         }
-    };
+    }, [permitToken, pendingStart, start]);
 
     // From try-saying chips: announce the phrase and start recording.
     const onChipTap = (phrase: string) => {
