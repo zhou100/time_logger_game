@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5.0] - 2026-04-27
+
+### Changed
+- **Email sign-in now uses a 6-digit code instead of a magic link.** Previously, signing in by email required tapping a link from your inbox, which on iOS Safari often opened the session in Chrome or the Gmail in-app browser, not the Safari tab where you started. Now the email contains a 6-digit code you type back into the form, so the session always lands in the browser you started in. Google sign-in is unchanged.
+- **Auth error messages updated for the OTP flow.** "This link has expired" → "That code has expired"; added a "didn't match" message for incorrect codes; rate-limit copy reworded ("magic links" → "codes").
+
+### Required dashboard change
+- The Supabase magic-link email template must include `{{ .Token }}` so the code renders in the email. Update at: Authentication → Email Templates → Magic Link.
+
 ## [0.5.4.1] - 2026-04-25
 
 ### Added
