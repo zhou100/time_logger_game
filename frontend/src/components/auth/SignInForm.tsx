@@ -53,7 +53,10 @@ type Action =
     | { type: 'BACK_TO_EMAIL' };
 
 const RESEND_COOLDOWN_S = 30;
-const CODE_LENGTH = 6;
+// Supabase OTP length is configurable per project (6-10 digits). Accept the
+// full range so the frontend keeps working if the Supabase setting is rotated.
+const CODE_MIN_LENGTH = 6;
+const CODE_MAX_LENGTH = 10;
 
 const initialState: State = {
     step: 'email',
@@ -69,10 +72,10 @@ function reducer(state: State, action: Action): State {
         case 'SET_EMAIL':
             return { ...state, email: action.email, error: null };
         case 'SET_CODE':
-            // Strip non-digits, cap at CODE_LENGTH
+            // Strip non-digits, cap at CODE_MAX_LENGTH
             return {
                 ...state,
-                code: action.code.replace(/\D/g, '').slice(0, CODE_LENGTH),
+                code: action.code.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH),
                 error: null,
             };
         case 'SEND_START':
@@ -139,7 +142,7 @@ const SignInForm: React.FC = () => {
 
     const handleVerify = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (state.code.length !== CODE_LENGTH) return;
+        if (state.code.length < CODE_MIN_LENGTH || state.code.length > CODE_MAX_LENGTH) return;
         dispatch({ type: 'VERIFY_START' });
         const { error } = await verifyOTP(state.email.trim(), state.code);
         if (error) dispatch({ type: 'VERIFY_ERR', error });
@@ -237,7 +240,7 @@ const SignInForm: React.FC = () => {
                                     inputMode: 'numeric',
                                     pattern: '[0-9]*',
                                     autoComplete: 'one-time-code',
-                                    maxLength: CODE_LENGTH,
+                                    maxLength: CODE_MAX_LENGTH,
                                     'aria-label': 'code',
                                 }}
                             />
@@ -252,7 +255,7 @@ const SignInForm: React.FC = () => {
                                 color="primary"
                                 fullWidth
                                 size="large"
-                                disabled={state.status === 'pending' || state.code.length !== CODE_LENGTH}
+                                disabled={state.status === 'pending' || state.code.length < CODE_MIN_LENGTH}
                                 startIcon={state.status === 'pending' ? <CircularProgress size={16} /> : null}
                             >
                                 {state.status === 'pending' ? 'Verifying…' : 'Verify'}

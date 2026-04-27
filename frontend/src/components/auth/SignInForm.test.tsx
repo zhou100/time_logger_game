@@ -125,14 +125,14 @@ describe('SignInForm — step 2 (code entry)', () => {
         expect(screen.getByLabelText(/^code$/i)).toBeInTheDocument();
     });
 
-    it('strips non-digits and caps input at 6 characters', async () => {
+    it('strips non-digits and caps input at 10 characters', async () => {
         await advanceToCodeStep();
         const input = screen.getByLabelText(/^code$/i) as HTMLInputElement;
-        fireEvent.change(input, { target: { value: 'a1b2c3d4e5f6g7' } });
-        expect(input.value).toBe('123456');
+        fireEvent.change(input, { target: { value: 'a1b2c3d4e5f6g7h8i9j0k1' } });
+        expect(input.value).toBe('1234567890');
     });
 
-    it('Verify button is disabled until 6 digits are entered', async () => {
+    it('Verify button is disabled until at least 6 digits are entered', async () => {
         await advanceToCodeStep();
         const verifyBtn = screen.getByRole('button', { name: /^verify$/i });
         expect(verifyBtn).toBeDisabled();
@@ -140,6 +140,19 @@ describe('SignInForm — step 2 (code entry)', () => {
         expect(verifyBtn).toBeDisabled();
         fireEvent.change(screen.getByLabelText(/^code$/i), { target: { value: '123456' } });
         expect(verifyBtn).not.toBeDisabled();
+        // Also accepts longer codes (Supabase OTP length is 6-10)
+        fireEvent.change(screen.getByLabelText(/^code$/i), { target: { value: '12345678' } });
+        expect(verifyBtn).not.toBeDisabled();
+    });
+
+    it('accepts 8-digit codes when Supabase issues them', async () => {
+        mockVerifyOTP.mockResolvedValue({});
+        await advanceToCodeStep();
+        fireEvent.change(screen.getByLabelText(/^code$/i), { target: { value: '12345678' } });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /^verify$/i }));
+        });
+        expect(mockVerifyOTP).toHaveBeenCalledWith('me@test.com', '12345678');
     });
 
     it('calls verifyOTP with email + code on submit', async () => {

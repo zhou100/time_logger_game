@@ -11,7 +11,7 @@
  *   - aria-live region updates with pipeline state
  *   - Privacy link href is correct
  *   - 375px column fits within 360px max-width
- *   - Auth footer renders Google + magic link
+ *   - Auth footer renders Google + email code entry
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -155,11 +155,11 @@ describe('LandingPage — IA & basic structure', () => {
         expect(screen.getByText(/notice what breaks focus next time/i)).toBeInTheDocument();
     });
 
-    it('renders the auth footer with Google + magic link', () => {
+    it('renders the auth footer with Google + email sign-in', () => {
         renderPage();
         expect(screen.getByText(/keep your history across devices/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /get a magic link/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /sign in with email/i })).toBeInTheDocument();
     });
 
     it('points the privacy link to /privacy', () => {
@@ -240,27 +240,27 @@ describe('LandingPage — reduced motion', () => {
     });
 });
 
-describe('LandingPage — magic link form', () => {
-    it('opens an email field when the magic link link is clicked', () => {
+describe('LandingPage — email code form', () => {
+    it('opens an email field when the email sign-in link is clicked', () => {
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /get a magic link/i }));
+        fireEvent.click(screen.getByRole('button', { name: /sign in with email/i }));
         expect(screen.getByPlaceholderText(/you@example.com/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /send magic link/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /email me a code/i })).toBeInTheDocument();
     });
 
-    it('calls signInWithOtp with /welcome redirect on submit', async () => {
+    it('calls signInWithOtp without emailRedirectTo on submit (code-entry flow)', async () => {
         mockSignInWithOtp.mockResolvedValue({ data: {}, error: null });
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /get a magic link/i }));
+        fireEvent.click(screen.getByRole('button', { name: /sign in with email/i }));
         const input = screen.getByPlaceholderText(/you@example.com/i);
         fireEvent.change(input, { target: { value: 'a@b.co' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
+            fireEvent.click(screen.getByRole('button', { name: /email me a code/i }));
         });
         await waitFor(() => expect(mockSignInWithOtp).toHaveBeenCalledTimes(1));
         const call = mockSignInWithOtp.mock.calls[0][0];
         expect(call.email).toBe('a@b.co');
-        expect(call.options.emailRedirectTo).toContain('/welcome');
+        expect(call.options.emailRedirectTo).toBeUndefined();
     });
 });
 
