@@ -319,10 +319,10 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                                     variant="body2"
                                     sx={{ color: palette.textPrimary, textAlign: 'center' }}
                                 >
-                                    We sent a sign-in code to <strong>{email}</strong>.
+                                    We sent a 6-digit code to <strong>{email}</strong>.
                                 </Typography>
                                 <TextField
-                                    placeholder="Enter code"
+                                    placeholder="Enter 6-digit code"
                                     value={code}
                                     onChange={(e) =>
                                         setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))

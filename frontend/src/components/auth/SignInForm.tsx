@@ -223,13 +223,13 @@ const SignInForm: React.FC = () => {
                     {state.step === 'code' && (
                         <Box component="form" onSubmit={handleVerify} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                             <Typography variant="body1" color="text.primary" aria-live="polite">
-                                We sent a sign-in code to <strong>{state.email}</strong>.
+                                We sent a 6-digit code to <strong>{state.email}</strong>.
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                                 Enter it below to sign in. Check your spam folder if it doesn&rsquo;t arrive in 30 seconds.
                             </Typography>
                             <TextField
-                                label="Sign-in code"
+                                label="6-digit code"
                                 value={state.code}
                                 onChange={(e) => dispatch({ type: 'SET_CODE', code: e.target.value })}
                                 required
