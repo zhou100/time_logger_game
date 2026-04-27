@@ -52,6 +52,7 @@ jest.mock('../contexts/AuthContext', () => {
             isAuthenticated: false,
             isLoading: false,
             sendOTP: jest.fn(),
+            verifyOTP: jest.fn(),
             loginWithGoogle: jest.fn(),
             logout: jest.fn(),
             refreshAccessToken: jest.fn(),

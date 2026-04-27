@@ -31,6 +31,11 @@ describe('mapAuthError', () => {
         expect(mapAuthError(new Error('Invalid email format'))).toMatch(/invalid/i);
     });
 
+    it('maps invalid OTP token', () => {
+        expect(mapAuthError(new Error('Token has invalid syntax'))).toMatch(/didn't match/i);
+        expect(mapAuthError(new Error('Invalid token'))).toMatch(/didn't match/i);
+    });
+
     it('falls back to generic message on null or undefined', () => {
         expect(mapAuthError(null)).toMatch(/something went wrong/i);
         expect(mapAuthError(undefined)).toMatch(/something went wrong/i);
