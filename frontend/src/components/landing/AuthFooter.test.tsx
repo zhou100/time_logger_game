@@ -128,17 +128,17 @@ describe('AuthFooter — save_clicked analytics', () => {
         expect(calls[0][1]).toEqual({ method: 'google' });
     });
 
-    it('fires `save_clicked` with method=magic_link on magic-link form submit', async () => {
+    it('fires `save_clicked` with method=email_code on email form submit', async () => {
         mockSupabaseSignInWithOtp.mockResolvedValue({ data: {}, error: null });
         renderFooter();
-        fireEvent.click(screen.getByRole('button', { name: /get a magic link/i }));
+        fireEvent.click(screen.getByRole('button', { name: /sign in with email/i }));
         const input = screen.getByPlaceholderText(/you@example.com/i);
         fireEvent.change(input, { target: { value: 'a@b.co' } });
         await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /send magic link/i }));
+            fireEvent.click(screen.getByRole('button', { name: /email me a code/i }));
         });
         const calls = eventsFired('save_clicked');
         expect(calls.length).toBe(1);
-        expect(calls[0][1]).toEqual({ method: 'magic_link' });
+        expect(calls[0][1]).toEqual({ method: 'email_code' });
     });
 });

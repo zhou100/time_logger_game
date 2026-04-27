@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
     Alert,
     Box,
@@ -19,9 +19,11 @@ import { capture as captureEvent } from '../../services/analytics';
 /**
  * Auth footer for the interaction-first landing.
  *
- * Both Google OAuth and magic-link redirect to `/welcome?state=<claim_token>`
- * so item 5's /welcome page can call `/v1/entries/claim-demo-session` with
- * the HMAC token.
+ * Email path uses 6-10 digit OTP code entry (not magic link) to avoid the iOS
+ * Safari cross-app handoff bug. After verifyOtp succeeds, we navigate to
+ * /welcome?state=<claim_token> so the /welcome page can call
+ * /v1/entries/claim-demo-session with the HMAC token. Google OAuth still uses
+ * emailRedirectTo to thread the same claim_token through OAuth state.
  *
  * Why we don't reuse `GoogleSignInButton` here:
  *   - That component calls `AuthContext.loginWithGoogle()`, which uses a fixed
@@ -34,6 +36,8 @@ import { capture as captureEvent } from '../../services/analytics';
  * Sticky on mobile via the `sticky` prop; safe-area-inset padding keeps clear
  * of the iOS home-indicator.
  */
+const CODE_MIN_LENGTH = 6;
+const CODE_MAX_LENGTH = 10;
 
 interface Props {
     /** Sticky bottom strip (mobile-friendly) when true. */
@@ -62,13 +66,16 @@ const GoogleG: React.FC = () => (
 );
 
 const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
+    const navigate = useNavigate();
     const [oauthLoading, setOauthLoading] = useState(false);
     const [oauthError, setOAuthError] = useState<string | null>(null);
-    const [magicLinkOpen, setMagicLinkOpen] = useState(false);
+    const [emailFormOpen, setEmailFormOpen] = useState(false);
     const [email, setEmail] = useState('');
-    const [magicSending, setMagicSending] = useState(false);
-    const [magicSent, setMagicSent] = useState(false);
-    const [magicError, setMagicError] = useState<string | null>(null);
+    const [emailSending, setEmailSending] = useState(false);
+    const [codeSent, setCodeSent] = useState(false);
+    const [code, setCode] = useState('');
+    const [verifying, setVerifying] = useState(false);
+    const [emailError, setEmailError] = useState<string | null>(null);
 
     const buildRedirectTo = () => {
         // REACT_APP_WELCOME_HANDOFF_ENABLED gates whether OAuth/magic-link
@@ -108,37 +115,62 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
         }
     };
 
-    const handleMagicLink = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSendCode = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         // Same convention as Google: emit on submit, before any network call,
         // so empty-email validation failures still register intent.
-        captureEvent('save_clicked', { method: 'magic_link' });
-        setMagicError(null);
+        captureEvent('save_clicked', { method: 'email_code' });
+        setEmailError(null);
         const trimmed = email.trim();
         if (!trimmed) {
-            setMagicError('Enter an email address.');
+            setEmailError('Enter an email address.');
             return;
         }
         const sb = getSupabase();
         if (!sb) {
-            setMagicError('Auth service is not available.');
+            setEmailError('Auth service is not available.');
             return;
         }
-        setMagicSending(true);
+        setEmailSending(true);
         try {
             const { error } = await sb.auth.signInWithOtp({
                 email: trimmed,
-                options: {
-                    shouldCreateUser: true,
-                    emailRedirectTo: buildRedirectTo(),
-                },
+                options: { shouldCreateUser: true },
             });
             if (error) throw error;
-            setMagicSent(true);
+            setCodeSent(true);
         } catch (err) {
-            setMagicError(mapAuthError(err as Error));
+            setEmailError(mapAuthError(err as Error));
         } finally {
-            setMagicSending(false);
+            setEmailSending(false);
+        }
+    };
+
+    const handleVerifyCode = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setEmailError(null);
+        if (code.length < CODE_MIN_LENGTH) return;
+        const sb = getSupabase();
+        if (!sb) {
+            setEmailError('Auth service is not available.');
+            return;
+        }
+        setVerifying(true);
+        try {
+            const { error } = await sb.auth.verifyOtp({
+                email: email.trim(),
+                token: code,
+                type: 'email',
+            });
+            if (error) throw error;
+            // Session is created in-place. Hand off to /welcome with the
+            // claim_token so the demo session gets attached to this user.
+            navigate(buildRedirectTo().replace(window.location.origin, ''), { replace: true });
+        } catch (err) {
+            Logger.warn('verifyOtp failed', err);
+            setEmailError(mapAuthError(err as Error));
+        } finally {
+            setVerifying(false);
         }
     };
 
@@ -220,7 +252,7 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                     {oauthLoading ? 'Signing in…' : 'Sign in with Google'}
                 </Button>
 
-                {!magicLinkOpen ? (
+                {!emailFormOpen ? (
                     <Typography
                         variant="body2"
                         sx={{ mt: 1.5, textAlign: 'center', color: palette.textMuted }}
@@ -229,7 +261,7 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                         <Link
                             component="button"
                             type="button"
-                            onClick={() => setMagicLinkOpen(true)}
+                            onClick={() => setEmailFormOpen(true)}
                             sx={{
                                 color: palette.accent,
                                 fontWeight: 500,
@@ -237,13 +269,13 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                                 '&:hover': { textDecoration: 'underline' },
                             }}
                         >
-                            get a magic link
+                            sign in with email
                         </Link>
                     </Typography>
                 ) : (
                     <Box
                         component="form"
-                        onSubmit={handleMagicLink}
+                        onSubmit={codeSent ? handleVerifyCode : handleSendCode}
                         sx={{
                             mt: 1.5,
                             display: 'flex',
@@ -251,15 +283,7 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                             gap: 1,
                         }}
                     >
-                        {magicSent ? (
-                            <Typography
-                                variant="body2"
-                                sx={{ color: palette.textPrimary, textAlign: 'center' }}
-                            >
-                                Check your inbox — we sent a sign-in link to{' '}
-                                <strong>{email}</strong>.
-                            </Typography>
-                        ) : (
+                        {!codeSent ? (
                             <>
                                 <TextField
                                     type="email"
@@ -269,26 +293,64 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
                                     size="small"
                                     fullWidth
                                     autoFocus
-                                    inputProps={{ 'aria-label': 'Email for magic link' }}
+                                    inputProps={{
+                                        'aria-label': 'Email for sign-in code',
+                                        autoComplete: 'email',
+                                    }}
                                 />
-                                {magicError && (
-                                    <Typography
-                                        variant="caption"
-                                        sx={{ color: palette.error }}
-                                    >
-                                        {magicError}
+                                {emailError && (
+                                    <Typography variant="caption" sx={{ color: palette.error }}>
+                                        {emailError}
                                     </Typography>
                                 )}
                                 <Button
                                     type="submit"
                                     variant="outlined"
                                     color="primary"
-                                    disabled={magicSending}
-                                    startIcon={
-                                        magicSending ? <CircularProgress size={14} /> : null
-                                    }
+                                    disabled={emailSending}
+                                    startIcon={emailSending ? <CircularProgress size={14} /> : null}
                                 >
-                                    {magicSending ? 'Sending…' : 'Send magic link'}
+                                    {emailSending ? 'Sending…' : 'Email me a code'}
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Typography
+                                    variant="body2"
+                                    sx={{ color: palette.textPrimary, textAlign: 'center' }}
+                                >
+                                    We sent a sign-in code to <strong>{email}</strong>.
+                                </Typography>
+                                <TextField
+                                    placeholder="Enter code"
+                                    value={code}
+                                    onChange={(e) =>
+                                        setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_MAX_LENGTH))
+                                    }
+                                    size="small"
+                                    fullWidth
+                                    autoFocus
+                                    inputProps={{
+                                        inputMode: 'numeric',
+                                        pattern: '[0-9]*',
+                                        autoComplete: 'one-time-code',
+                                        maxLength: CODE_MAX_LENGTH,
+                                        'aria-label': 'Sign-in code',
+                                    }}
+                                />
+                                {emailError && (
+                                    <Typography variant="caption" sx={{ color: palette.error }}>
+                                        {emailError}
+                                    </Typography>
+                                )}
+                                <Button
+                                    type="submit"
+                                    variant="outlined"
+                                    color="primary"
+                                    disabled={verifying || code.length < CODE_MIN_LENGTH}
+                                    startIcon={verifying ? <CircularProgress size={14} /> : null}
+                                >
+                                    {verifying ? 'Verifying…' : 'Verify'}
                                 </Button>
                             </>
                         )}
