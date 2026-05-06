@@ -120,10 +120,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_API_URL: "http://localhost:${BACKEND_PORT:-10000}"
-        REACT_APP_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
-        REACT_APP_SUPABASE_URL: "${SUPABASE_URL:-}"
-        REACT_APP_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+        VITE_API_URL: "http://localhost:${BACKEND_PORT:-10000}"
+        VITE_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+        VITE_SUPABASE_URL: "${SUPABASE_URL:-}"
+        VITE_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     volumes:
@@ -131,9 +131,9 @@ services:
       - /app/node_modules
     environment:
       NODE_ENV: development
-      REACT_APP_API_URL: "http://localhost:${BACKEND_PORT:-10000}"
-      REACT_APP_SUPABASE_URL: "${SUPABASE_URL:-}"
-      REACT_APP_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+      VITE_API_URL: "http://localhost:${BACKEND_PORT:-10000}"
+      VITE_SUPABASE_URL: "${SUPABASE_URL:-}"
+      VITE_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
       PORT: "3000"
     depends_on:
       backend:

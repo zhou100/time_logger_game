@@ -22,7 +22,7 @@ import Logger from '../../utils/logger';
  *   - We stash that in sessionStorage and call `onPermit(permit_token)`.
  *   - On verify failure, the widget re-challenges inline.
  *
- * Site key: `process.env.REACT_APP_TURNSTILE_SITE_KEY`. If missing in dev,
+ * Site key: `import.meta.env.VITE_TURNSTILE_SITE_KEY`. If missing in dev,
  * we surface a soft warning rather than rendering nothing — easier to debug.
  */
 
@@ -94,7 +94,7 @@ const TurnstileWidget: React.FC<Props> = ({ onPermit, onError }) => {
     const [verifying, setVerifying] = useState(false);
     const [verifyError, setVerifyError] = useState<string | null>(null);
 
-    const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY || '';
+    const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
     useEffect(() => {
         let cancelled = false;

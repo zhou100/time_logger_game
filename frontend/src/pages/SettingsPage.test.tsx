@@ -1,10 +1,11 @@
+import type { Mock } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SettingsPage from './SettingsPage';
 import { preferencesApi, PreferencesValidationError } from '../services/api';
 
-jest.mock('../services/api', () => {
+vi.mock('../services/api', () => {
   class FakePreferencesValidationError extends Error {
     constructor(fields: any, message?: string) {
       super(message || 'Validation error');
@@ -14,8 +15,8 @@ jest.mock('../services/api', () => {
   }
   return {
     preferencesApi: {
-      get: jest.fn(),
-      patch: jest.fn(),
+      get: vi.fn(),
+      patch: vi.fn(),
     },
     PreferencesValidationError: FakePreferencesValidationError,
   };
@@ -38,14 +39,14 @@ function renderPage() {
 
 describe('SettingsPage', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    (preferencesApi.get as jest.Mock).mockResolvedValue(defaultPrefs);
+    vi.resetAllMocks();
+    (preferencesApi.get as Mock).mockResolvedValue(defaultPrefs);
   });
 
   // ── Loading & error states ───────────────────────────────────────────────
   it('shows a loading indicator while fetching preferences', async () => {
     let resolveGet!: (v: typeof defaultPrefs) => void;
-    (preferencesApi.get as jest.Mock).mockImplementation(
+    (preferencesApi.get as Mock).mockImplementation(
       () => new Promise<typeof defaultPrefs>((r) => { resolveGet = r; })
     );
     renderPage();
@@ -57,13 +58,13 @@ describe('SettingsPage', () => {
   });
 
   it('renders an error with a Retry button when load fails, and refetches on click', async () => {
-    (preferencesApi.get as jest.Mock).mockRejectedValueOnce(new Error('Network down'));
+    (preferencesApi.get as Mock).mockRejectedValueOnce(new Error('Network down'));
     renderPage();
 
     expect(await screen.findByText('Network down')).toBeInTheDocument();
     const retry = screen.getByRole('button', { name: /retry/i });
 
-    (preferencesApi.get as jest.Mock).mockResolvedValueOnce(defaultPrefs);
+    (preferencesApi.get as Mock).mockResolvedValueOnce(defaultPrefs);
     fireEvent.click(retry);
 
     expect(await screen.findByText(/how your weekly review sounds/i)).toBeInTheDocument();
@@ -123,7 +124,7 @@ describe('SettingsPage', () => {
 
   it('caps the avoid-topics list at MAX_TOPICS (10)', async () => {
     const tenTopics = Array.from({ length: 10 }, (_, i) => `topic-${i + 1}`);
-    (preferencesApi.get as jest.Mock).mockResolvedValueOnce({
+    (preferencesApi.get as Mock).mockResolvedValueOnce({
       ...defaultPrefs,
       avoid_topics: tenTopics,
     });
@@ -141,7 +142,7 @@ describe('SettingsPage', () => {
   });
 
   it('removes a topic when the chip delete button is clicked', async () => {
-    (preferencesApi.get as jest.Mock).mockResolvedValueOnce({
+    (preferencesApi.get as Mock).mockResolvedValueOnce({
       ...defaultPrefs,
       avoid_topics: ['weight', 'sleep'],
     });
@@ -163,7 +164,7 @@ describe('SettingsPage', () => {
 
   // ── Save ─────────────────────────────────────────────────────────────────
   it('PATCHes preferences with current values and shows a success banner on save', async () => {
-    (preferencesApi.patch as jest.Mock).mockResolvedValue({
+    (preferencesApi.patch as Mock).mockResolvedValue({
       ...defaultPrefs,
       avoid_topics: ['weight'],
     });
@@ -185,7 +186,7 @@ describe('SettingsPage', () => {
   });
 
   it('renders per-field validation errors when the API throws PreferencesValidationError', async () => {
-    (preferencesApi.patch as jest.Mock).mockRejectedValue(
+    (preferencesApi.patch as Mock).mockRejectedValue(
       new PreferencesValidationError(
         {
           tone: 'Tone is required',
@@ -209,7 +210,7 @@ describe('SettingsPage', () => {
   });
 
   it('shows a general error alert when the save fails for a non-422 reason', async () => {
-    (preferencesApi.patch as jest.Mock).mockRejectedValue(new Error('Server error. Try again later.'));
+    (preferencesApi.patch as Mock).mockRejectedValue(new Error('Server error. Try again later.'));
     renderPage();
     await screen.findByText(/how your weekly review sounds/i);
 
@@ -221,11 +222,11 @@ describe('SettingsPage', () => {
 
   // ── Reset ────────────────────────────────────────────────────────────────
   it('PATCHes all-null on Reset and re-applies the returned defaults', async () => {
-    (preferencesApi.get as jest.Mock).mockResolvedValueOnce({
+    (preferencesApi.get as Mock).mockResolvedValueOnce({
       ...defaultPrefs,
       avoid_topics: ['weight', 'sleep'],
     });
-    (preferencesApi.patch as jest.Mock).mockResolvedValue(defaultPrefs);
+    (preferencesApi.patch as Mock).mockResolvedValue(defaultPrefs);
 
     renderPage();
     expect(await screen.findByText('weight')).toBeInTheDocument();

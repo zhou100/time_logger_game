@@ -10,9 +10,9 @@ import { MemoryRouter } from 'react-router-dom';
 import AuthFooter from './AuthFooter';
 import { CLAIM_STORAGE_KEY } from '../../services/demoApi';
 
-const mockSignInWithOAuth = jest.fn();
-const mockSupabaseSignInWithOtp = jest.fn();
-jest.mock('../../services/supabase', () => ({
+const mockSignInWithOAuth = vi.fn();
+const mockSupabaseSignInWithOtp = vi.fn();
+vi.mock('../../services/supabase', () => ({
     __esModule: true,
     getSupabase: () => ({
         auth: {
@@ -23,33 +23,30 @@ jest.mock('../../services/supabase', () => ({
     isSupabaseConfigured: true,
 }));
 
-jest.mock('../../contexts/AuthContext', () => ({
+vi.mock('../../contexts/AuthContext', () => ({
     __esModule: true,
     useAuth: () => ({
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        sendOTP: jest.fn(),
-        verifyOTP: jest.fn(),
-        loginWithGoogle: jest.fn(),
-        logout: jest.fn(),
-        refreshAccessToken: jest.fn(),
+        sendOTP: vi.fn(),
+        verifyOTP: vi.fn(),
+        loginWithGoogle: vi.fn(),
+        logout: vi.fn(),
+        refreshAccessToken: vi.fn(),
     }),
     mapAuthError: (e: { message?: string }) => e?.message ?? 'err',
 }));
 
-const mockAnalyticsCapture = jest.fn();
-jest.mock('../../services/analytics', () => ({
+const mockAnalyticsCapture = vi.fn();
+vi.mock('../../services/analytics', () => ({
     __esModule: true,
     capture: (...args: unknown[]) => mockAnalyticsCapture(...args),
-    init: jest.fn(),
+    init: vi.fn(),
 }));
 
-const ORIGINAL_ENV = process.env;
-
 beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
-    delete process.env.REACT_APP_WELCOME_HANDOFF_ENABLED;
+    vi.unstubAllEnvs();
     mockSignInWithOAuth.mockReset();
     mockSupabaseSignInWithOtp.mockReset();
     mockAnalyticsCapture.mockReset();
@@ -57,7 +54,7 @@ beforeEach(() => {
 });
 
 afterAll(() => {
-    process.env = ORIGINAL_ENV;
+    vi.unstubAllEnvs();
 });
 
 function renderFooter() {
@@ -68,9 +65,9 @@ function renderFooter() {
     );
 }
 
-describe('AuthFooter — REACT_APP_WELCOME_HANDOFF_ENABLED', () => {
+describe('AuthFooter — VITE_WELCOME_HANDOFF_ENABLED', () => {
     it("when 'false', Google OAuth redirectTo points at /recording with no state param", async () => {
-        process.env.REACT_APP_WELCOME_HANDOFF_ENABLED = 'false';
+        vi.stubEnv('VITE_WELCOME_HANDOFF_ENABLED', 'false');
         // Even if a claim_token is in sessionStorage, the flag wins.
         sessionStorage.setItem(CLAIM_STORAGE_KEY, 'should-be-ignored');
         mockSignInWithOAuth.mockResolvedValue({ data: {}, error: null });
@@ -98,7 +95,7 @@ describe('AuthFooter — REACT_APP_WELCOME_HANDOFF_ENABLED', () => {
     });
 
     it("when 'true', redirectTo lands on /welcome and threads claim_token state", async () => {
-        process.env.REACT_APP_WELCOME_HANDOFF_ENABLED = 'true';
+        vi.stubEnv('VITE_WELCOME_HANDOFF_ENABLED', 'true');
         sessionStorage.setItem(CLAIM_STORAGE_KEY, 'abc123.signature');
         mockSignInWithOAuth.mockResolvedValue({ data: {}, error: null });
 

@@ -28,20 +28,20 @@ import { CLAIM_STORAGE_KEY, PERMIT_STORAGE_KEY } from '../services/demoApi';
 // attached by the interceptor) and `entriesApi.list(...)` to materialize the
 // just-claimed entry.
 
-const mockApiPost = jest.fn();
-const mockListEntries = jest.fn();
+const mockApiPost = vi.fn();
+const mockListEntries = vi.fn();
 
-jest.mock('../services/api', () => ({
+vi.mock('../services/api', () => ({
     __esModule: true,
     default: { post: (...args: unknown[]) => mockApiPost(...args) },
     entriesApi: {
         list: (...args: unknown[]) => mockListEntries(...args),
         // Also stub other entriesApi methods that EntryCard touches via
         // tanstack-query (it calls getActiveDates inside a useQuery).
-        getActiveDates: jest.fn().mockResolvedValue([]),
-        deleteEntry: jest.fn(),
-        updateEntry: jest.fn(),
-        reclassifyEntry: jest.fn(),
+        getActiveDates: vi.fn().mockResolvedValue([]),
+        deleteEntry: vi.fn(),
+        updateEntry: vi.fn(),
+        reclassifyEntry: vi.fn(),
     },
     API_BASE_URL: 'http://localhost:10000',
 }));
@@ -50,28 +50,28 @@ jest.mock('../services/api', () => ({
 
 let mockUser: { id: number; email: string } | null = { id: 1, email: 'u@example.com' };
 let mockAuthLoading = false;
-jest.mock('../contexts/AuthContext', () => ({
+vi.mock('../contexts/AuthContext', () => ({
     __esModule: true,
     useAuth: () => ({
         user: mockUser,
         isAuthenticated: !!mockUser,
         isLoading: mockAuthLoading,
-        sendOTP: jest.fn(),
-        verifyOTP: jest.fn(),
-        loginWithGoogle: jest.fn(),
-        logout: jest.fn(),
-        refreshAccessToken: jest.fn(),
+        sendOTP: vi.fn(),
+        verifyOTP: vi.fn(),
+        loginWithGoogle: vi.fn(),
+        logout: vi.fn(),
+        refreshAccessToken: vi.fn(),
     }),
     mapAuthError: (e: { message?: string }) => e?.message ?? 'err',
     AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 // Analytics seam — assert event names without touching real posthog-js.
-const mockAnalyticsCapture = jest.fn();
-jest.mock('../services/analytics', () => ({
+const mockAnalyticsCapture = vi.fn();
+vi.mock('../services/analytics', () => ({
     __esModule: true,
     capture: (...args: unknown[]) => mockAnalyticsCapture(...args),
-    init: jest.fn(),
+    init: vi.fn(),
 }));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -101,7 +101,8 @@ const claimedEntry = {
     ],
 };
 
-let replaceStateSpy: jest.SpyInstance;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let replaceStateSpy: any;
 
 beforeEach(() => {
     mockUser = { id: 1, email: 'u@example.com' };
@@ -112,7 +113,7 @@ beforeEach(() => {
     sessionStorage.clear();
     sessionStorage.setItem(CLAIM_STORAGE_KEY, 'leftover-claim');
     sessionStorage.setItem(PERMIT_STORAGE_KEY, 'leftover-permit');
-    replaceStateSpy = jest.spyOn(window.history, 'replaceState');
+    replaceStateSpy = vi.spyOn(window.history, 'replaceState');
 });
 
 afterEach(() => {
@@ -238,14 +239,14 @@ describe('WelcomePage — spinner cap', () => {
     it('falls through to error fallback when user never materializes within 500ms', async () => {
         mockUser = null;
         mockAuthLoading = true;
-        jest.useFakeTimers();
+        vi.useFakeTimers();
         try {
             renderWelcome();
             // Spinner state initially.
             expect(screen.getByLabelText(/loading/i)).toBeInTheDocument();
 
             await act(async () => {
-                jest.advanceTimersByTime(600);
+                vi.advanceTimersByTime(600);
             });
 
             await waitFor(() =>
@@ -256,7 +257,7 @@ describe('WelcomePage — spinner cap', () => {
             // Claim never fired because no user was available.
             expect(mockApiPost).not.toHaveBeenCalled();
         } finally {
-            jest.useRealTimers();
+            vi.useRealTimers();
         }
     });
 });

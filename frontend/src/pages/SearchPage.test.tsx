@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -6,10 +7,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import SearchPage from './SearchPage';
 import { entriesApi } from '../services/api';
 
-jest.mock('../services/api', () => ({
+vi.mock('../services/api', () => ({
   entriesApi: {
-    search: jest.fn(),
-    getActiveDates: jest.fn(),
+    search: vi.fn(),
+    getActiveDates: vi.fn(),
   },
 }));
 
@@ -33,8 +34,8 @@ function renderSearchPage(initialEntry: string) {
 
 describe('SearchPage', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    (entriesApi.getActiveDates as jest.Mock).mockResolvedValue([]);
+    vi.resetAllMocks();
+    (entriesApi.getActiveDates as Mock).mockResolvedValue([]);
   });
 
   it('requires at least two characters before searching', () => {
@@ -45,7 +46,7 @@ describe('SearchPage', () => {
   });
 
   it('submits filters to the backend and renders highlighted results', async () => {
-    (entriesApi.search as jest.Mock).mockResolvedValue({
+    (entriesApi.search as Mock).mockResolvedValue({
       items: [
         {
           id: 'entry-1',
@@ -84,7 +85,7 @@ describe('SearchPage', () => {
   });
 
   it('loads more results when requested', async () => {
-    (entriesApi.search as jest.Mock)
+    (entriesApi.search as Mock)
       .mockResolvedValueOnce({
         items: Array.from({ length: 20 }, (_, index) => ({
           id: `entry-${index}`,
@@ -137,7 +138,7 @@ describe('SearchPage', () => {
   });
 
   it('uses local_date for the open day link when present', async () => {
-    (entriesApi.search as jest.Mock).mockResolvedValue({
+    (entriesApi.search as Mock).mockResolvedValue({
       items: [
         {
           id: 'entry-1',
@@ -161,7 +162,7 @@ describe('SearchPage', () => {
   });
 
   it('shows a clipped transcript snippet around the match', async () => {
-    (entriesApi.search as jest.Mock).mockResolvedValue({
+    (entriesApi.search as Mock).mockResolvedValue({
       items: [
         {
           id: 'entry-1',
@@ -195,7 +196,7 @@ describe('SearchPage', () => {
   });
 
   it('shows an empty state when nothing matches', async () => {
-    (entriesApi.search as jest.Mock).mockResolvedValue({
+    (entriesApi.search as Mock).mockResolvedValue({
       items: [],
       total: 0,
       skip: 0,
@@ -208,7 +209,7 @@ describe('SearchPage', () => {
   });
 
   it('shows category metadata provenance when the category matched', async () => {
-    (entriesApi.search as jest.Mock).mockResolvedValue({
+    (entriesApi.search as Mock).mockResolvedValue({
       items: [
         {
           id: 'entry-1',
@@ -232,7 +233,7 @@ describe('SearchPage', () => {
   });
 
   it('shows an API error state', async () => {
-    (entriesApi.search as jest.Mock).mockRejectedValue(new Error('Backend exploded'));
+    (entriesApi.search as Mock).mockRejectedValue(new Error('Backend exploded'));
 
     renderSearchPage('/search?q=milk');
 

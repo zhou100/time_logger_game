@@ -5,20 +5,20 @@
  * shapes (200, 422 with FastAPI's `loc/msg` array, 500).
  */
 
-jest.mock('axios', () => {
+vi.mock('axios', () => {
   const instance = {
-    get: jest.fn(),
-    patch: jest.fn(),
-    post: jest.fn(),
-    delete: jest.fn(),
-    put: jest.fn(),
+    get: vi.fn(),
+    patch: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+    put: vi.fn(),
     interceptors: {
-      request: { use: jest.fn() },
-      response: { use: jest.fn() },
+      request: { use: vi.fn() },
+      response: { use: vi.fn() },
     },
   };
   const isAxiosError = (e: any) => Boolean(e && e.isAxiosError);
-  const create = jest.fn(() => instance);
+  const create = vi.fn(() => instance);
   return {
     __esModule: true,
     default: { create, isAxiosError },
@@ -29,23 +29,23 @@ jest.mock('axios', () => {
 
 // api.ts pulls in Supabase for the token attach + 401 refresh. Stub both the
 // synchronous session read and the supabase client's refreshSession.
-jest.mock('./supabase', () => ({
+vi.mock('./supabase', () => ({
   __esModule: true,
-  getSupabase: jest.fn(() => ({
+  getSupabase: vi.fn(() => ({
     auth: {
-      refreshSession: jest.fn().mockResolvedValue({
+      refreshSession: vi.fn().mockResolvedValue({
         data: { session: { access_token: 'new-token' } },
         error: null,
       }),
-      signOut: jest.fn().mockResolvedValue({ error: null }),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
     },
   })),
   isSupabaseConfigured: true,
 }));
 
-jest.mock('./supabaseStorage', () => ({
+vi.mock('./supabaseStorage', () => ({
   __esModule: true,
-  readSupabaseSession: jest.fn(() => ({
+  readSupabaseSession: vi.fn(() => ({
     access_token: 'test-token',
     // Far-future expiry so the hot path doesn't trigger a refresh.
     expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -69,7 +69,7 @@ function makeAxiosError(status: number, data: unknown) {
 
 describe('preferencesApi.get', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('returns the preferences body from /v1/users/me/preferences', async () => {
@@ -101,7 +101,7 @@ describe('preferencesApi.get', () => {
 
 describe('preferencesApi.patch', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('PATCHes the body and returns the updated preferences', async () => {

@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, Navigate, useLocation } from 'react-router-dom';
@@ -10,10 +11,10 @@ import ThoughtGardenPage from './ThoughtGardenPage';
 import { capturesApi } from '../services/api';
 import { Capture } from '../types/api';
 
-jest.mock('../services/api', () => ({
+vi.mock('../services/api', () => ({
   capturesApi: {
-    list: jest.fn(),
-    patch: jest.fn(),
+    list: vi.fn(),
+    patch: vi.fn(),
   },
 }));
 
@@ -78,12 +79,12 @@ function renderPage(initialEntry: string) {
 
 describe('ThoughtGardenPage', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    (capturesApi.list as jest.Mock).mockResolvedValue(mockReflections);
+    vi.resetAllMocks();
+    (capturesApi.list as Mock).mockResolvedValue(mockReflections);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ describe('ThoughtGardenPage', () => {
   });
 
   it('defaults to the current Monday when ?week_start is missing', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-04-15T12:00:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-04-15T12:00:00'));
     renderPage('/thoughts');
 
     // With system time on Wed 2026-04-15, current Monday is 2026-04-13 →
@@ -138,7 +139,7 @@ describe('ThoughtGardenPage', () => {
   });
 
   it('falls back to current Monday when ?week_start is malformed and strips the bad param', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-04-15T12:00:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-04-15T12:00:00'));
     renderPage('/thoughts?week_start=banana');
 
     expect(
@@ -162,7 +163,7 @@ describe('ThoughtGardenPage', () => {
       classified_at: '2026-04-13T09:00:00Z',
     resolved_at: null,
     };
-    (capturesApi.list as jest.Mock).mockResolvedValue([monday]);
+    (capturesApi.list as Mock).mockResolvedValue([monday]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     expect(await screen.findByText('monday reflection')).toBeInTheDocument();
@@ -180,7 +181,7 @@ describe('ThoughtGardenPage', () => {
       classified_at: '2026-04-19T09:00:00Z',
     resolved_at: null,
     };
-    (capturesApi.list as jest.Mock).mockResolvedValue([sunday]);
+    (capturesApi.list as Mock).mockResolvedValue([sunday]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     expect(await screen.findByText('sunday reflection')).toBeInTheDocument();
@@ -198,7 +199,7 @@ describe('ThoughtGardenPage', () => {
       classified_at: '2026-04-12T09:00:00Z',
     resolved_at: null,
     };
-    (capturesApi.list as jest.Mock).mockResolvedValue([priorSunday]);
+    (capturesApi.list as Mock).mockResolvedValue([priorSunday]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     // Gems section is empty (off-by-one: prior Sunday is NOT this week)
@@ -223,7 +224,7 @@ describe('ThoughtGardenPage', () => {
       classified_at: '2026-04-20T09:00:00Z',
     resolved_at: null,
     };
-    (capturesApi.list as jest.Mock).mockResolvedValue([nextMon]);
+    (capturesApi.list as Mock).mockResolvedValue([nextMon]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     await screen.findByText(/no reflections yet this week/i);
@@ -232,7 +233,7 @@ describe('ThoughtGardenPage', () => {
 
   // ── Empty states ───────────────────────────────────────────────────────────
   it('shows the Gems empty state when no REFLECTIONs fall in the selected week', async () => {
-    (capturesApi.list as jest.Mock).mockResolvedValue([]);
+    (capturesApi.list as Mock).mockResolvedValue([]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     expect(
@@ -242,7 +243,7 @@ describe('ThoughtGardenPage', () => {
 
   it('hides the Recent Reflections section when no REFLECTIONs exist in prior weeks', async () => {
     // Only current-week data; nothing in the prior 3 weeks.
-    (capturesApi.list as jest.Mock).mockResolvedValue([mockReflections[0]]);
+    (capturesApi.list as Mock).mockResolvedValue([mockReflections[0]]);
     renderPage('/thoughts?week_start=2026-04-13');
 
     await screen.findByText('deep-work mornings feel right');

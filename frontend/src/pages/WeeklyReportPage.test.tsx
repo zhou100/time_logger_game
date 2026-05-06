@@ -1,20 +1,21 @@
+import type { Mock } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import WeeklyReportPage from './WeeklyReportPage';
 import { capturesApi, entriesApi } from '../services/api';
 
-jest.mock('../services/api', () => ({
+vi.mock('../services/api', () => ({
   capturesApi: {
-    list: jest.fn(),
-    patch: jest.fn(),
+    list: vi.fn(),
+    patch: vi.fn(),
   },
   entriesApi: {
-    getAvailableWeeks: jest.fn(),
-    getWeeklyAudit: jest.fn(),
-    generateWeeklyAudit: jest.fn(),
-    listThemes: jest.fn(),
-    updateTheme: jest.fn(),
+    getAvailableWeeks: vi.fn(),
+    getWeeklyAudit: vi.fn(),
+    generateWeeklyAudit: vi.fn(),
+    listThemes: vi.fn(),
+    updateTheme: vi.fn(),
   },
 }));
 
@@ -28,10 +29,10 @@ function renderWeeklyReportPage() {
 
 describe('WeeklyReportPage', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    (capturesApi.list as jest.Mock).mockResolvedValue([]);
-    (entriesApi.listThemes as jest.Mock).mockResolvedValue([]);
-    (entriesApi.getAvailableWeeks as jest.Mock).mockResolvedValue([
+    vi.resetAllMocks();
+    (capturesApi.list as Mock).mockResolvedValue([]);
+    (entriesApi.listThemes as Mock).mockResolvedValue([]);
+    (entriesApi.getAvailableWeeks as Mock).mockResolvedValue([
       {
         week_start: '2026-04-06',
         week_end: '2026-04-12',
@@ -42,7 +43,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('renders the full coach letter before the short draft status update', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -85,7 +86,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('renders a Thought Gems card linking to /thoughts for the selected week', async () => {
-    (entriesApi.getAvailableWeeks as jest.Mock).mockResolvedValue([
+    (entriesApi.getAvailableWeeks as Mock).mockResolvedValue([
       {
         week_start: '2026-04-13',
         week_end: '2026-04-19',
@@ -99,7 +100,7 @@ describe('WeeklyReportPage', () => {
         has_report: true,
       },
     ]);
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 22,
       breakdown: {},
       approximate: false,
@@ -119,7 +120,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('keeps themes, open loops, and coach letter visible alongside the Thought Gems card', async () => {
-    (capturesApi.list as jest.Mock).mockImplementation((opts?: { category?: string; status?: string }) => {
+    (capturesApi.list as Mock).mockImplementation((opts?: { category?: string; status?: string }) => {
       if (opts?.category === 'TODO' && opts?.status === 'open') {
         return Promise.resolve([
           {
@@ -137,7 +138,7 @@ describe('WeeklyReportPage', () => {
       }
       return Promise.resolve([]);
     });
-    (entriesApi.listThemes as jest.Mock).mockResolvedValue([
+    (entriesApi.listThemes as Mock).mockResolvedValue([
       {
         id: 'theme-1',
         title: 'deep-work mornings',
@@ -152,7 +153,7 @@ describe('WeeklyReportPage', () => {
         evidence: [],
       },
     ]);
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -191,7 +192,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('renders the stale-prefs banner with a Regenerate button when prefs_stale=true', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -204,7 +205,7 @@ describe('WeeklyReportPage', () => {
       days_covered: 7,
       prefs_stale: true,
     });
-    (entriesApi.generateWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.generateWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -247,7 +248,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('does not render the stale-prefs banner when prefs_stale is false or absent', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -270,7 +271,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('renders the coach letter as a bulleted list when audit_text is in bullet format', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -302,7 +303,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('keeps paragraph rendering (back-compat) when audit_text has no bullet markers', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -329,7 +330,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('renders the Recurring Themes teaser with DM Sans italic, not DM Serif Display', async () => {
-    (entriesApi.listThemes as jest.Mock).mockResolvedValue([
+    (entriesApi.listThemes as Mock).mockResolvedValue([
       {
         id: 'theme-1',
         title: 'deep-work mornings',
@@ -344,7 +345,7 @@ describe('WeeklyReportPage', () => {
         evidence: [],
       },
     ]);
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,
@@ -370,7 +371,7 @@ describe('WeeklyReportPage', () => {
   });
 
   it('falls back to the draft status update when no coach letter exists', async () => {
-    (entriesApi.getWeeklyAudit as jest.Mock).mockResolvedValue({
+    (entriesApi.getWeeklyAudit as Mock).mockResolvedValue({
       entries: 41,
       breakdown: {},
       approximate: false,

@@ -1,19 +1,16 @@
 /**
  * Tests for the PostHog client wrapper. Three modes mirror the backend
  * wrapper:
- *   - empty REACT_APP_POSTHOG_KEY → no-op
+ *   - empty VITE_POSTHOG_KEY → no-op
  *   - NODE_ENV=test → no-op even when key is set
  *   - key set + NODE_ENV != test → real client init + capture passthrough
  */
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { capture, init, _resetForTests } from './analytics';
 
-// Mock the posthog-js dynamic import. Jest hoists `jest.mock(...)` to the
-// top of the file, before any top-level statements run — so the factory
-// can only reference variables whose names start with `mock` (Jest's
-// convention for "this is safe to access lazily inside a hoisted mock").
-const mockPostHogCapture = jest.fn();
-const mockPostHogInit = jest.fn();
-jest.mock('posthog-js', () => ({
+const mockPostHogCapture = vi.fn();
+const mockPostHogInit = vi.fn();
+vi.mock('posthog-js', () => ({
     __esModule: true,
     default: {
         init: (...args: unknown[]) => mockPostHogInit(...args),
@@ -21,23 +18,24 @@ jest.mock('posthog-js', () => ({
     },
 }));
 
-const ORIGINAL_ENV = process.env;
-
 beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
     mockPostHogCapture.mockReset();
     mockPostHogInit.mockReset();
     _resetForTests();
 });
 
+afterEach(() => {
+    vi.unstubAllEnvs();
+});
+
 afterAll(() => {
-    process.env = ORIGINAL_ENV;
+    vi.unstubAllEnvs();
 });
 
 describe('analytics — gating', () => {
-    it('with empty REACT_APP_POSTHOG_KEY: capture is a no-op (no init, no error)', () => {
-        process.env.REACT_APP_POSTHOG_KEY = '';
-        process.env.NODE_ENV = 'development';
+    it('with empty VITE_POSTHOG_KEY: capture is a no-op (no init, no error)', () => {
+        vi.stubEnv('VITE_POSTHOG_KEY', '');
+        vi.stubEnv('NODE_ENV', 'development');
         init();
         capture('landing_viewed');
         expect(mockPostHogInit).not.toHaveBeenCalled();
@@ -45,8 +43,8 @@ describe('analytics — gating', () => {
     });
 
     it("with NODE_ENV='test': capture is a no-op even when key is set", () => {
-        process.env.REACT_APP_POSTHOG_KEY = 'phc_real';
-        process.env.NODE_ENV = 'test';
+        vi.stubEnv('VITE_POSTHOG_KEY', 'phc_real');
+        vi.stubEnv('NODE_ENV', 'test');
         init();
         capture('landing_viewed');
         expect(mockPostHogInit).not.toHaveBeenCalled();
@@ -56,8 +54,8 @@ describe('analytics — gating', () => {
 
 describe('analytics — real init', () => {
     it('init() resolves the posthog-js dynamic import and calls capture', async () => {
-        process.env.REACT_APP_POSTHOG_KEY = 'phc_real';
-        process.env.NODE_ENV = 'development';
+        vi.stubEnv('VITE_POSTHOG_KEY', 'phc_real');
+        vi.stubEnv('NODE_ENV', 'development');
 
         init();
         // Yield once to let the dynamic import promise resolve.
@@ -74,10 +72,10 @@ describe('analytics — real init', () => {
         expect(props).toEqual({ surface: 'landing' });
     });
 
-    it('honors REACT_APP_POSTHOG_HOST when set', async () => {
-        process.env.REACT_APP_POSTHOG_KEY = 'phc_real';
-        process.env.REACT_APP_POSTHOG_HOST = 'https://eu.i.posthog.com';
-        process.env.NODE_ENV = 'development';
+    it('honors VITE_POSTHOG_HOST when set', async () => {
+        vi.stubEnv('VITE_POSTHOG_KEY', 'phc_real');
+        vi.stubEnv('VITE_POSTHOG_HOST', 'https://eu.i.posthog.com');
+        vi.stubEnv('NODE_ENV', 'development');
 
         init();
         await new Promise((r) => setTimeout(r, 0));
