@@ -1,453 +1,189 @@
-# Time Logger Game
+# Brief
 
-A FastAPI and React-based voice-enabled time tracking and content organization system. Upload audio notes and let the system automatically categorize and organize your content while tracking your time.
+**Speak your day. Get a clear summary, key points, and todos.**
 
-## Features
+[**Try it → time.yujun.net**](https://time.yujun.net)
 
-- Voice-based time tracking and note-taking
-- Automatic content categorization (TODOs, Ideas, Thoughts, Time Records)
-- Past record search with filters and deep-linkable day view (v0.3.0.0)
-- Passwordless sign-in: email one-time code or Google OAuth — no password to remember (v0.4.0.0)
-- Interaction-first landing: tap mic → speak → see your debrief, no sign-in required. Save with Google when ready and your anonymous recording is claimed under your account (v0.5.0.0)
-- RESTful API with OpenAPI documentation
-- Structured data storage with PostgreSQL
-- Modern, responsive React-based UI
-- Real-time audio recording and processing
-- Material-UI components for consistent design
-- Mobile-first approach for use on any device
+Brief is a voice-first debriefing app. Tap the mic, talk for as long as you want, and a few seconds later you have a transcript, a summary, extracted todos, and a category breakdown of where your time and attention went. No typing, no forms, no setup.
 
-## Product Vision
+Try it once without signing in. If you like what you get back, sign in with Google or an email code and the recording you just made is saved to your account.
 
-### Target Users
-- Students tracking study sessions and capturing lecture notes
-- Professionals managing work time and capturing meeting insights
-- Creative workers organizing ideas and tracking project time
-- Personal development enthusiasts monitoring growth activities
-- Anyone wanting an effortless way to track time and organize thoughts
+---
 
-### Key Benefits
-- Natural Interface: Voice-based input removes friction from time tracking and note-taking
-- AI-Powered Organization: Automatic categorization saves time and maintains structure
-- Comprehensive Tracking: Combine time data with contextual notes for better insights
-- Flexible Use: Works for both structured (time tracking) and unstructured (ideas, thoughts) content
-- Cross-Platform: Access your data from any device through the web interface
+## What it does
 
-## Core Technologies
+- **Voice in, structure out.** OpenAI Whisper transcribes; GPT-4o-mini extracts todos, ideas, reflections, and time records.
+- **Interaction-first landing.** Visitors record and see a real debrief on `/` before being asked to sign in. The save prompt only appears after value has been delivered.
+- **Daily and weekly AI coach audits.** Time-weighted category breakdowns surface patterns across recordings.
+- **Past record search.** Filters and a deep-linkable day view.
+- **Passwordless auth.** 6-digit email code or Google OAuth. No passwords, ever.
+- **PWA-installable.** Works on iOS Safari (`audio/mp4`) and Chrome/Firefox (`audio/webm`).
+- **Privacy-first anonymous demo.** 24-hour retention on anonymous recordings, hashed IPs, Cloudflare Turnstile bot protection, daily OpenAI spend cap.
 
-### Backend
-- FastAPI web framework for efficient API development
-- PostgreSQL database for reliable data storage
-- SQLAlchemy ORM with Alembic for database management and migrations
-- OpenAI APIs:
-  * Whisper API for accurate audio transcription
-  * GPT-4o-mini for advanced text processing and categorization
+## Status
 
-### Frontend
-- React for building interactive user interfaces
-- Material-UI for consistent, modern design components
-- React Router for client-side routing
-- Redux for state management
-- Web Audio API for voice recording
-- Responsive design for mobile and desktop use
+Live at [time.yujun.net](https://time.yujun.net). Current version: **v0.5.5.0** (2026-04-27). See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-## System Architecture
+The codebase is in active development. Recent focus: anonymous demo pipeline, save-on-signup handoff, and OTP-based email sign-in.
 
-```mermaid
-graph TD
-    %% Frontend Section
-    subgraph Frontend[Browser/Mobile Client]
-        UI[User Interface]
-        subgraph ReactComponents[React Components]
-            App[App Component]
-            Nav[Navigation]
-            Auth[Auth Provider]
-            
-            subgraph CoreFeatures[Core Features]
-                TR[Time Tracker]
-                AR[Audio Recorder]
-                CV[Content Viewer]
-                PF[Profile Manager]
-            end
-            
-            subgraph Analytics[Analytics & Insights]
-                TD[Time Dashboard]
-                VZ[Visualizations]
-                IG[Insight Generator]
-            end
-            
-            App --> Nav
-            App --> Auth
-            Auth --> CoreFeatures
-            Auth --> Analytics
-            Nav --> CoreFeatures
-        end
-        
-        subgraph StateManagement[State Management]
-            RS[(Redux Store)]
-            subgraph Slices
-                AS[Auth Slice]
-                TS[Timer Slice]
-                CS[Content Slice]
-                US[User Slice]
-                ES[Entry Slice]
-            end
-            RS --> Slices
-        end
-        
-        subgraph Services
-            APIS[API Service]
-            WA[Web Audio API]
-            ST[Storage Service]
-            SW[Service Worker]
-        end
-        
-        CoreFeatures --> RS
-        Analytics --> RS
-        RS --> CoreFeatures
-        AR --> WA
-        CoreFeatures --> APIS
-        CoreFeatures --> ST
-        SW -->|Offline Support| ST
-    end
+---
 
-    %% Backend Flow
-    subgraph Backend[Server]
-        B[FastAPI Web Server]
-        C{Authentication}
-        
-        subgraph Processing[Content Processing]
-            D[Audio Processing]
-            F[OpenAI Whisper API]
-            G[Transcribed Text]
-            H[GPT-4o-mini API]
-            
-            subgraph AIFeatures[AI Analysis]
-                I[Content Categorization]
-                SEN[Sentiment Analysis]
-                SUM[Summary Generation]
-                ACT[Action Items Extraction]
-                CAL[Calendar Suggestions]
-            end
-        end
-        
-        B -->|Authenticates| C
-        C -->|Success| Processing
-        C -->|Failure| E[Return Error]
-        D -->|Sends to| F
-        F -->|Returns| G
-        G -->|Processes with| H
-        H --> AIFeatures
-    end
+## Architecture
 
-    %% Database Section
-    subgraph Database
-        J[(PostgreSQL Database)]
-        
-        subgraph CoreTables[Core Tables]
-            L[Users]
-            M[ChatHistory]
-            N[CategorizedEntries]
-            O[Tasks]
-        end
-        
-        J -->|Contains| CoreTables
-    end
-
-    %% API Endpoints
-    subgraph APIEndpoints[API Endpoints]
-        subgraph CoreAPI[Core APIs]
-            P["/audio/process"]
-            Q["/categories/category"]
-            R["/tasks/action"]
-            S["/users"]
-        end
-        
-        subgraph AnalyticsAPI[Analytics APIs]
-            AA["/insights"]
-            AT["/trends"]
-            AS["/summaries"]
-        end
-    end
-
-    %% Cross-component Connections
-    APIS -->|Calls| B
-    AIFeatures -->|Stores in| J
-    J -->|Retrieves via| APIEndpoints
-    APIEndpoints -->|Serves| APIS
-    SW -->|Syncs when online| B
-
-    %% Styling
-    classDef frontendStyle fill:#e1f5fe,stroke:#333,stroke-width:2px
-    classDef backendStyle fill:#e8f5e9,stroke:#333,stroke-width:2px
-    classDef dbStyle fill:#fff3e0,stroke:#333,stroke-width:2px
-    classDef apiStyle fill:#f3e5f5,stroke:#333,stroke-width:2px
-    class Frontend frontendStyle
-    class Backend,Processing backendStyle
-    class Database,CoreTables dbStyle
-    class APIEndpoints,CoreAPI,AnalyticsAPI apiStyle
+```
+Browser → React (PWA, MUI, Redux Toolkit)
+            │
+            ▼
+        FastAPI (async, asyncpg, SQLAlchemy 2.0)
+            │
+            ├─► OpenAI Whisper (transcription)
+            ├─► OpenAI GPT-4o-mini (categorization + summary)
+            ├─► PostgreSQL 15 (entries, classifications, jobs, audits)
+            ├─► S3-compatible storage (audio blobs, 24h TTL for anonymous)
+            └─► Supabase Auth (passwordless)
 ```
 
-### Data Layer
+### Data model
 
-Database Schema:
-```sql
-Users:
-  - id (PK)
-  - email (unique)
-  - hashed_password (nullable)
-  - is_active
-  - auth_provider ("email" | "google" | "supabase")
-  - supabase_id (unique, nullable)
-
-Entries:
-  - id (UUID, PK)
-  - user_id (FK -> Users)
-  - audio_key (S3/R2 object key)
-  - transcript (text, nullable)
-  - duration_seconds (nullable)
-  - recorded_at (nullable)
-  - created_at
-
-EntryClassifications:
-  - id (PK)
-  - entry_id (FK -> Entries)
-  - text (extracted content)
-  - category (ENUM: TODO, EXPERIMENT, REFLECTION, TIME_RECORD)
-  - estimated_minutes (nullable)
-
-Jobs:
-  - id (UUID, PK)
-  - entry_id (FK -> Entries)
-  - status (ENUM: pending, processing, done, failed)
-  - step (current processing step)
-  - error (nullable)
-
-AuditResults:
-  - id (PK)
-  - user_id (FK -> Users)
-  - audit_date
-  - audit_type ("daily" | "weekly")
-  - entries_count
-  - breakdown_json
-  - audit_text
-  - generated_at
-
-Notifications:
-  - id (PK)
-  - user_id (FK -> Users)
-  - event_type
-  - payload_json
-  - created_at
+```
+users          ─┬─ entries ─┬─ entry_classifications
+                │           └─ jobs (async pipeline state)
+                ├─ audit_results (daily/weekly coach summaries)
+                └─ notifications
 ```
 
-## Installation (Local Development & Testing)
+See [CLAUDE.md](CLAUDE.md) for the full repository map and conventions.
 
-Follow these steps to set up both the FastAPI backend and the React frontend for local development and testing.
+---
 
-### 1. Clone the Repository
+## Local development
+
+### Prerequisites
+
+- Docker + Docker Compose (recommended), or
+- Python 3.10+, Node 18+, PostgreSQL 15
+- An OpenAI API key
+
+### Run with Docker
+
 ```bash
 git clone https://github.com/zhou100/time_logger_game.git
 cd time_logger_game
-```
-
-### 2. Backend Setup
-
-#### Create and Activate a Python Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-#### Install Backend Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-#### Set Up Environment Variables
-1. Create a new `.env` file in the project root:
-```bash
-cp .env.example .env
-```
-
-2. Edit `.env` with your configuration:
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-OPENAI_API_KEY=your_openai_api_key
-SECRET_KEY=your_secret_key
-```
-
-#### Initialize the Database
-```bash
-cd backend
-alembic upgrade head
-```
-
-### 3. Frontend Setup
-
-#### Install Frontend Dependencies
-```bash
-cd frontend
-npm install  # or yarn install
-```
-
-### 4. Running the Application
-
-#### Start the Backend Server
-From the project root directory:
-```bash
-cd backend
-uvicorn app.main:app --reload
-```
-The FastAPI server will be available at http://localhost:8000
-
-#### Start the Frontend Development Server
-In a new terminal, from the project root:
-```bash
-cd frontend
-npm start  # or yarn start
-```
-The React application will be available at http://localhost:3000
-
-### 5. Accessing the Application
-
-- Web Interface: http://localhost:3000
-- API Documentation: http://localhost:8000/docs
-- API Redoc: http://localhost:8000/redoc
-
-## Docker Setup for Local Development
-
-### Prerequisites
-- Docker
-- Docker Compose
-
-### Getting Started with Docker
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/time_logger_game.git
-cd time_logger_game
-```
-
-2. Start the development environment:
-```bash
+cp backend/.env.test backend/.env   # edit OPENAI_API_KEY, SECRET_KEY
 docker compose up --build
 ```
 
-This will:
-- Build and start the backend service on port 10000
-- Build and start the frontend service on port 3000
-- Set up hot-reloading for both services
-
-3. Access the application:
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:10000
-- API Documentation: http://localhost:10000/docs
+- Backend: http://localhost:10000
+- API docs: http://localhost:10000/docs
 
-### Development with Docker
-
-- The Docker setup includes volume mounts, so your code changes will automatically trigger rebuilds
-- Backend files are mounted at `/app` in the backend container
-- Frontend files are mounted at `/app` in the frontend container
-- Both services support hot-reloading for a smooth development experience
-
-### Useful Docker Commands
+### Run without Docker
 
 ```bash
-# Start services in detached mode
-docker compose up -d
+# Backend
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.test .env
+alembic upgrade head
+uvicorn app.main:app --reload --port 10000
 
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
-
-# Rebuild specific service
-docker compose build backend  # or frontend
-
-# Restart specific service
-docker compose restart backend  # or frontend
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm start
 ```
 
-### Troubleshooting
+### Required environment variables
 
-1. If the frontend can't connect to the backend:
-   - Ensure both services are running (`docker compose ps`)
-   - Check if the `REACT_APP_API_URL` environment variable is set correctly
-   - Verify network connectivity between containers
-
-2. For permission issues:
-   - Ensure the `temp` directory has correct permissions
-   - Run `docker compose down` and rebuild with `docker compose up --build`
-
-## Development
-
-### Running Tests
 ```bash
-pytest
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/time_logger_game
+SECRET_KEY=<your-secret-key>
+OPENAI_API_KEY=<your-openai-key>
+ACCESS_TOKEN_EXPIRE_MINUTES=240
+ALGORITHM=HS256
+ENVIRONMENT=development
 ```
 
-### Database Migrations
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "description"
+---
 
-# Apply migrations
+## Tests
+
+```bash
+# Backend
+cd backend && pytest
+
+# Frontend E2E (requires app running)
+cd frontend && npx cypress run
+```
+
+## Database migrations
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe change"
 alembic upgrade head
 ```
 
-## Best Practices
+---
 
-### Security
-- Store credentials in environment variables
-- Use proper authentication headers
-- Implement rate limiting
+## API surface
 
-### File Handling
-- Use temporary files for audio
-- Clean up in try/finally blocks
-- Validate file formats
+Authenticated endpoints use a Supabase JWT. Anonymous demo endpoints are gated on `PUBLIC_DEMO_ENABLED`.
 
-### Database
-- Use migrations for schema changes
-- Implement proper relationships
-- Handle enum types carefully
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/audio/upload` | Upload, transcribe, categorize |
+| `GET` | `/api/audio` | Paginated user entries |
+| `GET` | `/api/categories` | List standard + custom categories |
+| `POST` | `/api/categories/custom` | Create custom category |
+| `POST` | `/v1/public/demo/verify-turnstile` | Issue HMAC permit + session cookie |
+| `POST` | `/v1/public/demo/presign` | S3 presigned PUT for anonymous upload |
+| `POST` | `/v1/public/demo/submit` | Enqueue anonymous pipeline job |
+| `GET` | `/v1/public/demo/status/{entry_id}` | Poll for transcript/summary |
+| `POST` | `/api/v1/entries/claim-demo-session` | Save-on-signup handoff |
+| `GET` | `/health` | Health check |
+| `GET` | `/metrics` | Prometheus exposition |
 
-## Model Usage
-- Audio Transcription: `whisper-1`
-- Text Processing: `gpt-4o-mini`
+Full schema: http://localhost:10000/docs
 
-## Future Improvements
+---
 
-### Technical Enhancements
-- Mobile application development (iOS/Android)
-- Offline support with local-first architecture
-- Real-time collaboration features
-- Calendar integration (Google Calendar, iCal)
-- Enhanced analytics and reporting
-- API integrations with popular productivity tools
+## Tech stack
 
-### Product Features
-- Custom categories and workflows
-- Advanced visualization of time patterns
-- AI-powered productivity insights
-- Team and organization support
+**Backend:** FastAPI 0.104 · SQLAlchemy 2.0 (async) · Alembic · PostgreSQL 15 · OpenAI (Whisper + GPT-4o-mini) · Supabase Auth · slowapi · Prometheus · PostHog
 
-### Infrastructure
-- Multi-region deployment
-- Enhanced security features
-- Automated backup systems
-- Performance optimization
-- Scalability improvements
+**Frontend:** React 18 · TypeScript · Material-UI · Redux Toolkit · React Router 6 · Axios · react-media-recorder · Cypress
+
+**Infrastructure:** Docker Compose (dev) · Render.com (backend, `time-api.yujun.net`) · Cloudflare Pages (frontend, `time.yujun.net`) · Cloudflare Turnstile · S3-compatible blob storage
+
+---
+
+## Project layout
+
+```
+time_logger_game/
+├── backend/         FastAPI app, Alembic migrations, pytest suite
+├── frontend/        React + TypeScript SPA, Cypress E2E
+├── deployment/      Render + Cloudflare config
+├── docs/            Design docs and ADRs
+├── CLAUDE.md        Repo conventions for AI assistants
+├── CHANGELOG.md     Release history
+└── DESIGN.md        Design system source of truth
+```
+
+The legacy `backend/app/routers/` directory is deprecated; new routes live in `backend/app/routes/`.
+
+---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Brief is a personal portfolio project, but issues and pull requests are welcome.
+
+1. Fork and create a feature branch
+2. Run `pytest` and `npm test` before pushing
+3. Open a PR against `main`
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
