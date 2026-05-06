@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 /**
  * Tests for the interaction-first LandingPage.
  *
@@ -21,9 +22,9 @@ import * as demoApi from '../services/demoApi';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const mockSignInWithOAuth = jest.fn();
-const mockSignInWithOtp = jest.fn();
-jest.mock('../services/supabase', () => ({
+const mockSignInWithOAuth = vi.fn();
+const mockSignInWithOtp = vi.fn();
+vi.mock('../services/supabase', () => ({
     __esModule: true,
     getSupabase: () => ({
         auth: {
@@ -36,26 +37,26 @@ jest.mock('../services/supabase', () => ({
 
 // Mock the analytics wrapper so we can assert on event seams without
 // touching the real posthog-js dynamic import.
-const mockAnalyticsCapture = jest.fn();
-jest.mock('../services/analytics', () => ({
+const mockAnalyticsCapture = vi.fn();
+vi.mock('../services/analytics', () => ({
     __esModule: true,
     capture: (...args: unknown[]) => mockAnalyticsCapture(...args),
-    init: jest.fn(),
+    init: vi.fn(),
 }));
 
-jest.mock('../contexts/AuthContext', () => {
-    const real = jest.requireActual('../contexts/AuthContext');
+vi.mock('../contexts/AuthContext', () => {
+    const real = vi.importActual('../contexts/AuthContext');
     return {
         ...real,
         useAuth: () => ({
             user: null,
             isAuthenticated: false,
             isLoading: false,
-            sendOTP: jest.fn(),
-            verifyOTP: jest.fn(),
-            loginWithGoogle: jest.fn(),
-            logout: jest.fn(),
-            refreshAccessToken: jest.fn(),
+            sendOTP: vi.fn(),
+            verifyOTP: vi.fn(),
+            loginWithGoogle: vi.fn(),
+            logout: vi.fn(),
+            refreshAccessToken: vi.fn(),
         }),
     };
 });
@@ -64,15 +65,15 @@ jest.mock('../contexts/AuthContext', () => {
 function setupMatchMedia(reduceMotion = false) {
     Object.defineProperty(window, 'matchMedia', {
         writable: true,
-        value: jest.fn().mockImplementation((query: string) => ({
+        value: vi.fn().mockImplementation((query: string) => ({
             matches: query.includes('prefers-reduced-motion') ? reduceMotion : false,
             media: query,
             onchange: null,
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-            addListener: jest.fn(),
-            removeListener: jest.fn(),
-            dispatchEvent: jest.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn(),
         })),
     });
 }
@@ -98,14 +99,14 @@ class FakeMediaRecorder {
         this.onstop?.();
     }
 }
-(global as unknown as { MediaRecorder: typeof FakeMediaRecorder }).MediaRecorder = FakeMediaRecorder;
+(globalThis as unknown as { MediaRecorder: typeof FakeMediaRecorder }).MediaRecorder = FakeMediaRecorder;
 
 // getUserMedia
-const mockGetUserMedia = jest.fn();
+const mockGetUserMedia = vi.fn();
 
 beforeEach(() => {
     setupMatchMedia(false);
-    jest.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
+    vi.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
     Object.defineProperty(navigator, 'mediaDevices', {
         configurable: true,
         value: { getUserMedia: mockGetUserMedia },
@@ -181,7 +182,7 @@ describe('LandingPage — IA & basic structure', () => {
 
 describe('LandingPage — cookie-blocked caption', () => {
     it('does NOT render the caption when probe survives', () => {
-        jest.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
+        vi.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
         renderPage();
         expect(
             screen.queryByText(/your browser is blocking cookies/i),
@@ -189,7 +190,7 @@ describe('LandingPage — cookie-blocked caption', () => {
     });
 
     it('renders the caption when probe fails', async () => {
-        jest.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(true);
+        vi.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(true);
         renderPage();
         await waitFor(() =>
             expect(screen.getByText(/your browser is blocking cookies/i)).toBeInTheDocument(),
@@ -299,13 +300,13 @@ describe('LandingPage — analytics events', () => {
     });
 
     it('fires `cookie_blocked` only when the probe fails', () => {
-        jest.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(true);
+        vi.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(true);
         renderPage();
         expect(eventsFired('cookie_blocked').length).toBe(1);
     });
 
     it('does NOT fire `cookie_blocked` when cookies work', () => {
-        jest.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
+        vi.spyOn(demoApi, 'detectCookieBlocked').mockReturnValue(false);
         renderPage();
         expect(eventsFired('cookie_blocked').length).toBe(0);
     });

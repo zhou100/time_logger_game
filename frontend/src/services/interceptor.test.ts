@@ -6,8 +6,9 @@
  *  - capture the interceptor handlers registered on axios.interceptors so we
  *    can invoke them directly without going over the network
  */
+import type { Mock } from 'vitest';
 
-jest.mock('axios', () => {
+vi.mock('axios', () => {
     // Captured interceptor handlers; tests read these via __captured.
     const captured: {
         requestHandler?: (cfg: any) => Promise<any> | any;
@@ -17,27 +18,27 @@ jest.mock('axios', () => {
     const instance: any = {
         interceptors: {
             request: {
-                use: jest.fn((fn: any) => { captured.requestHandler = fn; return 0; }),
+                use: vi.fn((fn: any) => { captured.requestHandler = fn; return 0; }),
             },
             response: {
-                use: jest.fn((_success: any, errFn: any) => {
+                use: vi.fn((_success: any, errFn: any) => {
                     captured.responseErrorHandler = errFn;
                     return 0;
                 }),
             },
         },
-        get: jest.fn(),
-        post: jest.fn(),
-        put: jest.fn(),
-        patch: jest.fn(),
-        delete: jest.fn(),
+        get: vi.fn(),
+        post: vi.fn(),
+        put: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
     };
     // Make the instance callable so `api(original)` resolves in retry paths.
     const callable: any = function callable(cfg: any) {
         return Promise.resolve({ data: 'retried-ok', config: cfg });
     };
     Object.assign(callable, instance);
-    const create = jest.fn(() => callable);
+    const create = vi.fn(() => callable);
     return {
         __esModule: true,
         default: { create, isAxiosError: (e: any) => !!e?.isAxiosError },
@@ -47,9 +48,9 @@ jest.mock('axios', () => {
     };
 });
 
-jest.mock('./supabase', () => {
-    const refreshSession = jest.fn();
-    const signOut = jest.fn().mockResolvedValue({ error: null });
+vi.mock('./supabase', () => {
+    const refreshSession = vi.fn();
+    const signOut = vi.fn().mockResolvedValue({ error: null });
     const auth = { refreshSession, signOut };
     return {
         __esModule: true,
@@ -59,8 +60,8 @@ jest.mock('./supabase', () => {
     };
 });
 
-jest.mock('./supabaseStorage', () => {
-    const readSupabaseSession = jest.fn();
+vi.mock('./supabaseStorage', () => {
+    const readSupabaseSession = vi.fn();
     return {
         __esModule: true,
         readSupabaseSession,
@@ -70,23 +71,22 @@ jest.mock('./supabaseStorage', () => {
 
 // Importing './api' registers the interceptors; handlers land in captured.
 import './api';
+import * as axiosMock from 'axios';
+import * as supabaseMock from './supabase';
+import * as storageMock from './supabaseStorage';
 
-const axiosMock = jest.requireMock('axios') as {
+const { requestHandler, responseErrorHandler } = (axiosMock as unknown as {
     __captured: {
         requestHandler: (cfg: any) => Promise<any>;
         responseErrorHandler: (err: any) => Promise<any>;
     };
-};
-const supabaseMock = jest.requireMock('./supabase') as {
-    __mocks: { refreshSession: jest.Mock; signOut: jest.Mock };
-};
-const storageMock = jest.requireMock('./supabaseStorage') as {
-    __mocks: { readSupabaseSession: jest.Mock };
-};
-
-const { requestHandler, responseErrorHandler } = axiosMock.__captured;
-const { refreshSession, signOut } = supabaseMock.__mocks;
-const { readSupabaseSession } = storageMock.__mocks;
+}).__captured;
+const { refreshSession, signOut } = (supabaseMock as unknown as {
+    __mocks: { refreshSession: Mock; signOut: Mock };
+}).__mocks;
+const { readSupabaseSession } = (storageMock as unknown as {
+    __mocks: { readSupabaseSession: Mock };
+}).__mocks;
 
 function makeAxiosError(status: number): any {
     return {

@@ -80,7 +80,7 @@ const AuthFooter: React.FC<Props> = ({ sticky = false }) => {
     const buildRedirectTo = () => {
         // REACT_APP_WELCOME_HANDOFF_ENABLED gates whether OAuth/magic-link
         // callbacks route through /welcome. Default 'true' (handoff enabled).
-        if (process.env.REACT_APP_WELCOME_HANDOFF_ENABLED === 'false') {
+        if (import.meta.env.VITE_WELCOME_HANDOFF_ENABLED === 'false') {
             return `${window.location.origin}/recording`;
         }
         const claimToken = readClaimToken();

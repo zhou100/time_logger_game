@@ -11,11 +11,11 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom';
 import SignInForm from './SignInForm';
 
-const mockSendOTP = jest.fn();
-const mockVerifyOTP = jest.fn();
-const mockLoginWithGoogle = jest.fn();
+const mockSendOTP = vi.fn();
+const mockVerifyOTP = vi.fn();
+const mockLoginWithGoogle = vi.fn();
 
-jest.mock('../../contexts/AuthContext', () => ({
+vi.mock('../../contexts/AuthContext', () => ({
     __esModule: true,
     useAuth: () => ({
         sendOTP: mockSendOTP,
@@ -24,18 +24,18 @@ jest.mock('../../contexts/AuthContext', () => ({
         isAuthenticated: false,
         isLoading: false,
         user: null,
-        logout: jest.fn(),
-        refreshAccessToken: jest.fn(),
+        logout: vi.fn(),
+        refreshAccessToken: vi.fn(),
     }),
 }));
 
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => {
-    const actual = jest.requireActual('react-router-dom');
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('react-router-dom')>();
     return { ...actual, useNavigate: () => mockNavigate };
 });
 
-jest.mock('../../theme', () => ({
+vi.mock('../../theme', () => ({
     __esModule: true,
     palette: {
         accent: '#B6492D',
@@ -57,7 +57,7 @@ function renderForm() {
 }
 
 beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     mockSendOTP.mockReset();
     mockVerifyOTP.mockReset();
     mockLoginWithGoogle.mockReset();
@@ -65,8 +65,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    act(() => { jest.runOnlyPendingTimers(); });
-    jest.useRealTimers();
+    act(() => { vi.runOnlyPendingTimers(); });
+    vi.useRealTimers();
 });
 
 describe('SignInForm — step 1 (email)', () => {
@@ -183,7 +183,7 @@ describe('SignInForm — step 2 (code entry)', () => {
 
         for (let i = 0; i < 30; i++) {
             await act(async () => {
-                jest.advanceTimersByTime(1000);
+                vi.advanceTimersByTime(1000);
             });
         }
         await waitFor(() => {

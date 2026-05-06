@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 /**
  * Tests for the sign-in gate that fires after the first real debrief.
  *
@@ -20,9 +21,9 @@ import type { UseDemoRecordingResult } from '../hooks/useDemoRecording';
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 type MockHookReturn = Omit<UseDemoRecordingResult, 'start' | 'stop' | 'reset'> & {
-    start: jest.Mock;
-    stop: jest.Mock;
-    reset: jest.Mock;
+    start: Mock;
+    stop: Mock;
+    reset: Mock;
 };
 
 const mockHookReturn: MockHookReturn = {
@@ -34,75 +35,75 @@ const mockHookReturn: MockHookReturn = {
     fakeOutput: null,
     transcript: null,
     error: null,
-    start: jest.fn(),
-    stop: jest.fn(),
-    reset: jest.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    reset: vi.fn(),
 };
 
-jest.mock('../hooks/useDemoRecording', () => ({
+vi.mock('../hooks/useDemoRecording', () => ({
     __esModule: true,
     useDemoRecording: () => mockHookReturn,
 }));
 
-jest.mock('../services/supabase', () => ({
+vi.mock('../services/supabase', () => ({
     __esModule: true,
     getSupabase: () => ({
-        auth: { signInWithOAuth: jest.fn(), signInWithOtp: jest.fn() },
+        auth: { signInWithOAuth: vi.fn(), signInWithOtp: vi.fn() },
     }),
     isSupabaseConfigured: true,
 }));
 
-jest.mock('../services/analytics', () => ({
+vi.mock('../services/analytics', () => ({
     __esModule: true,
-    capture: jest.fn(),
-    init: jest.fn(),
+    capture: vi.fn(),
+    init: vi.fn(),
 }));
 
-jest.mock('../contexts/AuthContext', () => {
-    const real = jest.requireActual('../contexts/AuthContext');
+vi.mock('../contexts/AuthContext', () => {
+    const real = vi.importActual('../contexts/AuthContext');
     return {
         ...real,
         useAuth: () => ({
             user: null,
             isAuthenticated: false,
             isLoading: false,
-            sendOTP: jest.fn(),
-            verifyOTP: jest.fn(),
-            loginWithGoogle: jest.fn(),
-            logout: jest.fn(),
-            refreshAccessToken: jest.fn(),
+            sendOTP: vi.fn(),
+            verifyOTP: vi.fn(),
+            loginWithGoogle: vi.fn(),
+            logout: vi.fn(),
+            refreshAccessToken: vi.fn(),
         }),
     };
 });
 
-jest.mock('../services/demoApi', () => ({
+vi.mock('../services/demoApi', () => ({
     __esModule: true,
     demoApi: {
-        verifyTurnstile: jest.fn(),
-        presign: jest.fn(),
-        uploadAudio: jest.fn(),
-        submit: jest.fn(),
-        status: jest.fn(),
+        verifyTurnstile: vi.fn(),
+        presign: vi.fn(),
+        uploadAudio: vi.fn(),
+        submit: vi.fn(),
+        status: vi.fn(),
     },
     readPermit: () => ({ token: 'cached-permit', expires_at: '2099-01-01T00:00:00Z' }),
-    writePermit: jest.fn(),
-    readClaimToken: jest.fn(),
-    writeClaimToken: jest.fn(),
-    detectCookieBlocked: jest.fn().mockResolvedValue(false),
+    writePermit: vi.fn(),
+    readClaimToken: vi.fn(),
+    writeClaimToken: vi.fn(),
+    detectCookieBlocked: vi.fn().mockResolvedValue(false),
 }));
 
 beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
         writable: true,
-        value: jest.fn().mockReturnValue({
+        value: vi.fn().mockReturnValue({
             matches: false,
             media: '',
             onchange: null,
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-            addListener: jest.fn(),
-            removeListener: jest.fn(),
-            dispatchEvent: jest.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn(),
         }),
     });
     mockHookReturn.start.mockClear();

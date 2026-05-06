@@ -7,8 +7,8 @@ function renderPicker(props?: Partial<React.ComponentProps<typeof DatePickerPopo
     const anchor = document.createElement('button');
     document.body.appendChild(anchor);
 
-    const onClose = jest.fn();
-    const onSelect = jest.fn();
+    const onClose = vi.fn();
+    const onSelect = vi.fn();
 
     render(
         <DatePickerPopover

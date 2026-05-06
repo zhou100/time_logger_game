@@ -22,7 +22,7 @@ import { getSupabase } from './supabase';
 import { readSupabaseSession } from './supabaseStorage';
 import Logger from '../utils/logger';
 
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:10000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
 
 // Supabase refreshSession() can wedge on a storage lock; cap it so a stuck
 // refresh doesn't translate to a hung request for the user.

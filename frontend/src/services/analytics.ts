@@ -2,7 +2,7 @@
  * PostHog analytics — client-side product event capture.
  *
  * Lazy-init pattern: a real PostHog client loads only when
- * `process.env.REACT_APP_POSTHOG_KEY` is non-empty AND we're not in
+ * `import.meta.env.VITE_POSTHOG_KEY` is non-empty AND we're not in
  * `NODE_ENV === 'test'`. Otherwise `capture()` is a no-op stub so call
  * sites never need to null-check. CRA inlines REACT_APP_* at build time.
  *
@@ -26,11 +26,11 @@ let posthogClient: unknown = null;
 
 function isEnabled(): boolean {
     if (process.env.NODE_ENV === 'test') return false;
-    return !!process.env.REACT_APP_POSTHOG_KEY;
+    return !!import.meta.env.VITE_POSTHOG_KEY;
 }
 
 function getHost(): string {
-    return process.env.REACT_APP_POSTHOG_HOST || 'https://us.i.posthog.com';
+    return import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
 }
 
 /**
@@ -49,7 +49,7 @@ export function init(): void {
         .then((mod) => {
             try {
                 const ph = mod.default;
-                ph.init(process.env.REACT_APP_POSTHOG_KEY as string, {
+                ph.init(import.meta.env.VITE_POSTHOG_KEY as string, {
                     api_host: getHost(),
                     // Defer feature-flag bootstrap to event capture time;
                     // we don't gate UI on flags.
