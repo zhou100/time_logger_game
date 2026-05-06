@@ -8,6 +8,82 @@ This file provides guidance for AI assistants (Claude and others) working on thi
 
 **Time Logger Game** is a full-stack web application for voice-based time tracking with AI-powered categorization. Users record voice notes, which are transcribed via OpenAI Whisper and auto-categorized (TODO, IDEA, THOUGHT, TIME_RECORD) using GPT-4o-mini. Features include daily/weekly AI coach audits and time-weighted category breakdowns.
 
+**Core product intent:** voice-first, low-friction capture. Anything that adds clutter, login friction, or developer-facing complexity to the recording flow erodes the product. Preserve this intent across all UI changes.
+
+---
+
+## Workflow Philosophy
+
+Treat AI-assisted development on this repo as a structured engineering workflow, not ad-hoc prompting.
+
+### Before editing — classify the task
+
+Decide which kind of change this is and adjust behavior accordingly: product/UX, frontend UI, backend/API, auth/Supabase, AI pipeline (transcription/categorization/review/teaser), database/migration, deployment/infra, bug investigation, refactor, or docs-only.
+
+For anything non-trivial, produce a short plan before editing. Name:
+1. Which files are likely relevant
+2. Which system boundaries are involved (auth, demo, logged-in flow, AI pipeline)
+3. What should **not** be touched
+4. What needs to be tested
+5. Any risk to auth, demo flow, database state, or production deployment
+
+Prefer small, reversible changes. If the task is expanding, stop and narrow scope rather than continuing.
+
+### Mode switching
+
+- **Design mode** — landing, layout, copy, mobile UX, recording UI. Read `DESIGN.md` first. Keep the microphone/recording flow prominent. Reduce login friction.
+- **Engineering mode** — backend logic, frontend state, API contracts, auth, DB, tests, AI processing. Respect `routes/` vs legacy `routers/`. Keep request/response contracts aligned across frontend and backend. Avoid hidden coupling between demo, anonymous, and logged-in flows.
+- **Deployment mode** — Render, Cloudflare Pages, env vars, CORS, build/runtime errors. Local behavior is not a substitute for verifying production assumptions. Distinguish local, preview, and production explicitly.
+
+### Review as a separate phase
+
+Don't blend implementation and review. Understand → inspect → plan → smallest viable patch → review the diff against the original task → run/specify tests → summarize what changed and what remains risky.
+
+For code-review tasks: do NOT rewrite immediately. First identify correctness issues, architecture-boundary violations, hidden coupling, missing tests, regression risk, auth/data-leakage risk, UX regressions, and deployment risk. Only then propose or apply fixes.
+
+### Hard rules — uncontrolled changes
+
+- No broad refactors unless explicitly requested
+- Don't rename core files, routes, models, or components unless the task requires it
+- Don't touch legacy `backend/app/routers/` unless the task is specifically cleanup
+- Don't change auth, DB schema, API contracts, or deploy config as a side effect of a UI task
+- Don't change prompts or model behavior as a side effect of unrelated backend work
+- Don't introduce new libraries without explaining why existing tools are insufficient
+- Don't remove tests to make a build pass
+- Don't silently rename environment variables
+- Don't bypass Turnstile, cost caps, or abuse-prevention logic in the demo flow
+- Don't reintroduce the legacy custom-JWT login flow after the Supabase migration
+- Don't auto-claim demo entries without an authenticated `claim-demo-session` call
+
+If a broader change seems necessary, pause and explain the proposed expansion before editing.
+
+### Common prior-AI failure modes on this repo
+
+- Edited `routers/` instead of `routes/`
+- Reintroduced custom-JWT auth assumptions after Supabase migration
+- Changed backend API contract without updating `frontend/src/services/api.ts`
+- Added a DB field without an Alembic migration
+- Fixed a local issue but broke Render or Cloudflare Pages production
+- Used synchronous SQLAlchemy where async is required
+- Touched the demo flow in a way that bypassed cost caps or Turnstile
+- Drifted from `DESIGN.md` without approval
+
+---
+
+## Project-Specific Guardrails
+
+Durable constraints distilled from real failure modes (see also "Common Pitfalls" below for the long-form versions):
+
+- **Active routes** live in `backend/app/routes/`; `backend/app/routers/` is legacy and frozen.
+- **Auth is Supabase only.** Legacy `/api/auth/register`, `/api/auth/token`, `/api/auth/refresh` are orphaned and scheduled for removal — do not build on them.
+- **Async only** — all DB calls use `AsyncSession` and must be `await`ed.
+- **Schema changes always require an Alembic migration.**
+- **Demo flow has cost caps and Turnstile** — `PUBLIC_DEMO_ENABLED`, HMAC `permit_token`/`claim_token`, hourly TTL sweep. Don't bypass these to "make the demo simpler."
+- **Frontend API calls go through `services/api.ts`** — never `fetch` directly.
+- **Design changes go through `DESIGN.md`** — flag deviations rather than silently changing the visual system.
+- **CORS allow-origin** is explicit in `main.py`; new frontend origins require updating it.
+- **Alembic uses sync URL, app uses async URL** — this split is intentional.
+
 ---
 
 ## Repository Structure
