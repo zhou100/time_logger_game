@@ -21,12 +21,7 @@ import { Box } from '@mui/material';
 
 function App() {
   return (
-    <Router
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <Router>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AuthProvider>
